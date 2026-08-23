@@ -1,0 +1,65 @@
+# ─── Private / Secrets ────────────────────────────────────
+private/
+*.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# ─── FastDDS (auto-generated on each boot) ────────────────
+fastdds_profile.xml
+fastdds_unicast.xml
+
+# ─── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+ENV/
+
+# ─── Node.js / Web GUI ───────────────────────────────────
+node_modules/
+gemini_web_gui/dist/
+gemini_web_gui/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── IDE & Editor ────────────────────────────────────────
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ─── OS Files ─────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ─── ROS 2 Build Artifacts ───────────────────────────────
+log/
+install/
+wsl_ws/build/
+wsl_ws/install/
+wsl_ws/log/
+
+# ─── NVIDIA Example Scripts (vendored, not part of this project) ──
+isaacsim_scripts/camera_manual.py
+isaacsim_scripts/camera_noise.py
+isaacsim_scripts/camera_periodic.py
+isaacsim_scripts/carter_multiple_robot_navigation.py
+isaacsim_scripts/carter_stereo.py
+isaacsim_scripts/clock.py
+isaacsim_scripts/moveit.py
+isaacsim_scripts/rtx_lidar.py
+isaacsim_scripts/rtx_radar.py
+isaacsim_scripts/subscriber.py

@@ -18,7 +18,7 @@ Three Franka FR3 robotic arms cooperate to build a 9-layer tower, orchestrated b
 - **Multi-Robot Cooperation** — 3 Franka FR3 arms coordinate to pick, transport, and stack 9 colored blocks into a tower
 - **VLA Brain** — Google Gemini Robotics-ER analyzes overhead camera feeds, plans tasks, and dispatches parallel robot commands via Function Calling
 - **Dual Control Modes** — Switch between the Gemini VLM orchestrator and a standalone rule-based motion planner (no API needed)
-- **Real-Time Dashboard** — ChatGPT-style web UI with voice input, live Gantt timeline, ROS 2 log streaming, and one-click launch
+- **Industrial Monitoring Dashboard** — Salabim-inspired React UI with live KPI utilization tracking, 2D digital twin map, enhanced timeline, and discrete event logging
 - **Cross-OS Bridge** — Seamless Windows ↔ WSL2 communication via FastDDS Unicast, fully automated on each boot
 - **Mobile Manipulation** — Bonus demo: Nova Carter mobile base + FR3 arm with LiDAR and RGB-D sensing
 
@@ -123,14 +123,16 @@ A ChatGPT-style interface for controlling and monitoring the robot system:
 <!-- TODO: Add screenshot -->
 <!-- ![Dashboard](docs/assets/dashboard.png) -->
 
+The dashboard features four dedicated monitoring tabs alongside the main chat view:
+
 | Feature | Description |
 |---------|-------------|
-| 💬 **Chat** | Send natural language goals via text or voice (Web Speech API) |
-| 📊 **Gantt Timeline** | Real-time visualization of parallel robot task execution |
-| 📋 **Action Blocks** | See every `pick`, `place`, `go_home` command dispatched by Gemini |
-| 📜 **ROS 2 Logs** | Color-coded, filterable `/rosout` stream (DEBUG → FATAL) |
-| 🖥️ **WSL2 Terminal** | Live output from `bringup.bash` and backend processes |
-| 🔨 **Build Button** | Trigger `colcon build` inside WSL2 from the browser |
+| 📊 **KPI Dashboard** | Live resource utilization bars, real-time state badges (PICKING, PLACING, QUEUED), and task success/failure counters |
+| 📈 **Enhanced Timeline** | Advanced Gantt chart visualizing execution phases and queue/waiting times (orange segments) with zooming capabilities |
+| 🗺️ **2D Scene Map** | Lightweight SVG digital twin tracking block tokens, robot arm movements, and the target tower in real-time |
+| 📋 **Event Trace** | Filterable, sortable discrete event log table with duration calculations and CSV export |
+| 💬 **VLA Chat** | Send natural language goals via text or voice, and monitor the Gemini agent's reasoning |
+| 📜 **Terminal & Logs** | Integrated WSL2 terminal, `/rosout` log streaming, and one-click `colcon build` |
 
 ---
 

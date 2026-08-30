@@ -356,13 +356,16 @@ class GeminiRoboticsNode(Node):
         architect_model = gemini_config.get_planner_model()
         robotics_model = self.model_name
         
-        def stream_chat(sender, emoji, model_name, req_contents, req_config):
+        def stream_chat(sender, emoji, role, model_name, req_contents, req_config):
             msg_id = str(uuid.uuid4())
-            # Send initial header
-            header_text = f"""{emoji} **{sender}:**
-
-"""
-            header = {"id": msg_id, "text": header_text}
+            # Send initial header metadata
+            header = {
+                "id": msg_id, 
+                "text": "", 
+                "senderName": f"{sender} ({model_name})", 
+                "emoji": emoji, 
+                "role": role
+            }
             msg = String()
             msg.data = json.dumps(header)
             self.chat_pub.publish(msg)
@@ -403,7 +406,7 @@ Your PRIMARY GOAL is to maximize MULTI-ROBOT CONCURRENCY. Assign blocks so that 
 CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
 '''
             response_1 = stream_chat(
-                f"Robotics Orchestrator ({robotics_model})", "🦾",
+                "Robotics Orchestrator", "🦾", "vla",
                 robotics_model, prompt_1,
                 genai_types.GenerateContentConfig(temperature=0.2)
             )
@@ -419,7 +422,7 @@ Review their proposed plan and provide the exact mathematical 2D spatial coordin
 CRITICAL: Keep your response EXTREMELY concise (under 2 sentences) and list the coordinates.
 '''
             response_2 = stream_chat(
-                f"Spatial Architect ({architect_model})", "📐",
+                "Spatial Architect", "📐", "architect",
                 architect_model, prompt_2,
                 genai_types.GenerateContentConfig(temperature=0.1)
             )
@@ -439,7 +442,7 @@ CRITICAL: Keep your text extremely concise. Format your final response starting 
                 genai_types.Content(role="user", parts=[genai_types.Part.from_text(prompt_3)])
             ]
             response_3 = stream_chat(
-                f"Robotics Orchestrator ({robotics_model})", "🚀",
+                "Robotics Orchestrator", "🚀", "vla",
                 robotics_model, contents,
                 genai_types.GenerateContentConfig(temperature=0.1)
             )

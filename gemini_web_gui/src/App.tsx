@@ -50,17 +50,20 @@ function App() {
   const termEndRef = useRef<HTMLDivElement>(null);
   const seqRef = useRef(1);
 
-  const addMsg = useCallback((role: 'user'|'system', text: string, idOverride?: string | number) => {
+  const addMsg = useCallback((role: 'user'|'system'|'architect'|'vla', text: string, idOverride?: string | number, senderName?: string, emoji?: string) => {
     setMessages(p => {
       if (idOverride !== undefined) {
         const idx = p.findIndex(m => m.id === idOverride);
         if (idx >= 0) {
           const n = [...p];
           n[idx] = { ...n[idx], text: n[idx].text + text };
+          if (senderName) n[idx].senderName = senderName;
+          if (emoji) n[idx].emoji = emoji;
+          if (role !== 'system') n[idx].role = role;
           return n;
         }
       }
-      return [...p, { id: idOverride ?? seqRef.current++, role, text, ts: new Date() }];
+      return [...p, { id: idOverride ?? seqRef.current++, role, text, ts: new Date(), senderName, emoji }];
     });
   }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -122,7 +125,7 @@ function App() {
             try {
               const obj = JSON.parse(m.data);
               if (obj.id && obj.text !== undefined) {
-                addMsg('system', obj.text, obj.id);
+                addMsg(obj.role || 'system', obj.text, obj.id, obj.senderName, obj.emoji);
                 return;
               }
             } catch (e) {}
@@ -234,14 +237,14 @@ function App() {
                 }}>
                   <div style={{
                     width: 30, height: 30, borderRadius: 6, flexShrink: 0,
-                    background: m.role === 'user' ? C.bgHover : C.accent,
+                    background: m.role === 'user' ? C.bgHover : (m.role === 'architect' ? C.purple : (m.role === 'vla' ? C.blue : C.accent)),
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    {m.role === 'user' ? <User size={14} color={C.textDim} /> : <Bot size={14} color="#fff" />}
+                    {m.role === 'user' ? <User size={14} color={C.textDim} /> : (m.emoji ? <span style={{ fontSize: 16, lineHeight: 1 }}>{m.emoji}</span> : <Bot size={14} color="#fff" />)}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: fontSize - 1, fontWeight: 700, color: C.white, marginBottom: 4 }}>
-                      {m.role === 'user' ? 'You' : 'Gemini Robotics'}
+                      {m.role === 'user' ? 'You' : (m.senderName || 'Gemini Robotics')}
                     </div>
                     <div
                       style={{ fontSize: fontSize, lineHeight: 1.65, color: C.text, wordBreak: 'break-word' }}

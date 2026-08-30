@@ -311,12 +311,15 @@ class MultiRobotController(Node):
                     self._publish_result(False, f"Robot {r_id} is in state {curr_state}, not ready to place.", f"FR3_{r_id}")
 
             elif action == 'go_home':
+                if self.center_occupied_by == r_id:
+                    self.center_occupied_by = None
                 self._send_home_cmd(r_id)
                 self._set_state(r_id, 'FINISHED')
                 self._publish_result(True, f"Robot {r_id} sent home.", f"FR3_{r_id}")
 
             elif action == 'verify_tower':
                 # Send all robots home for clear view
+                self.center_occupied_by = None
                 for i in [1, 2, 3]:
                     self._send_home_cmd(i)
                     self._set_state(i, 'FINISHED')
@@ -375,7 +378,7 @@ class MultiRobotController(Node):
             return None, None
         frame = self.get_robot_base_frame(robot_id)
         try:
-            trans = self.tf_buffer.lookup_transform(frame, name, rclpy.time.Time(), timeout=Duration(seconds=0.05))
+            trans = self.tf_buffer.lookup_transform(frame, name, rclpy.time.Time())
             p = trans.transform.translation
             q = trans.transform.rotation
             
@@ -387,7 +390,7 @@ class MultiRobotController(Node):
             target_quat = kinematics.compute_symmetric_grasp_quat(block_yaw, arm_yaw)
             return np.array([p.x, p.y, p.z]), target_quat
         except Exception as e:
-            self.get_logger().error(f"TF lookup failed for {name} to {frame}: {e}")
+            self.get_logger().error(f"TF lookup failed for {name} to {frame}: {e}", throttle_duration_sec=1.0)
             return None, None
 
     def get_place_local_pose(self, robot_id):
@@ -399,7 +402,7 @@ class MultiRobotController(Node):
         target_y = getattr(self, f'target_y{robot_id}', 0.0)
         
         try:
-            trans = self.tf_buffer.lookup_transform(frame, 'world', rclpy.time.Time(), timeout=Duration(seconds=0.05))
+            trans = self.tf_buffer.lookup_transform(frame, 'world', rclpy.time.Time())
             
             # Dynamically check TF frames for already placed blocks at this target X,Y
             tf_blocks_on_tower = 0
@@ -410,7 +413,7 @@ class MultiRobotController(Node):
                 if block_name == active_block:
                     continue  # Do not count the block currently in the robot's gripper
                 try:
-                    b_trans = self.tf_buffer.lookup_transform('world', block_name, rclpy.time.Time(), timeout=Duration(seconds=0.01))
+                    b_trans = self.tf_buffer.lookup_transform('world', block_name, rclpy.time.Time())
                     bx = b_trans.transform.translation.x
                     by = b_trans.transform.translation.y
                     bz = b_trans.transform.translation.z
@@ -451,7 +454,7 @@ class MultiRobotController(Node):
             target_quat = kinematics.compute_symmetric_grasp_quat(world_yaw, arm_yaw)
             return p_local, target_quat
         except Exception as e:
-            self.get_logger().warn(f"get_place_local_pose failed: {e}")
+            self.get_logger().warn(f"get_place_local_pose failed: {e}", throttle_duration_sec=1.0)
             return None, None
 
     # Phase Initialization & Command Helpers

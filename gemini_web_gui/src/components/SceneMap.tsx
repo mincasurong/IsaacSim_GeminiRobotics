@@ -14,30 +14,31 @@ const SVG_H = 280;
 const TABLE_W = 60;
 const TABLE_H = 40;
 
-// Source tables
-const TABLE1 = { x: 30, y: 140, label: 'Table 1' };   // Left (FR3_1)
-const TABLE2 = { x: 210, y: 140, label: 'Table 2' };  // Right (FR3_2)
-const TABLE3 = { x: 120, y: 30, label: 'Table 3' };   // Top (FR3_3)
-const TARGET = { x: 120, y: 140, label: 'Target' };    // Center
+// Source tables (top-left corners, centered around real coordinates)
+const TABLE1 = { x: 150 - TABLE_W / 2, y: 245 - TABLE_H / 2, label: 'Table 1' };   // Bottom (FR3_1)
+const TABLE2 = { x: 241 - TABLE_W / 2, y: 87.5 - TABLE_H / 2, label: 'Table 2' };  // Top Right (FR3_2)
+const TABLE3 = { x: 59 - TABLE_W / 2, y: 87.5 - TABLE_H / 2, label: 'Table 3' };   // Top Left (FR3_3)
+const TARGET = { x: 150 - TABLE_W / 2, y: 140 - TABLE_H / 2, label: 'Target' };    // Center
 
-// Robot base positions
+// Robot base positions (scaled from meters to pixels: center 150,140, 1m=100px)
 const ROBOT_BASES: Record<string, { x: number; y: number; color: string }> = {
-  FR3_1: { x: 60,  y: 200, color: C.blue },
-  FR3_2: { x: 240, y: 200, color: C.yellow },
-  FR3_3: { x: 150, y: 80,  color: C.green },
+  FR3_1: { x: 150, y: 185, color: C.blue },
+  FR3_2: { x: 189, y: 117.5, color: C.yellow },
+  FR3_3: { x: 111, y: 117.5, color: C.green },
 };
 
 // Initial block assignments: Robot1 → Block1-3, Robot2 → Block4-6, Robot3 → Block7-9
+// Placed visually on their respective tables
 const INITIAL_BLOCK_TABLE: Record<string, { x: number; y: number }> = {
-  Block1: { x: TABLE1.x + 10, y: TABLE1.y + 5 },
-  Block2: { x: TABLE1.x + 30, y: TABLE1.y + 5 },
-  Block3: { x: TABLE1.x + 50, y: TABLE1.y + 5 },
-  Block4: { x: TABLE2.x + 10, y: TABLE2.y + 5 },
-  Block5: { x: TABLE2.x + 30, y: TABLE2.y + 5 },
-  Block6: { x: TABLE2.x + 50, y: TABLE2.y + 5 },
-  Block7: { x: TABLE3.x + 10, y: TABLE3.y + 5 },
-  Block8: { x: TABLE3.x + 30, y: TABLE3.y + 5 },
-  Block9: { x: TABLE3.x + 50, y: TABLE3.y + 5 },
+  Block1: { x: TABLE1.x + 10, y: TABLE1.y + 10 },
+  Block2: { x: TABLE1.x + 30, y: TABLE1.y + 10 },
+  Block3: { x: TABLE1.x + 50, y: TABLE1.y + 10 },
+  Block4: { x: TABLE2.x + 10, y: TABLE2.y + 10 },
+  Block5: { x: TABLE2.x + 30, y: TABLE2.y + 10 },
+  Block6: { x: TABLE2.x + 50, y: TABLE2.y + 10 },
+  Block7: { x: TABLE3.x + 10, y: TABLE3.y + 10 },
+  Block8: { x: TABLE3.x + 30, y: TABLE3.y + 10 },
+  Block9: { x: TABLE3.x + 50, y: TABLE3.y + 10 },
 };
 
 type BlockState = 'on_table' | 'in_gripper' | 'on_tower';

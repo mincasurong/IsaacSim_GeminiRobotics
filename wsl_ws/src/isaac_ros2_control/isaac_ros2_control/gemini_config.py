@@ -41,7 +41,7 @@ def get_api_key(env_path=None):
 def get_model_name(env_path=None):
     """Get the Gemini Robotics model name."""
     config = load_env(env_path)
-    return config.get('ROBOTICS_MODEL', 'gemini-robotics-er-2')
+    return config.get('ROBOTICS_MODEL', 'gemini-robotics-er-2-preview')
 
 
 def get_planner_model(env_path=None):

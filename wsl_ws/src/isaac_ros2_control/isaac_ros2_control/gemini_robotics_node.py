@@ -614,12 +614,13 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         self.detection_pub.publish(msg)
         return detections
 
-    def _fn_pick(self, robot: str, object_label: str) -> dict:
+    def _fn_pick(self, robot: str, object_label: str, rotation_dir: str = 'shortest') -> dict:
         msg = String()
         msg.data = json.dumps({
             "action": "pick",
             "robot": robot,
             "target": object_label,
+            "rotation_dir": rotation_dir
         })
         self.action_pub.publish(msg)
         return self._wait_for_action_complete(robot, timeout=25.0)

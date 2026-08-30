@@ -33,7 +33,7 @@ class MultiRobotController(Node):
     def __init__(self):
         super().__init__('multi_robot_controller')
 
-        # ?? Parameters ??????????????????????????????????????????????
+        # ── Parameters ──────────────────────────────────────────────
         self.declare_parameter('mode', 'rule_based')  # 'rule_based' or 'gemini'
         self.declare_parameter('tower_x', 0.0)
         self.declare_parameter('tower_y', 0.0)
@@ -52,7 +52,7 @@ class MultiRobotController(Node):
         self.steps_per_phase = self.get_parameter('steps_per_phase').get_parameter_value().integer_value
         self.dwell_steps = self.get_parameter('dwell_steps').get_parameter_value().integer_value
 
-        # ?? Publishers ??????????????????????????????????????????????
+        # ── Publishers ──────────────────────────────────────────────
         self.cmd_pub1 = self.create_publisher(JointState, '/fr3_1/joint_commands', 10)
         self.cmd_pub2 = self.create_publisher(JointState, '/fr3_2/joint_commands', 10)
         self.cmd_pub3 = self.create_publisher(JointState, '/fr3_3/joint_commands', 10)
@@ -60,22 +60,22 @@ class MultiRobotController(Node):
         self.result_pub = self.create_publisher(String, '/gemini/action_result', 10)
         self.metrics_pub = self.create_publisher(String, '/multi_robot/robot_metrics', 10)
 
-        # ?? Subscribers ?????????????????????????????????????????????
+        # ── Subscribers ──────────────────────────────────────────────
         self.state_sub1 = self.create_subscription(JointState, '/fr3_1/joint_states', self._state_cb1, 10)
         self.state_sub2 = self.create_subscription(JointState, '/fr3_2/joint_states', self._state_cb2, 10)
         self.state_sub3 = self.create_subscription(JointState, '/fr3_3/joint_states', self._state_cb3, 10)
         self.reset_sub = self.create_subscription(Empty, '/reset_simulation', self._reset_cb, 10)
         self.action_sub = self.create_subscription(String, '/gemini/action', self._action_cb, 10)
 
-        # ?? Services ????????????????????????????????????????????????
+        # ── Services ──────────────────────────────────────────────
         self.reset_srv = self.create_service(Trigger, '/multi_robot/reset', self._reset_srv_cb)
         self.mode_srv = self.create_service(SetBool, '/multi_robot/set_gemini_mode', self._set_gemini_mode_cb)
 
-        # ?? TF Buffer & Listener ????????????????????????????????????
+        # ── TF Buffer & Listener ──────────────────────────────────────────────
         self.tf_buffer = tf2_ros.Buffer(node=self)
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
-        # ?? Robot Definitions & Joint Names ?????????????????????????
+        # ── Robot Definitions & Joint Names ─────────────────────────────────────────
         self.joint_names_fr3 = [
             "fr3_joint1", "fr3_joint2", "fr3_joint3", "fr3_joint4",
             "fr3_joint5", "fr3_joint6", "fr3_joint7",
@@ -90,7 +90,7 @@ class MultiRobotController(Node):
         self.gripper_open = 0.04
         self.gripper_close = 0.015
 
-        # ?? Controller & Motion Planner State ????????????????????????
+        # ── Controller & Motion Planner State ───────────────────────────────────────
         self.current_joints1 = None
         self.current_joints2 = None
         self.current_joints3 = None
@@ -152,7 +152,7 @@ class MultiRobotController(Node):
         self._tasks_completed = {1: 0, 2: 0, 3: 0}
         self._tasks_failed = {1: 0, 2: 0, 3: 0}
 
-        # ?? 50 Hz Control Loop Timer ????????????????????????????????
+        # ── 50 Hz Control Loop Timer ──────────────────────────────────────────────
         self.timer = self.create_timer(0.02, self._timer_callback)
         self.metrics_timer = self.create_timer(0.5, self._publish_metrics)
 
@@ -161,9 +161,9 @@ class MultiRobotController(Node):
             "Waiting for joint states and TF frames..."
         )
 
-    # ?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═??
+    # ════════════════════════════════════════════════════════════════
     # Callbacks & ROS 2 Handlers
-    # ?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═??
+    # ════════════════════════════════════════════════════════════════
 
     def _state_cb1(self, msg):
         self.current_joints1 = msg.position
@@ -339,9 +339,9 @@ class MultiRobotController(Node):
         elif 'lime' in l or 'block9' in l: return 'Block9'
         return None
 
-    # ?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═??
+    # ════════════════════════════════════════════════════════════════
     # Coordinate Transforms & Poses
-    # ?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═??
+    # ════════════════════════════════════════════════════════════════
 
     def get_robot_base_frame(self, robot_id):
         if robot_id == 1: return 'fr3_link0'
@@ -449,9 +449,9 @@ class MultiRobotController(Node):
             self.get_logger().warn(f"get_place_local_pose failed: {e}")
             return None, None
 
-    # ?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═??
+    # ════════════════════════════════════════════════════════════════
     # Phase Initialization & Command Helpers
-    # ?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═??
+    # ════════════════════════════════════════════════════════════════
 
     def _make_tuck_config(self, j1_angle):
         return [j1_angle] + list(self.q_tuck_body)
@@ -524,9 +524,9 @@ class MultiRobotController(Node):
     def _set_state(self, robot_id, state):
         setattr(self, f'state{robot_id}', state)
 
-    # ?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═??
+    # ════════════════════════════════════════════════════════════════
     # 50 Hz Control Loop & State Machine
-    # ?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═??
+    # ════════════════════════════════════════════════════════════════
 
     def _publish_metrics(self):
         """Publish structured robot metrics at 2 Hz for the GUI dashboard."""
@@ -608,7 +608,7 @@ class MultiRobotController(Node):
 
         cmd_pub = self.cmd_pub1 if robot_id == 1 else (self.cmd_pub2 if robot_id == 2 else self.cmd_pub3)
 
-        # ?? State Machine ???????????????????????????????????????????
+        # ── State Machine ──────────────────────────────────────────────
         if state == 'INIT':
             block_pos, block_quat = self.get_block_local_pose(robot_id)
             if block_pos is None:

@@ -344,9 +344,8 @@ class GeminiRoboticsNode(Node):
     # Agentic Loop Tool Execution
 
 
-    def _brainstorm_spatial_plan(self, goal_text: str) -> str:
-        '''Multi-agent brainstorming with streaming responses for better UX.'''
-        from google import genai
+    def _brainstorm_spatial_plan(self, goal_text: str, image_bytes: bytes = None) -> str:
+        """Multi-agent discussion between Gemini Robotics-ER and Gemini Flash Spatial Architect."""
         from google.genai import types as genai_types
         from isaac_ros2_control import gemini_config
         import time
@@ -389,25 +388,30 @@ class GeminiRoboticsNode(Node):
                 
             return full_text
 
-        self.get_logger().info("[93m[MULTI-AGENT] Starting Brainstorming...[0m")
+        self.get_logger().info("\033[93m[MULTI-AGENT] Starting Brainstorming...\033[0m")
         try:
             # --- Turn 1: Robotics VLA Drafts Initial Plan ---
             prompt_1 = f'''
 You are the Robotics VLA Orchestrator ({robotics_model}). The user wants to build: "{goal_text}".
 
-You have 3 robots and 9 blocks available on the source tables:
-- Table 1 (FR3_1): Block1 (Red Cube), Block2 (Green Cylinder), Block3 (Blue Cube)
-- Table 2 (FR3_2): Block4 (Yellow Cylinder), Block5 (Magenta Cube), Block6 (Cyan Cylinder)
-- Table 3 (FR3_3): Block7 (Orange Cube), Block8 (Purple Cylinder), Block9 (Lime Cube)
-Central target table is at [X=0.0, Y=0.0].
+Workspace layout:
+- FR3_1 (Bottom arm): operates on Source Table 1 ([0.0, -1.05]) and the Central Target Table ([0.0, 0.0])
+- FR3_2 (Top-right arm): operates on Source Table 2 ([0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
+- FR3_3 (Top-left arm): operates on Source Table 3 ([-0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
 
-Draft an initial plan for assigning these blocks to robots.
-Your PRIMARY GOAL is to maximize MULTI-ROBOT CONCURRENCY. Assign blocks so that FR3_1, FR3_2, and FR3_3 can pick and place at the same time.
+Visually inspect the camera image to detect available objects (colors, shapes) on each table.
+Draft an initial plan assigning tasks to the robots to achieve the user's goal.
+Maximize MULTI-ROBOT CONCURRENCY so multiple arms can pick/place simultaneously.
 CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
 '''
+            req_1 = [
+                genai_types.Part.from_bytes(data=image_bytes, mime_type='image/png'),
+                genai_types.Part.from_text(text=prompt_1)
+            ] if image_bytes else prompt_1
+
             response_1 = stream_chat(
                 "Robotics Orchestrator", "🦾", "vla",
-                robotics_model, prompt_1,
+                robotics_model, req_1,
                 genai_types.GenerateContentConfig(temperature=0.2)
             )
 
@@ -418,7 +422,7 @@ You are the Spatial Architect ({architect_model}). The Robotics VLA has proposed
 {response_1}
 
 Your job is strictly GEOMETRIC and MATHEMATICAL CORRECTION. 
-Review their proposed plan and provide the exact mathematical 2D spatial coordinates (X, Y) required to form the requested shape. Blocks are ~0.04m wide.
+Review their proposed plan and provide the exact mathematical 2D spatial coordinates (X, Y) required to form the requested shape on the Central Table ([0.0, 0.0]). Blocks are ~0.04m wide.
 CRITICAL: Keep your response EXTREMELY concise (under 2 sentences) and list the coordinates.
 '''
             response_2 = stream_chat(
@@ -429,14 +433,17 @@ CRITICAL: Keep your response EXTREMELY concise (under 2 sentences) and list the 
 
             # --- Turn 3: Safety & Kinematics Verifier ---
             prompt_3 = f'''
-You are the Safety & Kinematics Verifier ({architect_model}). Review the combination of the Robotics VLA plan and the Spatial Architect coordinates:
+You are the Safety & Kinematics Verifier ({architect_model}). Review the proposed multi-robot execution plan:
 
 {response_2}
 
-Your job is strictly COLLISION & REACHABILITY verification.
-1. The 3 arms are placed very closely together. Identify if their simultaneous pick/place timings will cause mid-air collisions. If so, recommend sequencing (e.g. Robot 1 places, THEN Robot 2 places).
-2. Recommend hyperparameter usage: e.g. recommend using `speed="slow"` for delicate places, or higher `approach_height=0.2` if reaching over obstacles.
-CRITICAL: Keep your response EXTREMELY concise (2 sentences).
+Analyze safety, trajectory interference, and kinematics:
+1. Concurrency & Collision Check: If multiple arms place at the center table simultaneously, specify explicit execution order (e.g., dispatch non-conflicting picks concurrently, but serialize center placements).
+2. Dynamic Hyperparameters:
+   - `speed`: select 'fast' for unobstructed initial movements, 'normal' for standard transport, and 'slow' for high-precision placement or higher tower layers.
+   - `approach_height`: default is 0.1m; increase to 0.15m - 0.25m when stacking atop existing blocks or clearing surrounding objects.
+
+CRITICAL: Provide clear, actionable safety directives and hyperparameter choices in under 2-3 sentences.
 '''
             response_3 = stream_chat(
                 "Safety Verifier", "🛡️", "architect",
@@ -446,12 +453,12 @@ CRITICAL: Keep your response EXTREMELY concise (2 sentences).
 
             # --- Turn 4: Robotics VLA Finalizes ---
             prompt_4 = f'''
-Here is the safety verification:
+Here is the safety and kinematic review:
 {response_3}
 
-Integrate the spatial coordinates and the safety/hyperparameter recommendations into your plan.
+Finalize the plan by integrating the spatial coordinates and the safety/hyperparameter directives (speed, approach_height, concurrency order).
 Provide the FINAL exact blueprint.
-CRITICAL: Keep your text extremely concise. Format your final response starting with "Here is the final execution blueprint:"
+CRITICAL: Keep your text concise. Format your final response starting with "Here is the final execution blueprint:"
 '''
             contents = [
                 genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=prompt_1)]),
@@ -480,7 +487,7 @@ CRITICAL: Keep your text extremely concise. Format your final response starting 
         # Initial contents for the conversation
         
         # 1. Multi-Agent Brainstorming Phase (Spatial Architect)
-        blueprint = self._brainstorm_spatial_plan(self.user_goal)
+        blueprint = self._brainstorm_spatial_plan(self.user_goal, image_bytes)
         
         enhanced_goal = f'''
 User Goal: {self.user_goal}

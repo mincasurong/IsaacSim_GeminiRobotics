@@ -1,102 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Mic, MicOff, Send, Bot, Wifi, WifiOff, Trash2,
-  Activity, Cpu, Terminal, ChevronDown, ChevronUp,
-  Play, Square, RotateCcw, Plus, Minus, Wrench, GanttChart, FileCode2,
-  PanelRightOpen, PanelRightClose, User
+  Terminal, ChevronDown, ChevronUp,
+  Play, Square, RotateCcw, Plus, Minus, Wrench,
+  PanelRightOpen, PanelRightClose, User,
+  BarChart3, GanttChart as GanttIcon, Map, List,
 } from 'lucide-react';
+import { C, btnSmall, btnCtrl, monoFont, stripAnsi, fmt, LOG_COLORS, LOG_LABELS,
+  type ChatMessage, type LogEntry, type RobotAction, type MetricsData } from './components/theme';
+import KpiDashboard from './components/KpiDashboard';
+import GanttChart from './components/GanttChart';
+import SceneMap from './components/SceneMap';
+import EventTrace from './components/EventTrace';
 
 const ROSLIB = (window as any).ROSLIB;
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 const API = 'http://localhost:3001';
 
-/* ── Theme ──────────────────────────────────────────────── */
-const C = {
-  bg:       '#0d0d0d',
-  bgChat:   '#171717',
-  bgSide:   '#1a1a1a',
-  bgInput:  '#2a2a2a',
-  bgHover:  '#333333',
-  border:   '#2e2e2e',
-  borderHi: '#444',
-  green:    '#22c55e',
-  greenDim: '#16a34a',
-  greenGlow:'rgba(34,197,94,0.25)',
-  yellow:   '#facc15',
-  white:    '#ececec',
-  text:     '#d1d5db',
-  textDim:  '#9ca3af',
-  textMuted:'#6b7280',
-  red:      '#ef4444',
-  redGlow:  'rgba(239,68,68,0.3)',
-  blue:     '#38bdf8',
-  accent:   '#10a37f',
-  accentDim:'#0d8c6d',
-};
-
-/* ── Types ──────────────────────────────────────────────── */
-interface ChatMessage { id: number; role: 'user' | 'system'; text: string; ts: Date; }
-interface LogEntry { id: number; level: number; name: string; msg: string; ts: Date; }
-interface RobotAction { id: number; raw: string; ts: Date; }
-
-const LOG_COLORS: Record<number, string> = { 10: C.textMuted, 20: C.green, 30: C.yellow, 40: C.red, 50: '#f472b6' };
-const LOG_LABELS: Record<number, string> = { 10: 'DBG', 20: 'INF', 30: 'WRN', 40: 'ERR', 50: 'FTL' };
-const stripAnsi = (s: string) => s ? s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\[[0-9;]+m/g, '').replace(/\[0m/g, '') : '';
-const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-const monoFont = '"SF Mono","Fira Code","Cascadia Code","Consolas",monospace';
-
-/* ── Gantt Chart ────────────────────────────────────────── */
-function GanttView({ actions, results, fontSize }: { actions: any[], results: any[], fontSize: number }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t); }, []);
-
-  const robots = ['FR3_1', 'FR3_2', 'FR3_3'];
-  const tasks: any[] = [];
-  actions.forEach(a => {
-    try {
-      const p = JSON.parse(a.raw);
-      const robot = p.robot || 'GLOBAL';
-      const actionName = p.action || '?';
-      const res = results.find((r: any) => { try { const rp = JSON.parse(r.raw); return rp.robot_id === robot && r.ts.getTime() >= a.ts.getTime(); } catch { return false; } });
-      tasks.push({ robot, action: actionName, start: a.ts.getTime(), end: res ? res.ts.getTime() : now, finished: !!res, success: res ? JSON.parse(res.raw).success : true });
-    } catch {}
-  });
-
-  if (tasks.length === 0) return <div style={{ color: C.textMuted, padding: 24, textAlign: 'center', fontSize: fontSize - 1 }}>No actions yet</div>;
-
-  const maxTime = Math.max(now, ...tasks.map(t => t.end));
-  let minTime = maxTime - 15000;
-  if (tasks.some(t => !t.finished)) { const e = Math.min(...tasks.filter(t => !t.finished).map(t => t.start)); if (e < minTime) minTime = e - 2000; }
-  const duration = Math.max(5000, maxTime - minTime);
-
-  return (
-    <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {robots.map(r => (
-        <div key={r}>
-          <div style={{ fontSize: fontSize - 2, fontWeight: 600, color: C.textDim, marginBottom: 4 }}>{r}</div>
-          <div style={{ height: 28, background: C.bgInput, borderRadius: 8, position: 'relative', overflow: 'hidden' }}>
-            {tasks.filter(t => t.robot === r && t.end > minTime).map((t, i) => {
-              const left = Math.max(0, (t.start - minTime) / duration * 100);
-              const width = Math.min(100 - left, (t.end - Math.max(minTime, t.start)) / duration * 100);
-              const color = !t.finished ? C.blue : (t.success ? C.green : C.red);
-              return (
-                <div key={i} style={{
-                  position: 'absolute', left: `${left}%`, width: `${Math.max(width, 1)}%`, top: 3, bottom: 3,
-                  background: color, borderRadius: 5, opacity: 0.85,
-                  display: 'flex', alignItems: 'center', padding: '0 6px', overflow: 'hidden',
-                  boxShadow: !t.finished ? `0 0 12px ${color}66` : 'none',
-                  transition: 'width 0.2s ease',
-                }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: '#000', whiteSpace: 'nowrap' }}>{t.action.toUpperCase()}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+type SideTab = 'kpi' | 'gantt' | 'map' | 'events';
 
 /* ── Main App ───────────────────────────────────────────── */
 function App() {
@@ -108,7 +29,7 @@ function App() {
   const [fontSize, setFontSize] = useState(14);
   const [sideOpen, setSideOpen] = useState(true);
   const [bottomOpen, setBottomOpen] = useState(true);
-  const [sideTab, setSideTab] = useState<'gantt'|'results'>('gantt');
+  const [sideTab, setSideTab] = useState<SideTab>('kpi');
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 0, role: 'system', text: 'Welcome to Gemini Robotics ER. Click **▶ Start** to launch the robot workspace, then type or speak a goal to begin.', ts: new Date() },
@@ -116,6 +37,7 @@ function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [actions, setActions] = useState<RobotAction[]>([]);
   const [actionResults, setActionResults] = useState<RobotAction[]>([]);
+  const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [logAutoScroll, setLogAutoScroll] = useState(true);
   const [minLogLevel, setMinLogLevel] = useState(20);
 
@@ -161,6 +83,12 @@ function App() {
           .subscribe((m: any) => { setActions(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action_result', messageType: 'std_msgs/String' })
           .subscribe((m: any) => { setActionResults(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
+
+        // NEW: Subscribe to robot metrics topic
+        new ROSLIB.Topic({ ros: ros.current, name: '/multi_robot/robot_metrics', messageType: 'std_msgs/String' })
+          .subscribe((m: any) => {
+            try { setMetrics(JSON.parse(m.data)); } catch {}
+          });
       });
       ros.current.on('error', () => setConnected(false));
       ros.current.on('close', () => { setConnected(false); setTimeout(initROS, 3000); });
@@ -193,10 +121,15 @@ function App() {
   const resetSim = () => { if (!connected || !resetTopic.current) { addMsg('system', '⚠️ Not connected.'); return; } resetTopic.current.publish(new ROSLIB.Message({})); addMsg('system', '🔄 Simulation reset sent.'); };
 
   const filteredLogs = logs.filter(l => l.level >= minLogLevel);
-
-  const parseAction = (raw: string) => { try { const o = JSON.parse(raw); return { action: o.action || '?', detail: `${o.robot || ''} ${o.target || ''}${o.x !== undefined ? ` x=${o.x}` : ''}${o.y !== undefined ? ` y=${o.y}` : ''}`.trim() }; } catch { return { action: '?', detail: raw }; } };
-
   const renderMarkdown = (t: string) => t.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+  /* ── Sidebar tab config ───────────────────────────────── */
+  const tabs: { key: SideTab; icon: typeof BarChart3; label: string }[] = [
+    { key: 'kpi', icon: BarChart3, label: 'KPI' },
+    { key: 'gantt', icon: GanttIcon, label: 'Timeline' },
+    { key: 'map', icon: Map, label: 'Map' },
+    { key: 'events', icon: List, label: 'Events' },
+  ];
 
   /* ── Render ───────────────────────────────────────────── */
   return (
@@ -206,10 +139,10 @@ function App() {
       <div style={{ height: 48, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, background: C.bgChat, flexShrink: 0 }}>
         <div style={{ width: 30, height: 30, borderRadius: 8, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Bot size={16} color="#fff" /></div>
         <span style={{ fontWeight: 700, color: C.white, fontSize: 15 }}>Gemini Robotics ER</span>
-        
+
         <div style={{ flex: 1 }} />
 
-        {/* Font */}
+        {/* Font size */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
           <button onClick={() => setFontSize(s => Math.max(10, s-1))} style={btnSmall}><Minus size={11} /></button>
           <span style={{ fontSize: 10, color: C.textMuted, width: 20, textAlign: 'center' }}>{fontSize}</span>
@@ -227,6 +160,13 @@ function App() {
         <button onClick={resetSim} style={{ ...btnCtrl, color: C.yellow }}><RotateCcw size={13} /> Reset</button>
 
         <div style={{ width: 1, height: 20, background: C.border, margin: '0 4px' }} />
+
+        {/* Tower height badge */}
+        {metrics && metrics.tower_height > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent, fontWeight: 700 }}>
+            🏗️ {metrics.tower_height}/9
+          </div>
+        )}
 
         {/* Status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: connected ? C.green : C.red }}>
@@ -251,11 +191,9 @@ function App() {
             <div style={{ maxWidth: 720, width: '100%', margin: '0 auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 0 }}>
               {messages.map(m => (
                 <div key={m.id} style={{
-                  padding: '20px 0',
-                  borderBottom: `1px solid ${C.border}`,
+                  padding: '20px 0', borderBottom: `1px solid ${C.border}`,
                   display: 'flex', gap: 14, alignItems: 'flex-start',
                 }}>
-                  {/* Avatar */}
                   <div style={{
                     width: 30, height: 30, borderRadius: 6, flexShrink: 0,
                     background: m.role === 'user' ? C.bgHover : C.accent,
@@ -263,7 +201,6 @@ function App() {
                   }}>
                     {m.role === 'user' ? <User size={14} color={C.textDim} /> : <Bot size={14} color="#fff" />}
                   </div>
-                  {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: fontSize - 1, fontWeight: 700, color: C.white, marginBottom: 4 }}>
                       {m.role === 'user' ? 'You' : 'Gemini Robotics'}
@@ -308,71 +245,39 @@ function App() {
           </div>
         </div>
 
-        {/* ── Right Sidebar ──────────────────────────── */}
+        {/* ── Right Sidebar (4 tabs) ─────────────────── */}
         {sideOpen && (
-          <div style={{ width: 360, borderLeft: `1px solid ${C.border}`, background: C.bgSide, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div style={{ width: 380, borderLeft: `1px solid ${C.border}`, background: C.bgSide, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}` }}>
-              <button onClick={() => setSideTab('gantt')} style={{
-                flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer', fontSize: fontSize - 2, fontWeight: 600,
-                background: 'transparent', color: sideTab === 'gantt' ? C.accent : C.textMuted,
-                borderBottom: sideTab === 'gantt' ? `2px solid ${C.accent}` : '2px solid transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}><GanttChart size={13} /> Timeline</button>
-              <button onClick={() => setSideTab('results')} style={{
-                flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer', fontSize: fontSize - 2, fontWeight: 600,
-                background: 'transparent', color: sideTab === 'results' ? C.accent : C.textMuted,
-                borderBottom: sideTab === 'results' ? `2px solid ${C.accent}` : '2px solid transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}><FileCode2 size={13} /> Results</button>
+              {tabs.map(tab => (
+                <button key={tab.key} onClick={() => setSideTab(tab.key)} style={{
+                  flex: 1, padding: '9px 0', border: 'none', cursor: 'pointer', fontSize: fontSize - 3, fontWeight: 600,
+                  background: 'transparent', color: sideTab === tab.key ? C.accent : C.textMuted,
+                  borderBottom: sideTab === tab.key ? `2px solid ${C.accent}` : '2px solid transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                  transition: 'color 0.15s',
+                }}>
+                  <tab.icon size={12} /> {tab.label}
+                </button>
+              ))}
             </div>
 
-            {sideTab === 'gantt' ? (
-              <div style={{ flex: 1, overflowY: 'auto' }}>
-                {/* Gantt */}
-                <GanttView actions={actions} results={actionResults} fontSize={fontSize} />
-
-                {/* Action blocks */}
-                <div style={{ padding: '6px 16px 8px', borderTop: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: fontSize - 2, fontWeight: 600, color: C.textDim, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Cpu size={12} /> Actions <span style={{ marginLeft: 'auto', fontSize: 10, color: C.textMuted }}>{actions.length}</span>
-                  </div>
-                  {actions.length === 0 && <div style={{ color: C.textMuted, fontSize: fontSize - 2, padding: 10, textAlign: 'center' }}>Waiting for commands...</div>}
-                  {actions.map(a => {
-                    const p = parseAction(a.raw);
-                    const pillColor = p.action === 'pick' ? C.blue : p.action === 'place' ? C.yellow : p.action === 'go_home' ? C.green : C.textMuted;
-                    return (
-                      <div key={a.id} style={{ padding: '7px 10px', marginBottom: 4, borderRadius: 8, background: C.bgInput, fontSize: fontSize - 2 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                          <span style={{ padding: '1px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700, background: pillColor + '22', color: pillColor, border: `1px solid ${pillColor}44` }}>{p.action.toUpperCase()}</span>
-                          <span style={{ color: C.textMuted, fontSize: 10, marginLeft: 'auto' }}>{fmt(a.ts)}</span>
-                        </div>
-                        <div style={{ color: C.text, fontFamily: monoFont, fontSize: fontSize - 2 }}>{p.detail}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px' }}>
-                <div style={{ fontSize: fontSize - 2, fontWeight: 600, color: C.textDim, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Activity size={12} /> Results <span style={{ marginLeft: 'auto', fontSize: 10, color: C.textMuted }}>{actionResults.length}</span>
-                </div>
-                {actionResults.map(r => {
-                  let success = false; try { success = JSON.parse(r.raw).success; } catch {}
-                  return (
-                    <div key={r.id} style={{
-                      padding: '7px 10px', marginBottom: 4, borderRadius: 8, fontFamily: monoFont, fontSize: fontSize - 2,
-                      background: success ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
-                      border: `1px solid ${success ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)'}`,
-                      color: success ? C.green : C.red,
-                    }}>
-                      {r.raw}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {/* Tab content */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {sideTab === 'kpi' && (
+                <KpiDashboard metrics={metrics} fontSize={fontSize} />
+              )}
+              {sideTab === 'gantt' && (
+                <GanttChart actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
+              )}
+              {sideTab === 'map' && (
+                <SceneMap actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
+              )}
+              {sideTab === 'events' && (
+                <EventTrace actions={actions} results={actionResults} fontSize={fontSize} />
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -445,9 +350,5 @@ function App() {
     </div>
   );
 }
-
-/* ── Shared button styles ───────────────────────────────── */
-const btnSmall: React.CSSProperties = { width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
-const btnCtrl: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, cursor: 'pointer', border: '1px solid #2e2e2e', background: 'transparent', color: '#9ca3af', fontSize: 12, fontWeight: 600 };
 
 export default App;

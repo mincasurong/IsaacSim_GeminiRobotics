@@ -8,6 +8,7 @@ Supports two operational modes:
 """
 
 import json
+import time
 import numpy as np
 import rclpy
 from rclpy.duration import Duration
@@ -57,6 +58,7 @@ class MultiRobotController(Node):
         self.cmd_pub3 = self.create_publisher(JointState, '/fr3_3/joint_commands', 10)
         self.status_pub = self.create_publisher(String, '/multi_robot/status', 10)
         self.result_pub = self.create_publisher(String, '/gemini/action_result', 10)
+        self.metrics_pub = self.create_publisher(String, '/multi_robot/robot_metrics', 10)
 
         # ?? Subscribers ?????????????????????????????????????????????
         self.state_sub1 = self.create_subscription(JointState, '/fr3_1/joint_states', self._state_cb1, 10)
@@ -141,8 +143,18 @@ class MultiRobotController(Node):
         self.gemini_action3 = None
         self.center_occupied_by = None
 
+        # ── Metrics & Utilization Tracking ───────────────────────────
+        self._metrics_start_time = time.monotonic()
+        self._robot_busy_time = {1: 0.0, 2: 0.0, 3: 0.0}
+        self._robot_idle_time = {1: 0.0, 2: 0.0, 3: 0.0}
+        self._robot_last_transition = {1: time.monotonic(), 2: time.monotonic(), 3: time.monotonic()}
+        self._robot_was_busy = {1: False, 2: False, 3: False}
+        self._tasks_completed = {1: 0, 2: 0, 3: 0}
+        self._tasks_failed = {1: 0, 2: 0, 3: 0}
+
         # ?? 50 Hz Control Loop Timer ????????????????????????????????
         self.timer = self.create_timer(0.02, self._timer_callback)
+        self.metrics_timer = self.create_timer(0.5, self._publish_metrics)
 
         self.get_logger().info(
             f"MultiRobotController initialized. Mode: [{self.mode.upper()}]. "
@@ -222,6 +234,15 @@ class MultiRobotController(Node):
         self.gemini_action3 = None
         
         self.center_occupied_by = None
+        
+        self._metrics_start_time = time.monotonic()
+        self._robot_busy_time = {1: 0.0, 2: 0.0, 3: 0.0}
+        self._robot_idle_time = {1: 0.0, 2: 0.0, 3: 0.0}
+        self._robot_last_transition = {1: time.monotonic(), 2: time.monotonic(), 3: time.monotonic()}
+        self._robot_was_busy = {1: False, 2: False, 3: False}
+        self._tasks_completed = {1: 0, 2: 0, 3: 0}
+        self._tasks_failed = {1: 0, 2: 0, 3: 0}
+
         try:
             self.tf_buffer.clear()
         except Exception:
@@ -507,6 +528,64 @@ class MultiRobotController(Node):
     # 50 Hz Control Loop & State Machine
     # ?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═?═??
 
+    def _publish_metrics(self):
+        """Publish structured robot metrics at 2 Hz for the GUI dashboard."""
+        now = time.monotonic()
+        robots_data = {}
+        for r_id in [1, 2, 3]:
+            state = getattr(self, f'state{r_id}')
+            is_busy = state not in ('INIT', 'FINISHED', 'WAITING_FOR_PLACE_CMD', 'WAIT_FOR_CENTER')
+            
+            # Accumulate time since last transition
+            dt = now - self._robot_last_transition[r_id]
+            if self._robot_was_busy[r_id]:
+                self._robot_busy_time[r_id] += dt
+            else:
+                self._robot_idle_time[r_id] += dt
+            self._robot_last_transition[r_id] = now
+            self._robot_was_busy[r_id] = is_busy
+            
+            total = self._robot_busy_time[r_id] + self._robot_idle_time[r_id]
+            busy_pct = (self._robot_busy_time[r_id] / total * 100.0) if total > 0 else 0.0
+            idle_pct = 100.0 - busy_pct
+            
+            # Determine simplified state category for the GUI
+            if state in ('ROTATE_TO_PICK', 'HOVER_PICK', 'DESCEND_PICK', 'GRASP', 'LIFT'):
+                gui_phase = 'PICKING'
+            elif state in ('TUCK_AFTER_PICK', 'ROTATE_TO_PLACE', 'HOVER_PLACE', 'DESCEND_PLACE', 'RELEASE', 'RETRACT', 'TUCK_AFTER_PLACE'):
+                gui_phase = 'PLACING'
+            elif state == 'RETURN_HOME':
+                gui_phase = 'HOMING'
+            elif state in ('WAITING_FOR_PLACE_CMD', 'WAIT_FOR_CENTER'):
+                gui_phase = 'QUEUED'
+            elif state == 'FINISHED':
+                gui_phase = 'IDLE'
+            else:
+                gui_phase = 'INIT'
+            
+            action = getattr(self, f'gemini_action{r_id}', None) or ''
+            target = getattr(self, f'active_target{r_id}', None) or ''
+            
+            robots_data[f'FR3_{r_id}'] = {
+                'state': state,
+                'phase': gui_phase,
+                'action': action,
+                'target': target,
+                'busy_pct': round(busy_pct, 1),
+                'idle_pct': round(idle_pct, 1),
+                'tasks_completed': self._tasks_completed[r_id],
+                'tasks_failed': self._tasks_failed[r_id],
+            }
+        
+        msg = String()
+        msg.data = json.dumps({
+            'timestamp': now - self._metrics_start_time,
+            'robots': robots_data,
+            'tower_height': self.tower_height,
+            'center_occupied_by': f'FR3_{self.center_occupied_by}' if self.center_occupied_by else None,
+        })
+        self.metrics_pub.publish(msg)
+
     def _timer_callback(self):
         for r_id in [1, 2, 3]:
             self._process_robot(r_id)
@@ -635,6 +714,7 @@ class MultiRobotController(Node):
                             # It missed!
                             self._set_state(robot_id, 'FINISHED')
                             self._publish_result(False, f"Pick failed by robot {robot_id}. Gripper closed on empty space.", f"FR3_{robot_id}")
+                            self._tasks_failed[robot_id] += 1
                     else:
                         if pick_success:
                             self._set_state(robot_id, 'WAITING_FOR_CENTER')
@@ -693,6 +773,7 @@ class MultiRobotController(Node):
                     if self.mode == 'gemini' and getattr(self, f'gemini_action{robot_id}') == 'place':
                         self._set_state(robot_id, 'FINISHED')
                         self._publish_result(True, f"Place completed by robot {robot_id}. Tower height is now {self.tower_height}.", f"FR3_{robot_id}")
+                        self._tasks_completed[robot_id] += 1
                     else:
                         # Advance block index for current robot
                         max_blocks_per_robot = 3

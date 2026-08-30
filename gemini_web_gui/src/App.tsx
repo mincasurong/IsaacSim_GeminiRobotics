@@ -4,7 +4,7 @@ import {
   Terminal, ChevronDown, ChevronUp,
   Play, Square, RotateCcw, Plus, Minus, Wrench,
   PanelRightOpen, PanelRightClose, User,
-  BarChart3, GanttChart as GanttIcon, Map, List,
+  BarChart3,
 } from 'lucide-react';
 import { C, btnSmall, btnCtrl, monoFont, stripAnsi, fmt, LOG_COLORS, LOG_LABELS,
   type ChatMessage, type LogEntry, type RobotAction, type MetricsData } from './components/theme';
@@ -17,7 +17,6 @@ const ROSLIB = (window as any).ROSLIB;
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 const API = 'http://localhost:3001';
 
-type SideTab = 'kpi' | 'gantt' | 'map' | 'events';
 
 /* ── Main App ───────────────────────────────────────────── */
 function App() {
@@ -29,8 +28,9 @@ function App() {
   const [fontSize, setFontSize] = useState(14);
   const [sideOpen, setSideOpen] = useState(true);
   const [bottomOpen, setBottomOpen] = useState(true);
-  const [sideTab, setSideTab] = useState<SideTab>('kpi');
-
+  const [rightPanelWidth, setRightPanelWidth] = useState(55);
+  const isDragging = useRef(false);
+  
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 0, role: 'system', text: 'Welcome to Gemini Robotics ER. Click **▶ Start** to launch the robot workspace, then type or speak a goal to begin.', ts: new Date() },
   ]);
@@ -54,6 +54,26 @@ function App() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => { if (logAutoScroll) logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, logAutoScroll]);
   useEffect(() => { termEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [termLines]);
+
+  /* ── Drag to Resize ───────────────────────────────────── */
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const newWidth = 100 - (e.clientX / window.innerWidth) * 100;
+      setRightPanelWidth(Math.max(30, Math.min(newWidth, 70)));
+    };
+    const handleMouseUp = () => {
+      isDragging.current = false;
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
 
   /* ── SSE ──────────────────────────────────────────────── */
   useEffect(() => {
@@ -123,13 +143,6 @@ function App() {
   const filteredLogs = logs.filter(l => l.level >= minLogLevel);
   const renderMarkdown = (t: string) => t.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
-  /* ── Sidebar tab config ───────────────────────────────── */
-  const tabs: { key: SideTab; icon: typeof BarChart3; label: string }[] = [
-    { key: 'kpi', icon: BarChart3, label: 'KPI' },
-    { key: 'gantt', icon: GanttIcon, label: 'Timeline' },
-    { key: 'map', icon: Map, label: 'Map' },
-    { key: 'events', icon: List, label: 'Events' },
-  ];
 
   /* ── Render ───────────────────────────────────────────── */
   return (
@@ -245,38 +258,47 @@ function App() {
           </div>
         </div>
 
-        {/* ── Right Sidebar (4 tabs) ─────────────────── */}
+        {/* ── Right Dashboard Panel & Divider ─────────────────── */}
         {sideOpen && (
-          <div style={{ width: 380, borderLeft: `1px solid ${C.border}`, background: C.bgSide, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-            {/* Tabs */}
-            <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}` }}>
-              {tabs.map(tab => (
-                <button key={tab.key} onClick={() => setSideTab(tab.key)} style={{
-                  flex: 1, padding: '9px 0', border: 'none', cursor: 'pointer', fontSize: fontSize - 3, fontWeight: 600,
-                  background: 'transparent', color: sideTab === tab.key ? C.accent : C.textMuted,
-                  borderBottom: sideTab === tab.key ? `2px solid ${C.accent}` : '2px solid transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                  transition: 'color 0.15s',
-                }}>
-                  <tab.icon size={12} /> {tab.label}
-                </button>
-              ))}
+          <div
+            onMouseDown={() => {
+              isDragging.current = true;
+              document.body.style.cursor = 'col-resize';
+              document.body.style.userSelect = 'none';
+            }}
+            style={{
+              width: 5,
+              cursor: 'col-resize',
+              background: C.border,
+              flexShrink: 0,
+              zIndex: 10,
+              transition: 'background 0.2s'
+            }}
+            onMouseOver={e => e.currentTarget.style.background = C.accent}
+            onMouseOut={e => e.currentTarget.style.background = C.border}
+          />
+        )}
+        {sideOpen && (
+          <div style={{ width: `${rightPanelWidth}%`, background: C.bgSide, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8, color: C.textDim, fontWeight: 600 }}>
+              <BarChart3 size={14} /> System Monitoring Dashboard
             </div>
-
-            {/* Tab content */}
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {sideTab === 'kpi' && (
-                <KpiDashboard metrics={metrics} fontSize={fontSize} />
-              )}
-              {sideTab === 'gantt' && (
+            
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <KpiDashboard metrics={metrics} fontSize={fontSize} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0, borderLeft: `1px solid ${C.border}` }}>
+                  <SceneMap actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
+                </div>
+              </div>
+              <div style={{ borderTop: `1px solid ${C.border}` }}>
                 <GanttChart actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
-              )}
-              {sideTab === 'map' && (
-                <SceneMap actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
-              )}
-              {sideTab === 'events' && (
+              </div>
+              <div style={{ borderTop: `1px solid ${C.border}`, flex: 1, minHeight: 300, display: 'flex', flexDirection: 'column' }}>
                 <EventTrace actions={actions} results={actionResults} fontSize={fontSize} />
-              )}
+              </div>
             </div>
           </div>
         )}

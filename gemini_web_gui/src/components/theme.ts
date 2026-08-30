@@ -70,9 +70,15 @@ export const BLOCK_COLORS: Record<string, string> = {
 };
 
 export const BLOCK_LABELS: Record<string, string> = {
-  Block1: 'Red',    Block2: 'Green',  Block3: 'Blue',
-  Block4: 'Yellow', Block5: 'Magenta', Block6: 'Cyan',
-  Block7: 'Orange', Block8: 'Purple', Block9: 'Lime',
+  Block1: 'Red Cube',       Block2: 'Green Cyl',  Block3: 'Blue Cube',
+  Block4: 'Yellow Cyl',     Block5: 'Magenta Cube',Block6: 'Cyan Cyl',
+  Block7: 'Orange Cube',    Block8: 'Purple Cyl', Block9: 'Lime Cube',
+};
+
+export const BLOCK_SHAPES: Record<string, 'cube' | 'cylinder'> = {
+  Block1: 'cube',     Block2: 'cylinder', Block3: 'cube',
+  Block4: 'cylinder', Block5: 'cube',     Block6: 'cylinder',
+  Block7: 'cube',     Block8: 'cylinder', Block9: 'cube',
 };
 
 export const PHASE_COLORS: Record<string, string> = {

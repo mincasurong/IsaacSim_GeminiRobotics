@@ -14,6 +14,9 @@ echo -e "${BOLD}║   🤖  WSL2 ROS 2 Bringup & Environment Configurator       
 echo -e "${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
+# Prevent ROS 2 missing log directory symlink warning
+mkdir -p ~/.ros/log
+
 # 0. Sync workspace packages from Windows mount to WSL2 workspace
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ "$SCRIPT_DIR" == /mnt/* ]] && [ -d "$SCRIPT_DIR/src" ]; then

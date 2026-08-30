@@ -68,10 +68,13 @@ graph LR
 Follow these steps to set up the dual Windows/WSL2 environment from scratch.
 
 ### Step 1: Install NVIDIA Isaac Sim (Windows)
-1. Download and install the [NVIDIA Omniverse Launcher](https://www.nvidia.com/en-us/omniverse/).
-2. Log in with your NVIDIA account.
-3. Go to the **Exchange** tab, search for **Isaac Sim**, and install version **4.5.0** or **6.0.0**.
-4. Once installed, Isaac Sim's Python environment will act as the simulation host.
+Clone and install Isaac Sim directly from the official GitHub repository (Isaac Sim 4.5+ or 6.0+ is required):
+```bash
+git clone https://github.com/isaac-sim/IsaacSim.git
+cd IsaacSim
+# Follow the repository's README to set up the Isaac Sim Python environment
+```
+*Note: Once installed, this configured Python environment will act as the simulation host.*
 
 ### Step 2: Clone the Repository
 Open a Windows terminal (Command Prompt or PowerShell):

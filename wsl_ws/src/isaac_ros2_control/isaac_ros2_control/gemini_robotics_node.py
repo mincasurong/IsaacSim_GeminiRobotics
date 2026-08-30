@@ -19,11 +19,14 @@ Services:
 
 import json
 import time
+import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.duration import Duration
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
+import tf2_ros
 
 try:
     from cv_bridge import CvBridge
@@ -108,6 +111,17 @@ class GeminiRoboticsNode(Node):
         self.user_goal = "Your ultimate goal is to build a single, stable 9-layer tower on the central target table using ALL 9 available objects."
         self.is_running = False
         self.cancel_current_task = False
+        
+        # TF2 for querying block positions from Isaac Sim
+        self.tf_buffer = tf2_ros.Buffer(node=self)
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        
+        # Known robot base positions in world frame (from three_robot_tower.py)
+        self.robot_bases = {
+            'FR3_1': np.array([0.0, -0.45]),
+            'FR3_2': np.array([0.3897, 0.225]),
+            'FR3_3': np.array([-0.3897, 0.225]),
+        }
         
     # Callback Groups
         from rclpy.callback_groups import ReentrantCallbackGroup
@@ -390,6 +404,21 @@ class GeminiRoboticsNode(Node):
 
         self.get_logger().info("\033[93m[MULTI-AGENT] Starting Brainstorming...\033[0m")
         try:
+            # Query TF for block proximity data
+            proximity_text = ""
+            block_positions = self._query_block_positions()
+            if block_positions:
+                lines = []
+                for robot_name, base_xy in self.robot_bases.items():
+                    dists = []
+                    for block_name, pos in block_positions.items():
+                        d = np.hypot(pos[0] - base_xy[0], pos[1] - base_xy[1])
+                        dists.append((block_name, pos, d))
+                    dists.sort(key=lambda x: x[2])
+                    ranked = ", ".join([f"{b}({round(d,2)}m)" for b, _, d in dists[:5]])
+                    lines.append(f"  {robot_name}: nearest blocks → {ranked}")
+                proximity_text = "\n".join(lines)
+
             # --- Turn 1: Robotics VLA Drafts Initial Plan ---
             prompt_1 = f'''
 You are the Robotics VLA Orchestrator ({robotics_model}). The user wants to build: "{goal_text}".
@@ -399,9 +428,11 @@ Workspace layout:
 - FR3_2 (Top-right arm): operates on Source Table 2 ([0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
 - FR3_3 (Top-left arm): operates on Source Table 3 ([-0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
 
-Visually inspect the camera image to detect available objects (colors, shapes) on each table.
+MEASURED block distances from each robot base (pick CLOSEST blocks first!):
+{proximity_text if proximity_text else "(TF data not yet available — use visual proximity from the camera image)"}
+
 Draft an initial plan assigning tasks to the robots to achieve the user's goal.
-1. Proximity Rule: Always pick the CLOSEST, most easily accessible objects on each table first (nearest to the robot base) to minimize arm extension.
+1. Proximity Rule: ALWAYS pick the block with the SHORTEST distance from the robot base first. The distances above are measured in meters — lower = closer = pick first.
 2. Concurrency: Maximize MULTI-ROBOT CONCURRENCY so multiple arms can pick/place simultaneously.
 CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
 '''
@@ -634,10 +665,41 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         detections = gemini_utils.parse_gemini_response(result_text)
         self.last_detections = detections
 
+        # Enrich detections with TF-based proximity data
+        block_positions = self._query_block_positions()
+        if block_positions:
+            # Build a proximity summary for each robot
+            proximity_info = []
+            for robot_name, base_xy in self.robot_bases.items():
+                distances = []
+                for block_name, pos in block_positions.items():
+                    d = np.hypot(pos[0] - base_xy[0], pos[1] - base_xy[1])
+                    distances.append({"block": block_name, "world_xy": [round(pos[0], 3), round(pos[1], 3)], "distance_m": round(d, 3)})
+                distances.sort(key=lambda x: x["distance_m"])
+                proximity_info.append({"robot": robot_name, "blocks_by_distance": distances})
+            
+            # Attach proximity data to the detection result
+            return {"visual_detections": detections, "proximity": proximity_info}
+
         msg = String()
         msg.data = json.dumps(detections)
         self.detection_pub.publish(msg)
         return detections
+
+    def _query_block_positions(self) -> dict:
+        """Query TF for world-frame XY positions of all 9 blocks."""
+        positions = {}
+        for i in range(1, 10):
+            block_name = f"Block{i}"
+            try:
+                trans = self.tf_buffer.lookup_transform(
+                    'world', block_name, rclpy.time.Time(), timeout=Duration(seconds=0.1))
+                x = trans.transform.translation.x
+                y = trans.transform.translation.y
+                positions[block_name] = (x, y)
+            except Exception:
+                pass  # Block may not exist or TF not yet available
+        return positions
 
     def _fn_pick(self, robot: str, object_label: str, speed: str = 'normal', approach_height: float = 0.1) -> dict:
         msg = String()

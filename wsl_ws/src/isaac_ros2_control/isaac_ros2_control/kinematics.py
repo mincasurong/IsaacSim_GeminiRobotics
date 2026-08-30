@@ -10,9 +10,7 @@ Features:
 import numpy as np
 
 
-# ═════════════════════════════════════════════════════════════════════
 # 1. Coordinate Transform & Geometry Utilities
-# ═════════════════════════════════════════════════════════════════════
 
 def tf_matrix(xyz, rpy):
     """Create a 4x4 homogeneous transformation matrix from translation and RPY."""
@@ -164,9 +162,7 @@ def compute_symmetric_grasp_quat(target_yaw, arm_yaw):
     return [qw, qx, qy, qz]
 
 
-# ═════════════════════════════════════════════════════════════════════
 # 2. Franka FR3 Kinematics (7-DOF Arm + Parallel Gripper)
-# ═════════════════════════════════════════════════════════════════════
 
 JOINT_ORIGINS_FR3 = [
     ([0.0, 0.0, 0.333], [0.0, 0.0, 0.0]),
@@ -289,9 +285,7 @@ def inverse_kinematics(target_pos, target_quat, q_init, max_iter=60, tol=1e-4):
     return q, False
 
 
-# ═════════════════════════════════════════════════════════════════════
 # 3. Universal Robots UR5e Kinematics (Analytical Closed-Form IK)
-# ═════════════════════════════════════════════════════════════════════
 
 # UR5e DH parameters
 UR5E_D1 = 0.1625

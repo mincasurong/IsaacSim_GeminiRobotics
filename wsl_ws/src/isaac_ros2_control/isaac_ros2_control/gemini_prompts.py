@@ -1,7 +1,7 @@
 """Structured prompt templates for Gemini Robotics-ER 2 function calling.
 """
 
-# ── Function Calling System Prompt ────────────────────────────────────────────
+# Function Calling System Prompt
 
 SYSTEM_PROMPT = """\
 You are an advanced, autonomous robotic task orchestrator controlling 3 Franka FR3 robot arms.
@@ -41,7 +41,7 @@ Available functions: detect_objects, pick, place, verify_tower, go_home, get_wor
 Begin by detecting the objects, formulating your strategy, and executing it efficiently!
 """
 
-# ── Detection & Verification Prompts ──────────────────────────────────────────
+# Detection & Verification Prompts
 
 DETECT_BLOCKS_PROMPT = """\
 You are observing a 3-robot manipulation workspace from an overhead camera.

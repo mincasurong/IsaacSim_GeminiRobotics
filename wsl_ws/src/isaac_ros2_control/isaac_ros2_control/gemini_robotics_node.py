@@ -461,9 +461,13 @@ You are the Spatial Architect ({architect_model}). The Robotics VLA has proposed
 
 {response_1}
 
-Your job is strictly GEOMETRIC and MATHEMATICAL CORRECTION. 
-Review their proposed plan and provide the exact mathematical 2D spatial coordinates (X, Y) required to form the requested shape on the Central Table ([0.0, 0.0]). Blocks are ~0.04m wide.
-CRITICAL: Keep your response EXTREMELY concise (under 2 sentences) and list the coordinates.
+Your job is strictly GEOMETRIC and MATHEMATICAL CORRECTION.
+Do NOT try to guess raw absolute (X,Y) coordinates for complex shapes! Instead, use Relative Placement.
+1. First, draw an ASCII top-down grid of the desired shape using `[]` for blocks and `.` for empty space.
+2. Second, pick ONE block to be the central anchor placed at (0, 0).
+3. Third, map all other blocks relative to that anchor using the relation keywords: `on_top_of`, `left_of`, `right_of`, `front_of`, `back_of`.
+
+CRITICAL: Keep your response EXTREMELY concise. Draw the ASCII grid, then list the exact relative placement mappings.
 '''
                 response_2 = stream_chat(
                     "Spatial Architect", "📐", "architect",
@@ -494,10 +498,11 @@ CRITICAL: Provide clear, actionable safety directives and hyperparameter choices
 
                 # --- Turn 4: Robotics VLA Finalizes ---
                 prompt_4 = f'''
-Here is the safety and kinematic review:
+Here is the safety and kinematic review (including relative placement mappings):
 {response_3}
 
-Finalize the plan by integrating the spatial coordinates and the safety/hyperparameter directives (speed, approach_height, concurrency order).
+Finalize the plan by integrating the relative placement strategy and the safety/hyperparameter directives (speed, approach_height, concurrency order).
+Make sure to emphasize that the agent MUST use the `place_relative` tool for all blocks other than the anchor block, rather than guessing absolute (X,Y) coordinates.
 Provide the FINAL exact blueprint.
 CRITICAL: Keep your text concise. Format your final response starting with "Here is the final execution blueprint:"
 '''
@@ -701,6 +706,8 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     result["error_context"] = f"Pick failed. Current workspace status: {json.dumps(status)}. Suggest calling replan or try an alternative."
             elif name == "place":
                 result = self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "normal"), args.get("approach_height", 0.1))
+            elif name == "place_relative":
+                result = self._fn_place_relative(args.get("robot"), args.get("anchor_block"), args.get("relation"), args.get("speed", "normal"), args.get("approach_height", 0.1))
             elif name == "verify_tower":
                 result = self._fn_verify_tower()
             elif name == "go_home":
@@ -805,6 +812,43 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         })
         self.action_pub.publish(msg)
         return self._wait_for_action_complete(robot, timeout=25.0)
+
+    def _fn_place_relative(self, robot: str, anchor_block: str, relation: str, speed: str = 'normal', approach_height: float = 0.1) -> dict:
+        """Resolve a relative placement request into absolute coordinates via TF."""
+        try:
+            # Clean block name (e.g., 'Red Cube' -> 'Block1')
+            block_key = gemini_utils.resolve_block_key(anchor_block)
+            if not block_key:
+                return {"success": False, "message": f"Could not resolve anchor block name: {anchor_block}"}
+            
+            # Lookup anchor in TF
+            transform = self.tf_buffer.lookup_transform('world', block_key, rclpy.time.Time())
+            anchor_x = transform.transform.translation.x
+            anchor_y = transform.transform.translation.y
+            
+            # Apply offset
+            block_size = 0.045 # 4.5cm block width + tolerance
+            target_x, target_y = anchor_x, anchor_y
+            
+            if relation == "left_of":
+                target_y += block_size
+            elif relation == "right_of":
+                target_y -= block_size
+            elif relation == "front_of":
+                target_x += block_size
+            elif relation == "back_of":
+                target_x -= block_size
+            elif relation == "on_top_of":
+                pass # Same X, Y. The multi_robot_controller dynamically computes Z.
+            else:
+                return {"success": False, "message": f"Unknown relation: {relation}"}
+                
+            self.get_logger().info(f"\033[96m[TOOL] place_relative resolved {relation} {anchor_block} to X:{target_x:.3f}, Y:{target_y:.3f}\033[0m")
+            return self._fn_place(robot, float(target_x), float(target_y), speed, approach_height)
+        except Exception as e:
+            self.get_logger().error(f"Error in place_relative: {e}")
+            return {"success": False, "message": f"TF lookup failed for {anchor_block}: {e}"}
+
 
     def _fn_go_home(self, robot: str) -> dict:
         msg = String()

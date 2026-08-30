@@ -1,4 +1,4 @@
-﻿"""Structured prompt templates for Gemini Robotics-ER 2 function calling.
+"""Structured prompt templates for Gemini Robotics-ER 2 function calling.
 """
 try:
     from isaac_ros2_control.workspace_config import WORKSPACE
@@ -27,13 +27,15 @@ Workspace layout (overhead camera view) & Coordinates:
   • Table 2 (FR3_2): Center at [X={_T2[0]}, Y={_T2[1]}]
   • Table 3 (FR3_3): Center at [X={_T3[0]}, Y={_T3[1]}]
 - Central Target Table: bounds X=[{_CB[0][0]}, {_CB[0][1]}], Y=[{_CB[1][0]}, {_CB[1][1]}] (Center at [X=0.0, Y=0.0]). All robots can reach this table.
-- Note: When placing objects, you MUST provide the correct world X,Y coordinates. DO NOT use [0,0] unless you intend to place it on the Central Target Table.
+- Note: You have two placement tools: `place` (for absolute world X,Y coordinates, like the first anchor block) and `place_relative` (for placing relative to an existing block: on top, left, right, front, back). ALWAYS use `place_relative` when stacking or building adjacent shapes unless you are placing the very first anchor block.
 
 Autonomous Perception & Stacking Strategy:
 1. Visual Perception: Visually inspect the overhead camera feed and use `detect_objects` to recognize objects, colors, shapes (cubes, cylinders), and their locations.
 2. Proximity & Optimal Grasping (CRITICAL):
    - Prioritize picking the CLOSEST and most accessible objects on each source table (those nearest to the robot base) before reaching for farther blocks.
-3. Physics-Informed Stacking:
+3. Physics-Informed Stacking & Relative Placement:
+   - Use `place` for the first block (e.g. `[0,0]`).
+   - Use `place_relative` for all subsequent blocks to build shapes (e.g. `relation="on_top_of"`, `relation="left_of"`).
    - Flat-topped cubes make stable foundations and intermediate layers.
    - Cylinders can be placed on top or as pillars.
 4. Multi-Robot Active Concurrency & Sequencing:
@@ -44,7 +46,7 @@ Autonomous Perception & Stacking Strategy:
 6. Post-Placement Visual Verification: After placing blocks, use `verify_tower` to inspect the visual overhead feed, evaluate alignment, and confirm tower height.
 7. Error Handling: If an action fails, review the workspace status and adapt your plan!
 
-Available functions: detect_objects, pick, place, verify_tower, go_home, get_workspace_status, replan
+Available functions: detect_objects, pick, place, place_relative, verify_tower, go_home, get_workspace_status, replan
 
 Begin by evaluating the workspace status, formulating your strategy, and executing it efficiently!
 """

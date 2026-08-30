@@ -78,6 +78,39 @@ def get_robot_tools():
                 ),
             ),
             types.FunctionDeclaration(
+                name="place_relative",
+                description="Place the currently held object relative to an existing block on the central table (e.g. on top, to the left, right, front, back). The system will automatically calculate the correct coordinates based on the anchor block's current position.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "robot": types.Schema(
+                            type="STRING",
+                            enum=["FR3_1", "FR3_2", "FR3_3"],
+                            description="Which robot arm is holding the object."
+                        ),
+                        "anchor_block": types.Schema(
+                            type="STRING", 
+                            description="The name of the block already placed on the table to use as a reference point (e.g., 'Block1', 'Red Cube')."
+                        ),
+                        "relation": types.Schema(
+                            type="STRING",
+                            enum=["on_top_of", "left_of", "right_of", "front_of", "back_of"],
+                            description="Where to place the object relative to the anchor block. 'on_top_of' stacks it. 'left_of'/etc places it adjacently."
+                        ),
+                        "speed": types.Schema(
+                            type="STRING",
+                            enum=["fast", "normal", "slow"],
+                            description="Optional: Kinematic movement speed."
+                        ),
+                        "approach_height": types.Schema(
+                            type="NUMBER",
+                            description="Optional: Hover height above the object before descending (meters). Default is 0.1."
+                        ),
+                    },
+                    required=["robot", "anchor_block", "relation"],
+                ),
+            ),
+            types.FunctionDeclaration(
                 name="verify_tower",
                 description="Take a new overhead photo and verify the current workspace state. Returns assessment of the shapes/towers and any issues.",
                 parameters=types.Schema(

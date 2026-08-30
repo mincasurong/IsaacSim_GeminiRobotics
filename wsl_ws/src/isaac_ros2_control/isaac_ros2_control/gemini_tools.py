@@ -108,6 +108,14 @@ def get_robot_tools():
                     properties={},
                 ),
             ),
+            types.FunctionDeclaration(
+                name="replan",
+                description="Trigger a full re-evaluation of the workspace via a multi-agent brainstorm. Use this if the environment has drastically changed or if previous plans are repeatedly failing.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={},
+                ),
+            ),
         ]),
     ]
 

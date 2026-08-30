@@ -45,17 +45,20 @@ try:
     from isaac_ros2_control import gemini_utils
     from isaac_ros2_control import gemini_prompts
     from isaac_ros2_control import gemini_tools
+    from isaac_ros2_control import workspace_state
 except ImportError:
     try:
         from . import gemini_config
         from . import gemini_utils
         from . import gemini_prompts
         from . import gemini_tools
+        from . import workspace_state
     except ImportError:
         import gemini_config
         import gemini_utils
         import gemini_prompts
         import gemini_tools
+        import workspace_state
 
 
 class GeminiRoboticsNode(Node):
@@ -122,6 +125,8 @@ class GeminiRoboticsNode(Node):
             'FR3_2': np.array([0.3897, 0.225]),
             'FR3_3': np.array([-0.3897, 0.225]),
         }
+        
+        self.workspace_state = workspace_state.WorkspaceState()
         
     # Callback Groups
         from rclpy.callback_groups import ReentrantCallbackGroup
@@ -446,9 +451,12 @@ CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
                 robotics_model, req_1,
                 genai_types.GenerateContentConfig(temperature=0.2)
             )
-
-            # --- Turn 2: Spatial Architect Corrects Geometry ---
-            prompt_2 = f'''
+            
+            is_complex = any(kw in goal_text.lower() for kw in ['tower', 'layer', 'stack', 'build', 'pattern', 'replan', 'arrange'])
+            
+            if is_complex:
+                # --- Turn 2: Spatial Architect Corrects Geometry ---
+                prompt_2 = f'''
 You are the Spatial Architect ({architect_model}). The Robotics VLA has proposed the following schedule for building: "{goal_text}".
 
 {response_1}
@@ -457,14 +465,14 @@ Your job is strictly GEOMETRIC and MATHEMATICAL CORRECTION.
 Review their proposed plan and provide the exact mathematical 2D spatial coordinates (X, Y) required to form the requested shape on the Central Table ([0.0, 0.0]). Blocks are ~0.04m wide.
 CRITICAL: Keep your response EXTREMELY concise (under 2 sentences) and list the coordinates.
 '''
-            response_2 = stream_chat(
-                "Spatial Architect", "📐", "architect",
-                architect_model, prompt_2,
-                genai_types.GenerateContentConfig(temperature=0.1)
-            )
+                response_2 = stream_chat(
+                    "Spatial Architect", "📐", "architect",
+                    architect_model, prompt_2,
+                    genai_types.GenerateContentConfig(temperature=0.1)
+                )
 
-            # --- Turn 3: Safety & Kinematics Verifier ---
-            prompt_3 = f'''
+                # --- Turn 3: Safety & Kinematics Verifier ---
+                prompt_3 = f'''
 You are the Safety & Kinematics Verifier ({architect_model}). Review the proposed multi-robot execution plan:
 
 {response_2}
@@ -478,14 +486,14 @@ Analyze safety, trajectory interference, and kinematics:
 
 CRITICAL: Provide clear, actionable safety directives and hyperparameter choices in under 2-3 sentences.
 '''
-            response_3 = stream_chat(
-                "Safety Verifier", "🛡️", "architect",
-                architect_model, prompt_3,
-                genai_types.GenerateContentConfig(temperature=0.1)
-            )
+                response_3 = stream_chat(
+                    "Safety Verifier", "🛡️", "architect",
+                    architect_model, prompt_3,
+                    genai_types.GenerateContentConfig(temperature=0.1)
+                )
 
-            # --- Turn 4: Robotics VLA Finalizes ---
-            prompt_4 = f'''
+                # --- Turn 4: Robotics VLA Finalizes ---
+                prompt_4 = f'''
 Here is the safety and kinematic review:
 {response_3}
 
@@ -493,6 +501,13 @@ Finalize the plan by integrating the spatial coordinates and the safety/hyperpar
 Provide the FINAL exact blueprint.
 CRITICAL: Keep your text concise. Format your final response starting with "Here is the final execution blueprint:"
 '''
+            else:
+                prompt_4 = f'''
+Based on your initial plan, finalize the execution blueprint. 
+Since this is a simple task, no complex spatial coordinates or safety overrides are needed. Just proceed.
+CRITICAL: Keep your text concise. Format your final response starting with "Here is the final execution blueprint:"
+'''
+
             contents = [
                 genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=prompt_1)]),
                 genai_types.Content(role="model", parts=[genai_types.Part.from_text(text=response_1)]),
@@ -542,12 +557,28 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             )
         ]
         max_turns = 45
+        placement_count = 0
+        
         for turn in range(max_turns):
             if self.cancel_current_task:
                 self.get_logger().warn("\033[93m[WARN] Aborting current agentic loop due to cancellation request!\033[0m")
                 break
                 
             self.get_logger().info(f"\033[94m[AGENT] Agentic Turn {turn+1}/{max_turns}\033[0m")
+            
+            # Periodically inject fresh visual context (every 3 turns)
+            if turn > 0 and turn % 3 == 0 and self.latest_rgb is not None:
+                self.get_logger().info("\033[96m[VISION] Injecting fresh camera frame into context...\033[0m")
+                fresh_image = gemini_utils.encode_image_to_bytes(self.latest_rgb)
+                contents.append(
+                    genai_types.Content(
+                        role="user",
+                        parts=[
+                            genai_types.Part.from_bytes(data=fresh_image, mime_type='image/png'),
+                            genai_types.Part.from_text(text="[SYSTEM AUTO-REFRESH] Here is the latest overhead camera view.")
+                        ]
+                    )
+                )
             
             response = self.client.models.generate_content(
                 model=self.model_name,
@@ -578,6 +609,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                 
                 import concurrent.futures
                 response_parts = []
+                replan_triggered = False
                 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=len(func_parts)) as executor:
                     futures = {
@@ -590,6 +622,10 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                         self.get_logger().info(f"\033[96m[TOOL] Executing: {fc.name} with args {fc.args}\033[0m")
                         try:
                             res = future.result()
+                            if fc.name == "place" and res.get("success", False):
+                                placement_count += 1
+                            if fc.name == "replan":
+                                replan_triggered = True
                         except Exception as e:
                             import traceback
                             self.get_logger().error(f"Function {fc.name} failed with exception: {e}")
@@ -610,6 +646,34 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                         parts=response_parts
                     )
                 )
+                
+                if replan_triggered:
+                    self.get_logger().info("\033[93m[REPLAN] Initiating mid-task brainstorm...\033[0m")
+                    fresh_image = gemini_utils.encode_image_to_bytes(self.latest_rgb)
+                    new_blueprint = self._brainstorm_spatial_plan("REPLAN AND RECOVER. " + self.user_goal, fresh_image)
+                    contents.append(
+                        genai_types.Content(
+                            role="user",
+                            parts=[
+                                genai_types.Part.from_text(text=f"[SYSTEM REPLAN RESULTS] The Spatial Architect provides a new blueprint:\n{new_blueprint}")
+                            ]
+                        )
+                    )
+                    
+                # Auto Verify after 3 placements
+                if placement_count >= 3:
+                    self.get_logger().info("\033[96m[AUTO-VERIFY] 3 placements completed. Triggering auto-verification...\033[0m")
+                    placement_count = 0
+                    verify_res = self._fn_verify_tower()
+                    if not verify_res.get("success", True):
+                         contents.append(
+                            genai_types.Content(
+                                role="user",
+                                parts=[
+                                    genai_types.Part.from_text(text=f"[SYSTEM WARNING] Auto-verification failed! Issues: {verify_res.get('issues')}. Please adapt your plan.")
+                                ]
+                            )
+                        )
             else:
                 # Text response (task complete or final output)
                 text_parts = []
@@ -624,22 +688,38 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
     def _execute_function(self, name: str, args: dict) -> dict:
         """Dispatch function calls to actual robot controllers."""
         try:
+            result = None
             if name == "detect_objects":
-                return {"objects": self._fn_detect_objects()}
+                result = {"objects": self._fn_detect_objects()}
             elif name == "pick":
-                return self._fn_pick(args.get("robot"), args.get("object_label"), args.get("speed", "normal"), args.get("approach_height", 0.1))
+                result = self._fn_pick(args.get("robot"), args.get("object_label"), args.get("speed", "normal"), args.get("approach_height", 0.1))
+                # Auto-retry / enriched error context on pick failure
+                if not result.get("success", True):
+                    self.get_logger().warn(f"Pick failed. Enclosing fresh workspace status.")
+                    self.workspace_state.update_from_tf(self.tf_buffer)
+                    status = self.workspace_state.get_summary()
+                    result["error_context"] = f"Pick failed. Current workspace status: {json.dumps(status)}. Suggest calling replan or try an alternative."
             elif name == "place":
-                return self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "normal"), args.get("approach_height", 0.1))
+                result = self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "normal"), args.get("approach_height", 0.1))
             elif name == "verify_tower":
-                return self._fn_verify_tower()
+                result = self._fn_verify_tower()
             elif name == "go_home":
-                return self._fn_go_home(args.get("robot"))
+                result = self._fn_go_home(args.get("robot"))
             elif name == "get_workspace_status":
-                return self._fn_get_status()
+                result = self._fn_get_status()
+            elif name == "replan":
+                result = self._fn_replan()
             else:
-                return {"error": f"Unknown function: {name}"}
+                result = {"error": f"Unknown function: {name}"}
+                
+            # Log action history
+            if name in ["pick", "place", "go_home"]:
+                self.workspace_state.record_action(f"{name} {args}", result.get("success", True), result.get("message", ""))
+                
+            return result
         except Exception as e:
             self.get_logger().error(f"Error executing {name}: {e}")
+            self.workspace_state.record_action(f"{name} {args}", False, str(e))
             return {"error": str(e)}
 
     def _wait_for_action_complete(self, robot_id: str, timeout=30.0):
@@ -763,7 +843,18 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             return {"success": False, "issues": f"Failed to parse verify response: {e}"}
 
     def _fn_get_status(self) -> dict:
-        return {"status": "Workspace operational. Proceed with task."}
+        self.workspace_state.update_from_tf(self.tf_buffer)
+        return self.workspace_state.get_summary()
+
+    def _fn_replan(self) -> dict:
+        """Trigger a fresh brainstorm."""
+        self.get_logger().warn("Replanning requested by agent.")
+        image_bytes = None
+        if self.latest_rgb is not None:
+            image_bytes = gemini_utils.encode_image_to_bytes(self.latest_rgb)
+        
+        # We return a special dict that _execute_function handles
+        return {"action": "replan_requested"}
 
 
 def main(args=None):

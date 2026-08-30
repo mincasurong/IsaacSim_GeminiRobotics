@@ -635,7 +635,7 @@ class MultiRobotController(Node):
             setattr(self, f'step_counter{robot_id}', step_counter)
 
             # Determine duration for this phase
-            robot_steps = getattr(self, f'steps_per_phase{r_id}', self.steps_per_phase)
+            robot_steps = getattr(self, f'steps_per_phase{robot_id}', self.steps_per_phase)
             total_steps = self.dwell_steps if state in ['GRASP', 'RELEASE'] else robot_steps
             t = min(float(step_counter) / float(total_steps), 1.0)
             

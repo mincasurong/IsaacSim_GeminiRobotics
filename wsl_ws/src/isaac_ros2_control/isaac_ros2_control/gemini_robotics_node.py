@@ -437,9 +437,9 @@ Provide the FINAL exact X,Y blueprint.
 CRITICAL: Keep your text extremely concise. Format your final response starting with "Here is the final execution blueprint:"
 '''
             contents = [
-                genai_types.Content(role="user", parts=[genai_types.Part.from_text(prompt_1)]),
-                genai_types.Content(role="model", parts=[genai_types.Part.from_text(response_1)]),
-                genai_types.Content(role="user", parts=[genai_types.Part.from_text(prompt_3)])
+                genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=prompt_1)]),
+                genai_types.Content(role="model", parts=[genai_types.Part.from_text(text=response_1)]),
+                genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=prompt_3)])
             ]
             response_3 = stream_chat(
                 "Robotics Orchestrator", "🚀", "vla",

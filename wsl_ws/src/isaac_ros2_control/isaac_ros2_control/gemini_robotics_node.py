@@ -1,4 +1,4 @@
-﻿"""ROS 2 node integrating Gemini Robotics-ER 2 for vision-driven
+"""ROS 2 node integrating Gemini Robotics-ER 2 for vision-driven
 pick-and-place orchestration using Function Calling.
 
 Subscribes to:

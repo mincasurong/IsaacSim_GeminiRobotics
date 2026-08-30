@@ -345,22 +345,46 @@ class GeminiRoboticsNode(Node):
 
 
     def _brainstorm_spatial_plan(self, goal_text: str) -> str:
-        '''Multi-agent brainstorming between Robotics VLA and Spatial Architect.'''
+        '''Multi-agent brainstorming with streaming responses for better UX.'''
         from google import genai
         from google.genai import types as genai_types
         from isaac_ros2_control import gemini_config
         import time
+        import uuid
+        import json
         
         architect_model = gemini_config.get_planner_model()
         robotics_model = self.model_name
         
-        def send_chat(sender, text, emoji):
-            msg = String()
-            msg.data = f"""{emoji} **{sender}:**
+        def stream_chat(sender, emoji, model_name, req_contents, req_config):
+            msg_id = str(uuid.uuid4())
+            # Send initial header
+            header_text = f"""{emoji} **{sender}:**
 
-{text}"""
+"""
+            header = {"id": msg_id, "text": header_text}
+            msg = String()
+            msg.data = json.dumps(header)
             self.chat_pub.publish(msg)
-            time.sleep(0.5)
+            
+            full_text = ""
+            try:
+                response = self.client.models.generate_content_stream(
+                    model=model_name,
+                    contents=req_contents,
+                    config=req_config
+                )
+                for chunk in response:
+                    if chunk.text:
+                        chunk_msg = String()
+                        chunk_msg.data = json.dumps({"id": msg_id, "text": chunk.text})
+                        self.chat_pub.publish(chunk_msg)
+                        full_text += chunk.text
+                        time.sleep(0.01)  # small buffer for ROS 2 pub
+            except Exception as e:
+                self.get_logger().error(f"Streaming error: {e}")
+                
+            return full_text
 
         self.get_logger().info("[93m[MULTI-AGENT] Starting Brainstorming...[0m")
         try:
@@ -375,53 +399,50 @@ You have 3 robots and 9 blocks available on the source tables:
 Central target table is at [X=0.0, Y=0.0].
 
 Draft an initial plan for assigning these blocks to robots.
-Your PRIMARY GOAL is to maximize MULTI-ROBOT CONCURRENCY. Assign blocks so that FR3_1, FR3_2, and FR3_3 can pick and place at the same time without sequential bottlenecks.
-Do not worry if your geometric math isn't perfect; the Spatial Architect will correct your coordinates in the next step.
-
-Write your response as a natural language proposal to the Spatial Architect.
+Your PRIMARY GOAL is to maximize MULTI-ROBOT CONCURRENCY. Assign blocks so that FR3_1, FR3_2, and FR3_3 can pick and place at the same time.
+CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
 '''
-            response_1 = self.client.models.generate_content(
-                model=robotics_model, contents=prompt_1,
-                config=genai_types.GenerateContentConfig(temperature=0.2)
-            ).text
-            send_chat(f"Robotics Orchestrator ({robotics_model})", response_1, "🦾")
+            response_1 = stream_chat(
+                f"Robotics Orchestrator ({robotics_model})", "🦾",
+                robotics_model, prompt_1,
+                genai_types.GenerateContentConfig(temperature=0.2)
+            )
 
             # --- Turn 2: Spatial Architect Corrects Geometry ---
             prompt_2 = f'''
-You are the Spatial Architect ({architect_model}). The Robotics VLA has proposed the following concurrency-optimized schedule for building: "{goal_text}".
+You are the Spatial Architect ({architect_model}). The Robotics VLA has proposed the following schedule for building: "{goal_text}".
 
 {response_1}
 
 Your job is strictly GEOMETRIC and MATHEMATICAL CORRECTION. 
-Review their proposed plan and provide the exact mathematical 2D spatial coordinates (X, Y) required to actually form the requested shape (e.g., square, circle, heart).
-Keep the robot/block assignments they chose to preserve concurrency, but strictly correct the X, Y placement values so the shape is perfect. Blocks are about 0.04m wide.
-Keep your response concise and conversational.
+Review their proposed plan and provide the exact mathematical 2D spatial coordinates (X, Y) required to form the requested shape. Blocks are ~0.04m wide.
+CRITICAL: Keep your response EXTREMELY concise (under 2 sentences) and list the coordinates.
 '''
-            response_2 = self.client.models.generate_content(
-                model=architect_model, contents=prompt_2,
-                config=genai_types.GenerateContentConfig(temperature=0.1)
-            ).text
-            send_chat(f"Spatial Architect ({architect_model})", response_2, "📐")
+            response_2 = stream_chat(
+                f"Spatial Architect ({architect_model})", "📐",
+                architect_model, prompt_2,
+                genai_types.GenerateContentConfig(temperature=0.1)
+            )
 
             # --- Turn 3: Robotics VLA Finalizes ---
             prompt_3 = f'''
 Here is the geometric correction from the Spatial Architect:
 {response_2}
 
-Integrate these precise mathematical coordinates into your original concurrency-optimized plan.
-Provide the FINAL exact X,Y blueprint. 
-Format your final response starting with "Here is the final execution blueprint:"
+Integrate these precise coordinates into your concurrency-optimized plan.
+Provide the FINAL exact X,Y blueprint.
+CRITICAL: Keep your text extremely concise. Format your final response starting with "Here is the final execution blueprint:"
 '''
             contents = [
                 genai_types.Content(role="user", parts=[genai_types.Part.from_text(prompt_1)]),
                 genai_types.Content(role="model", parts=[genai_types.Part.from_text(response_1)]),
                 genai_types.Content(role="user", parts=[genai_types.Part.from_text(prompt_3)])
             ]
-            response_3 = self.client.models.generate_content(
-                model=robotics_model, contents=contents,
-                config=genai_types.GenerateContentConfig(temperature=0.1)
-            ).text
-            send_chat(f"Robotics Orchestrator ({robotics_model})", response_3, "🚀")
+            response_3 = stream_chat(
+                f"Robotics Orchestrator ({robotics_model})", "🚀",
+                robotics_model, contents,
+                genai_types.GenerateContentConfig(temperature=0.1)
+            )
             
             return response_3
 

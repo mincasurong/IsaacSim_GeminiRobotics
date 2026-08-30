@@ -28,7 +28,7 @@ export const C = {
   lime:     '#a3e635',
 };
 
-export interface ChatMessage { id: number; role: 'user' | 'system'; text: string; ts: Date; }
+export interface ChatMessage { id: number | string; role: 'user' | 'system'; text: string; ts: Date; }
 export interface LogEntry { id: number; level: number; name: string; msg: string; ts: Date; }
 export interface RobotAction { id: number; raw: string; ts: Date; }
 

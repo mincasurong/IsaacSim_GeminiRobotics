@@ -50,7 +50,19 @@ function App() {
   const termEndRef = useRef<HTMLDivElement>(null);
   const seqRef = useRef(1);
 
-  const addMsg = useCallback((role: 'user'|'system', text: string) => setMessages(p => [...p, { id: seqRef.current++, role, text, ts: new Date() }]), []);
+  const addMsg = useCallback((role: 'user'|'system', text: string, idOverride?: string | number) => {
+    setMessages(p => {
+      if (idOverride !== undefined) {
+        const idx = p.findIndex(m => m.id === idOverride);
+        if (idx >= 0) {
+          const n = [...p];
+          n[idx] = { ...n[idx], text: n[idx].text + text };
+          return n;
+        }
+      }
+      return [...p, { id: idOverride ?? seqRef.current++, role, text, ts: new Date() }];
+    });
+  }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => { if (logAutoScroll) logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, logAutoScroll]);
   useEffect(() => { termEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [termLines]);
@@ -106,7 +118,16 @@ function App() {
 
         // Subscribe to chat replies from the VLA agent
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/chat_reply', messageType: 'std_msgs/String' })
-          .subscribe((m: any) => { addMsg('system', m.data); });
+          .subscribe((m: any) => {
+            try {
+              const obj = JSON.parse(m.data);
+              if (obj.id && obj.text !== undefined) {
+                addMsg('system', obj.text, obj.id);
+                return;
+              }
+            } catch (e) {}
+            addMsg('system', m.data);
+          });
 
         // NEW: Subscribe to robot metrics topic
         new ROSLIB.Topic({ ros: ros.current, name: '/multi_robot/robot_metrics', messageType: 'std_msgs/String' })

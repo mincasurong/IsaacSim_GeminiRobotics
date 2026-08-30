@@ -434,6 +434,7 @@ Here is the geometric correction from the Spatial Architect:
 
 Integrate these precise coordinates into your concurrency-optimized plan.
 Provide the FINAL exact X,Y blueprint.
+CRITICAL: The robots are placed closely together. To avoid swinging collisions, you MUST use the `rotation_dir` parameter ('cw' or 'ccw') when picking and placing! Set FR3_1 (bottom) to 'cw' and FR3_2 (top right) to 'ccw' so they swing outward.
 CRITICAL: Keep your text extremely concise. Format your final response starting with "Here is the final execution blueprint:"
 '''
             contents = [
@@ -570,9 +571,9 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             if name == "detect_objects":
                 return {"objects": self._fn_detect_objects()}
             elif name == "pick":
-                return self._fn_pick(args.get("robot"), args.get("object_label"))
+                return self._fn_pick(args.get("robot"), args.get("object_label"), args.get("rotation_dir", "shortest"))
             elif name == "place":
-                return self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0))
+                return self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("rotation_dir", "shortest"))
             elif name == "verify_tower":
                 return self._fn_verify_tower()
             elif name == "go_home":
@@ -623,13 +624,14 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         self.action_pub.publish(msg)
         return self._wait_for_action_complete(robot, timeout=25.0)
 
-    def _fn_place(self, robot: str, x: float = 0.0, y: float = 0.0) -> dict:
+    def _fn_place(self, robot: str, x: float = 0.0, y: float = 0.0, rotation_dir: str = 'shortest') -> dict:
         msg = String()
         msg.data = json.dumps({
             "action": "place",
             "robot": robot,
             "x": x,
-            "y": y
+            "y": y,
+            "rotation_dir": rotation_dir
         })
         self.action_pub.publish(msg)
         return self._wait_for_action_complete(robot, timeout=25.0)

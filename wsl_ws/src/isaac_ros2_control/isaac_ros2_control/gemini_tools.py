@@ -38,6 +38,11 @@ def get_robot_tools():
                             type="STRING",
                             description="Color and shape label of the object to pick, e.g. 'Red Cube', 'Blue Cylinder'"
                         ),
+                        "rotation_dir": types.Schema(
+                            type="STRING",
+                            enum=["shortest", "cw", "ccw"],
+                            description="Optional: force the rotation direction (clockwise 'cw' or counter-clockwise 'ccw') to avoid swinging into adjacent robots. Default is 'shortest'."
+                        ),
                     },
                     required=["robot", "object_label"],
                 ),
@@ -55,6 +60,11 @@ def get_robot_tools():
                         ),
                         "x": types.Schema(type="NUMBER", description="Target X coordinate in world frame."),
                         "y": types.Schema(type="NUMBER", description="Target Y coordinate in world frame."),
+                        "rotation_dir": types.Schema(
+                            type="STRING",
+                            enum=["shortest", "cw", "ccw"],
+                            description="Optional: force the rotation direction (clockwise 'cw' or counter-clockwise 'ccw') to avoid swinging into adjacent robots. Default is 'shortest'."
+                        ),
                     },
                     required=["robot", "x", "y"],
                 ),

@@ -102,6 +102,10 @@ class MultiRobotController(Node):
         self.q_current1 = list(self.q_home_fr3)
         self.q_current2 = list(self.q_home_fr3)
         self.q_current3 = list(self.q_home_fr3)
+        
+        self.rotation_dir1 = 'shortest'
+        self.rotation_dir2 = 'shortest'
+        self.rotation_dir3 = 'shortest'
 
         self.state1 = 'INIT'
         self.state2 = 'INIT'
@@ -278,23 +282,14 @@ class MultiRobotController(Node):
                 if not block_name:
                     self._publish_result(False, f"Could not map target '{target_label}' to a block prim.", f"FR3_{r_id}")
                     return
-                    
-                # Reachability Check: Ensure the block hasn't fallen off the table
-                try:
-                    from rclpy.duration import Duration
-                    trans = self.tf_buffer.lookup_transform('world', block_name, rclpy.time.Time(), timeout=Duration(seconds=0.05))
-                    if trans.transform.translation.z < 0.25:
-                        self._publish_result(False, f"Target '{target_label}' is unpickable! It has fallen off the table to the floor.", f"FR3_{r_id}")
-                        return
-                except Exception as e:
-                    pass
-
                 setattr(self, f'active_target{r_id}', block_name)
+                setattr(self, f'rotation_dir{r_id}', cmd.get('rotation_dir', 'shortest'))
                 self._set_state(r_id, 'INIT')
 
             elif action == 'place':
                 setattr(self, f'target_x{r_id}', cmd.get('x', 0.0))
                 setattr(self, f'target_y{r_id}', cmd.get('y', 0.0))
+                setattr(self, f'rotation_dir{r_id}', cmd.get('rotation_dir', 'shortest'))
                 curr_state = getattr(self, f'state{r_id}')
                 if curr_state == 'WAITING_FOR_PLACE_CMD':
                     self._set_state(r_id, 'WAIT_FOR_CENTER')
@@ -451,7 +446,26 @@ class MultiRobotController(Node):
         return [j1_angle] + list(self.q_tuck_body)
 
     def _compute_j1_for_target(self, robot_id, target_pos_local):
-        return np.arctan2(target_pos_local[1], target_pos_local[0])
+        target_angle = np.arctan2(target_pos_local[1], target_pos_local[0])
+        rot_dir = getattr(self, f'rotation_dir{robot_id}', 'shortest')
+        
+        q_current = getattr(self, f'q_current{robot_id}')
+        j1_current = q_current[0]
+        
+        # normalize target_angle to be near j1_current
+        diff = (target_angle - j1_current) % (2*np.pi)
+        if diff > np.pi:
+            diff -= 2*np.pi
+        target_angle = j1_current + diff
+        
+        if rot_dir == 'cw':
+            if target_angle > j1_current:
+                target_angle -= 2*np.pi
+        elif rot_dir == 'ccw':
+            if target_angle < j1_current:
+                target_angle += 2*np.pi
+                
+        return target_angle
 
     def _initialize_joint_phase(self, robot_id, end_q, end_gripper):
         q_current = getattr(self, f'q_current{robot_id}')

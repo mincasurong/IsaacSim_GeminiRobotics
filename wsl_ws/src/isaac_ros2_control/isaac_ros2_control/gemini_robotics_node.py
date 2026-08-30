@@ -401,7 +401,8 @@ Workspace layout:
 
 Visually inspect the camera image to detect available objects (colors, shapes) on each table.
 Draft an initial plan assigning tasks to the robots to achieve the user's goal.
-Maximize MULTI-ROBOT CONCURRENCY so multiple arms can pick/place simultaneously.
+1. Proximity Rule: Always pick the CLOSEST, most easily accessible objects on each table first (nearest to the robot base) to minimize arm extension.
+2. Concurrency: Maximize MULTI-ROBOT CONCURRENCY so multiple arms can pick/place simultaneously.
 CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
 '''
             req_1 = [
@@ -438,8 +439,9 @@ You are the Safety & Kinematics Verifier ({architect_model}). Review the propose
 {response_2}
 
 Analyze safety, trajectory interference, and kinematics:
-1. Concurrency & Collision Check: If multiple arms place at the center table simultaneously, specify explicit execution order (e.g., dispatch non-conflicting picks concurrently, but serialize center placements).
-2. Dynamic Hyperparameters:
+1. Proximity & Reachability: Ensure arms pick closest objects on their table first to avoid reaching near singularity boundaries.
+2. Concurrency & Collision Check: If multiple arms place at the center table simultaneously, specify explicit execution order (e.g., dispatch non-conflicting picks concurrently, but serialize center placements).
+3. Dynamic Hyperparameters:
    - `speed`: select 'fast' for unobstructed initial movements, 'normal' for standard transport, and 'slow' for high-precision placement or higher tower layers.
    - `approach_height`: default is 0.1m; increase to 0.15m - 0.25m when stacking atop existing blocks or clearing surrounding objects.
 

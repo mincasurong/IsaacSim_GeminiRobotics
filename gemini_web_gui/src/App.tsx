@@ -104,6 +104,10 @@ function App() {
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action_result', messageType: 'std_msgs/String' })
           .subscribe((m: any) => { setActionResults(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
 
+        // Subscribe to chat replies from the VLA agent
+        new ROSLIB.Topic({ ros: ros.current, name: '/gemini/chat_reply', messageType: 'std_msgs/String' })
+          .subscribe((m: any) => { addMsg('system', m.data); });
+
         // NEW: Subscribe to robot metrics topic
         new ROSLIB.Topic({ ros: ros.current, name: '/multi_robot/robot_metrics', messageType: 'std_msgs/String' })
           .subscribe((m: any) => {

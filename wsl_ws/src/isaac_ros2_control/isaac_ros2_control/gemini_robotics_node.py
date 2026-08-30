@@ -131,6 +131,8 @@ class GeminiRoboticsNode(Node):
             String, '/gemini/detected_objects', 10)
         self.action_pub = self.create_publisher(
             String, '/gemini/action', 10)
+        self.chat_pub = self.create_publisher(
+            String, '/gemini/chat_reply', 10)
 
         # Services
         self.detect_srv = self.create_service(

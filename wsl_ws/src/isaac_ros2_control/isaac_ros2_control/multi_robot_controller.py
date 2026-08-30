@@ -283,13 +283,27 @@ class MultiRobotController(Node):
                     self._publish_result(False, f"Could not map target '{target_label}' to a block prim.", f"FR3_{r_id}")
                     return
                 setattr(self, f'active_target{r_id}', block_name)
-                setattr(self, f'rotation_dir{r_id}', cmd.get('rotation_dir', 'shortest'))
+                
+                # Dynamic Hyperparameters
+                speed = cmd.get('speed', 'normal')
+                if speed == 'fast': setattr(self, f'steps_per_phase{r_id}', 30)
+                elif speed == 'slow': setattr(self, f'steps_per_phase{r_id}', 90)
+                else: setattr(self, f'steps_per_phase{r_id}', 60)
+                
+                setattr(self, f'hover_height{r_id}', float(cmd.get('approach_height', 0.1)))
                 self._set_state(r_id, 'INIT')
 
             elif action == 'place':
                 setattr(self, f'target_x{r_id}', cmd.get('x', 0.0))
                 setattr(self, f'target_y{r_id}', cmd.get('y', 0.0))
-                setattr(self, f'rotation_dir{r_id}', cmd.get('rotation_dir', 'shortest'))
+                
+                # Dynamic Hyperparameters
+                speed = cmd.get('speed', 'normal')
+                if speed == 'fast': setattr(self, f'steps_per_phase{r_id}', 30)
+                elif speed == 'slow': setattr(self, f'steps_per_phase{r_id}', 90)
+                else: setattr(self, f'steps_per_phase{r_id}', 60)
+                
+                setattr(self, f'hover_height{r_id}', float(cmd.get('approach_height', 0.1)))
                 curr_state = getattr(self, f'state{r_id}')
                 if curr_state == 'WAITING_FOR_PLACE_CMD':
                     self._set_state(r_id, 'WAIT_FOR_CENTER')
@@ -446,26 +460,8 @@ class MultiRobotController(Node):
         return [j1_angle] + list(self.q_tuck_body)
 
     def _compute_j1_for_target(self, robot_id, target_pos_local):
-        target_angle = np.arctan2(target_pos_local[1], target_pos_local[0])
-        rot_dir = getattr(self, f'rotation_dir{robot_id}', 'shortest')
-        
-        q_current = getattr(self, f'q_current{robot_id}')
-        j1_current = q_current[0]
-        
-        # normalize target_angle to be near j1_current
-        diff = (target_angle - j1_current) % (2*np.pi)
-        if diff > np.pi:
-            diff -= 2*np.pi
-        target_angle = j1_current + diff
-        
-        if rot_dir == 'cw':
-            if target_angle > j1_current:
-                target_angle -= 2*np.pi
-        elif rot_dir == 'ccw':
-            if target_angle < j1_current:
-                target_angle += 2*np.pi
-                
-        return target_angle
+        # Using pure arctan2 to prevent Joint 1 limit violations ([-2.89, 2.89])
+        return np.arctan2(target_pos_local[1], target_pos_local[0])
 
     def _initialize_joint_phase(self, robot_id, end_q, end_gripper):
         q_current = getattr(self, f'q_current{robot_id}')
@@ -639,7 +635,8 @@ class MultiRobotController(Node):
             setattr(self, f'step_counter{robot_id}', step_counter)
 
             # Determine duration for this phase
-            total_steps = self.dwell_steps if state in ['GRASP', 'RELEASE'] else self.steps_per_phase
+            robot_steps = getattr(self, f'steps_per_phase{r_id}', self.steps_per_phase)
+            total_steps = self.dwell_steps if state in ['GRASP', 'RELEASE'] else robot_steps
             t = min(float(step_counter) / float(total_steps), 1.0)
             
             # Minimum Jerk Quintic Polynomial (MoveIt 2 standard trajectory profile)
@@ -739,7 +736,8 @@ class MultiRobotController(Node):
                 elif state == 'ROTATE_TO_PLACE':
                     place_pos, place_quat = self.get_place_local_pose(robot_id)
                     if place_pos is None: return
-                    hover_place_pos = np.array([place_pos[0], place_pos[1], place_pos[2] + self.hover_height])
+                    hover_h = getattr(self, f'hover_height{robot_id}', self.hover_height)
+                    hover_place_pos = np.array([place_pos[0], place_pos[1], place_pos[2] + hover_h])
                     self._initialize_phase(robot_id, hover_place_pos, self.gripper_close, place_quat)
                     self._set_state(robot_id, 'HOVER_PLACE')
 

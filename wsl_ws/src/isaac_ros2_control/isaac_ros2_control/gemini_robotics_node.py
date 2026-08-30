@@ -345,50 +345,91 @@ class GeminiRoboticsNode(Node):
 
 
     def _brainstorm_spatial_plan(self, goal_text: str) -> str:
-        '''Use a reasoning pass to translate complex shapes into precise coordinates.'''
+        '''Multi-agent brainstorming between Spatial Architect and Robotics VLA.'''
         from google import genai
         from google.genai import types as genai_types
         from isaac_ros2_control import gemini_config
+        import time
         
-        prompt = f'''
-You are the Spatial Architect for a robotic assembly system.
-The user wants to: "{goal_text}".
+        architect_model = gemini_config.get_planner_model()
+        robotics_model = self.model_name
+        
+        def send_chat(sender, text, emoji):
+            msg = String()
+            msg.data = f"""{emoji} **{sender}:**
 
-You have 9 blocks available on the tables:
-- Block1 (Red Cube), Block2 (Green Cylinder), Block3 (Blue Cube)
-- Block4 (Yellow Cylinder), Block5 (Magenta Cube), Block6 (Cyan Cylinder)
-- Block7 (Orange Cube), Block8 (Purple Cylinder), Block9 (Lime Cube)
+{text}"""
+            self.chat_pub.publish(msg)
+            # Yield slightly to ensure ROS messages arrive in order
+            time.sleep(0.5)
 
-The central target table is at center [X=0.0, Y=0.0]. The physical bounds are roughly X=[-0.15, 0.15], Y=[-0.15, 0.15].
-Blocks are about 0.04m wide. 
-Your job is to translate the user's goal into exact 2D spatial coordinates (X, Y) and block assignments to achieve this shape (e.g., square, circle, heart, triangle, flat line) on the central table.
-Think step-by-step about geometry. 
-
-Format your response in a natural, conversational style as if you are brainstorming out loud with the user, followed by the exact X,Y blueprint.
-Example structure:
-"To build a heart, I'll place the red cube at the bottom tip at [0, -0.08], and then build the lobes using..."
-[Then list the exact coordinates]
-'''
-        self.get_logger().info("[93m[SPATIAL ARCHITECT] Brainstorming spatial blueprint...[0m")
+        self.get_logger().info("[93m[MULTI-AGENT] Starting Brainstorming...[0m")
         try:
-            model_to_use = gemini_config.get_planner_model()
-            response = self.client.models.generate_content(
-                model=model_to_use,
-                contents=prompt,
+            # --- Turn 1: Architect Proposes ---
+            prompt_1 = f'''
+You are the Spatial Architect ({architect_model}). The user wants to: "{goal_text}".
+
+You have 9 blocks available on the source tables:
+- Table 1 (FR3_1): Block1 (Red Cube), Block2 (Green Cylinder), Block3 (Blue Cube)
+- Table 2 (FR3_2): Block4 (Yellow Cylinder), Block5 (Magenta Cube), Block6 (Cyan Cylinder)
+- Table 3 (FR3_3): Block7 (Orange Cube), Block8 (Purple Cylinder), Block9 (Lime Cube)
+Central target table is at [X=0.0, Y=0.0].
+
+Design a Spatial Blueprint detailing exact X, Y coordinates for this geometry.
+CRITICAL: You must structure your plan to maximize MULTI-ROBOT CONCURRENCY. Do not make a plan that forces sequential execution. Assign blocks so that FR3_1, FR3_2, and FR3_3 can pick and place at the same time whenever possible.
+
+Write your response as a natural language proposal to the Robotics team.
+'''
+            response_1 = self.client.models.generate_content(
+                model=architect_model, contents=prompt_1,
+                config=genai_types.GenerateContentConfig(temperature=0.4)
+            ).text
+            send_chat(f"Spatial Architect ({architect_model})", response_1, "🧠")
+
+            # --- Turn 2: Robotics VLA Critiques ---
+            prompt_2 = f'''
+You are the Robotics VLA Orchestrator ({robotics_model}). Review this proposed blueprint from the Spatial Architect:
+
+{response_1}
+
+Critique this plan based strictly on:
+1. Multi-Robot Parallelism: Are we maximizing simultaneous 'pick' and 'place' actions?
+2. Did the architect accidentally create a sequence where robots have to wait for each other unnecessarily?
+If it forces sequential moves, firmly suggest how to interleave the robot actions or reassign blocks to different robots for maximum concurrency.
+Keep your critique concise, direct, and conversational.
+'''
+            response_2 = self.client.models.generate_content(
+                model=robotics_model, contents=prompt_2,
+                config=genai_types.GenerateContentConfig(temperature=0.2)
+            ).text
+            send_chat(f"Robotics Orchestrator ({robotics_model})", response_2, "🦾")
+
+            # --- Turn 3: Architect Finalizes ---
+            prompt_3 = f'''
+Here is the feedback from the Robotics Orchestrator:
+{response_2}
+
+Revise your blueprint to perfectly incorporate this concurrency feedback.
+Provide the FINAL, highly optimized exact X,Y blueprint. 
+Format your final response starting with "Here is the final parallel-optimized blueprint:"
+'''
+            # Pass conversation history so architect knows what was said
+            contents = [
+                genai_types.Content(role="user", parts=[genai_types.Part.from_text(prompt_1)]),
+                genai_types.Content(role="model", parts=[genai_types.Part.from_text(response_1)]),
+                genai_types.Content(role="user", parts=[genai_types.Part.from_text(prompt_3)])
+            ]
+            response_3 = self.client.models.generate_content(
+                model=architect_model, contents=contents,
                 config=genai_types.GenerateContentConfig(temperature=0.1)
-            )
-            blueprint = response.text
-            self.get_logger().info(f"[93m[SPATIAL ARCHITECT] Blueprint generated via {model_to_use}.\n{blueprint}[0m")
+            ).text
+            send_chat(f"Spatial Architect ({architect_model})", response_3, "📐")
             
-            # Send to GUI chat
-            chat_msg = String()
-            chat_msg.data = f"🧠 **Architect Brainstorming ({model_to_use}):**\n\n{blueprint}"
-            self.chat_pub.publish(chat_msg)
-            
-            return blueprint
+            return response_3
+
         except Exception as e:
-            self.get_logger().error(f"Failed to generate blueprint: {e}")
-            return "No blueprint available."
+            self.get_logger().error(f"Failed multi-agent brainstorm: {e}")
+            return "No blueprint available due to error."
 
     def _run_agentic_task(self):
 

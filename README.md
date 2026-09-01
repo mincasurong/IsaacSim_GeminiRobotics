@@ -10,6 +10,8 @@ Three Franka FR3 robotic arms cooperate to build a 9-layer tower, orchestrated b
 
 <!-- TODO: Add demo GIF here -->
 <!-- ![Demo](docs/assets/demo.gif) -->
+<img width="800" height="450" alt="gr2_small-ezgif com-video-to-gif-converter (1)" src="https://github.com/user-attachments/assets/38afbf90-e202-4bba-b511-8071a389ed7c" />
+
 
 ---
 

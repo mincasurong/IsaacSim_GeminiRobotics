@@ -11,8 +11,11 @@
 Three Franka FR3 robotic arms cooperatively manipulate objects and construct complex 3D structures in **NVIDIA Isaac Sim**, orchestrated by **Google Gemini Robotics-ER** via an agile multi-agent cognitive loop, tracked by an interactive **React Flow v12** digital twin, and validated with a publication-grade scientific evaluation suite.
 
 <div align="center">
-  <img width="800" height="450" alt="Multi-Robot Simulation in Isaac Sim" src="https://github.com/user-attachments/assets/38afbf90-e202-4bba-b511-8071a389ed7c" />
+  <img width="800" height="450" alt="geminirobotics2_Sep-ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/82cd52d6-ea0a-4758-8973-5ee024aa7510" />
 </div>
+
+
+
 
 ---
 

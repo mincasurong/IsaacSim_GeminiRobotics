@@ -75,17 +75,19 @@ echo =========================================================================
 echo   Select an Option:
 echo =========================================================================
 echo   1) Run Three FR3 Robot Tower Demo (Gemini / Rule-Based)
-echo   2) Run Industrial Mobile Manipulator Demo
-echo   3) Launch Isaac Sim GUI (Empty Scene)
-echo   4) Setup WSL2 Firewall Rules (Requires Administrator)
+echo   2) Run Kitchen Manipulation Demo (3x FR3 + Dual-Arm Bar Transport)
+echo   3) Run Industrial Mobile Manipulator Demo
+echo   4) Launch Isaac Sim GUI (Empty Scene)
+echo   5) Setup WSL2 Firewall Rules (Requires Administrator)
 echo   0) Exit
 echo =========================================================================
-set /p choice="Enter your choice (0-4): "
+set /p choice="Enter your choice (0-5): "
 
 if "%choice%"=="1" goto run_three_robots
-if "%choice%"=="2" goto run_mobile_manip
-if "%choice%"=="3" goto run_isaac_gui
-if "%choice%"=="4" goto setup_firewall
+if "%choice%"=="2" goto run_kitchen_demo
+if "%choice%"=="3" goto run_mobile_manip
+if "%choice%"=="4" goto run_isaac_gui
+if "%choice%"=="5" goto setup_firewall
 if "%choice%"=="0" exit /b 0
 
 echo Invalid choice. Try again.
@@ -110,6 +112,31 @@ echo =========================================================================
 echo   Simulation is running! Now open a WSL2 terminal and run:
 echo     cd ~/catkin_ws
 echo     bash bringup.bash
+echo =========================================================================
+pause
+goto menu
+
+
+:run_kitchen_demo
+echo.
+echo [1/2] Configuring Environment and FastDDS...
+cd /d "%ISAAC_SIM_RELEASE_PATH%"
+call setup_ros_env.bat
+if exist "%~dp0setup_fastdds_wsl.py" ( call python.bat "%~dp0setup_fastdds_wsl.py" )
+set "FASTDDS_DEFAULT_PROFILES_FILE=%USERPROFILE%\fastdds_profile.xml"
+set "RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+
+echo [2/2] Launching Kitchen 3x FR3 Manipulation Scene...
+set "SIM_SCRIPT=%~dp0..\isaacsim_scripts\kitchen_three_robot.py"
+call python.bat "!SIM_SCRIPT!" %*
+echo.
+echo =========================================================================
+echo   Kitchen scene is running!  Objects: 3x Dish, 3x Cup, 1x LongBar
+echo   Now open a WSL2 terminal and run:
+echo     cd ~/catkin_ws
+echo     bash bringup.bash
+echo   Try the dual-arm bar transfer with:
+echo     "Coordinate FR3_1 and FR3_2 to transport the long bar together"
 echo =========================================================================
 pause
 goto menu

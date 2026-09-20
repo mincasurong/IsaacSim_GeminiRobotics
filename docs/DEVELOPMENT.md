@@ -1,18 +1,18 @@
 # Development Guide
 
-This guide provides technical details, architecture overview, and setup instructions for developers and contributors.
+This guide provides technical details, architectural specifications, and setup workflows for developers and open-source contributors.
 
 ---
 
-## System Architecture
+## 🏗️ System Architecture
 
-The project bridges **NVIDIA Isaac Sim** (Windows) with **ROS 2 Jazzy** (WSL2 Ubuntu 24.04) using a FastDDS Unicast channel.
+The system bridges **NVIDIA Isaac Sim** (Windows) with **ROS 2 Jazzy** (WSL2 Ubuntu 24.04) across a FastDDS Unicast network channel, orchestrating three Franka FR3 robotic arms via Google Gemini Robotics-ER and a React 19 digital twin.
 
 ```mermaid
 graph TD
     subgraph "Windows Host"
-        IS["Isaac Sim<br/>(PhysX + USD Scenes)"]
-        GUI["Web Dashboard<br/>(React + Express)"]
+        IS["🎮 Isaac Sim<br/>(PhysX + USD Scenes)"]
+        GUI["🖥️ Web Dashboard & Visualizer<br/>(React 19 + @xyflow/react)"]
         FW["FastDDS Unicast Endpoint"]
     end
 
@@ -21,9 +21,11 @@ graph TD
     end
 
     subgraph "WSL2 Ubuntu 24.04"
-        ROS["ROS 2 Jazzy<br/>(/tf, /clock, /joint_states)"]
-        MRC["multi_robot_controller<br/>(50 Hz IK Loop)"]
-        GEM["gemini_robotics_node<br/>(VLM Agent)"]
+        ROS["⚙️ ROS 2 Jazzy Core<br/>(/tf, /clock, /joint_states)"]
+        MRC["🦾 multi_robot_controller<br/>(50 Hz DLS IK + Mutex Arbiter)"]
+        VLM["🧠 gemini_robotics_node<br/>(Multi-Agent VLA Engine)"]
+        EXP["🔬 experiment_runner<br/>(Automated Benchmarking Suite)"]
+        LOG["📊 experiment_logger<br/>(JSONL & Summary Telemetry)"]
         DDS["FastDDS Unicast Endpoint"]
     end
 
@@ -32,150 +34,161 @@ graph TD
     VNet <--> DDS
     DDS <--> ROS
     ROS <--> MRC
-    ROS <--> GEM
-    GUI <-->|"rosbridge<br/>WebSocket"| ROS
-    GEM <-->|"API"| GAPI["Google Gemini API"]
+    ROS <--> VLM
+    ROS <--> EXP
+    EXP <--> LOG
+    GUI <-->|"rosbridge WebSocket (9090)"| ROS
+    VLM <-->|"REST API"| GAPI["☁️ Google Gemini API"]
 ```
 
-### Responsibilities
+### Component Roles & Host Boundaries
 
-| Component | Host | Role |
-|-----------|------|------|
-| Isaac Sim | Windows | Physics simulation, rendering, scene management, camera/sensor publishing |
-| ROS 2 Nodes | WSL2 | Motion control, IK solving, task orchestration, VLM integration |
-| Web Dashboard | Windows | User interface, log viewer, Gantt timeline, goal dispatch |
-| FastDDS | Both | Cross-OS DDS communication via unicast XML profiles |
+| Component | Host / Runtime | Primary Responsibilities |
+|---|---|---|
+| **Isaac Sim** | Windows 11 | Rigid body physics (PhysX), synthetic sensor generation, overhead RGB-D camera feeds, `/tf` transform broadcasting |
+| **multi_robot_controller** | WSL2 (ROS 2) | 50 Hz closed-loop control, Damped Least Squares IK with Null-Space projection, central table mutex lock, trajectory generation |
+| **gemini_robotics_node** | WSL2 (ROS 2) | 4-turn multi-agent brainstorming pipeline, tool schema execution (`pick`, `place`, `place_relative`), closed-loop state tracking |
+| **experiment_runner** | WSL2 (ROS 2) | Batch benchmarking execution (S1–S7 scenarios), automated simulation resets, ground-truth TF verification |
+| **experiment_logger** | WSL2 (ROS 2) | Captures 35+ metrics across task success, multi-robot coordination (Gini balance), physical accuracy, and VLA throughput |
+| **Web Dashboard** | Windows (Browser) | Real-time React Flow v12 workflow graph, 2D digital twin map, Gantt timeline, KPI telemetry, discrete event table |
+| **FastDDS Bridge** | Both | Point-to-point cross-OS DDS discovery and communication via dynamic unicast XML profiles |
 
 ---
 
-## Development Setup
+## 🧠 Multi-Agent Cognitive Architecture
 
-### 1. Install Isaac Sim (Windows)
-
-1. Install the [NVIDIA Omniverse Launcher](https://www.nvidia.com/en-us/omniverse/).
-2. Install **Isaac Sim 4.5+** or **6.0** from the launcher.
-3. Note the installation path (e.g., `C:\Users\<USER>\AppData\Local\ov\pkg\isaac-sim-4.5.0`).
-
-### 2. Set Up WSL2 + ROS 2 Jazzy
-
-```powershell
-# Install WSL2 Ubuntu 24.04 (PowerShell as Admin)
-wsl --install -d Ubuntu-24.04
-```
-
-```bash
-# Inside WSL2 terminal
-cd /mnt/d/git/IsaacSim_GeminiRobotics/wsl_ws
-chmod +x setup_all.sh
-./setup_all.sh
-```
-
-The setup script installs:
-- ROS 2 Jazzy (`ros-jazzy-desktop`)
-- Build tools (`colcon`, `rosdep`)
-- Python dependencies (`google-genai`, `numpy`, `scipy`, `cv_bridge`)
-- FastDDS unicast configuration
-
-### 3. Configure Networking
-
-WSL2 runs on a Hyper-V virtual NAT. Standard DDS multicast doesn't cross this boundary.
-
-- **Firewall**: Open UDP ports 7400–7500 on the `vEthernet (WSL)` adapter.
-- **FastDDS**: The launcher scripts automatically run `setup_fastdds_wsl.py` to generate unicast profiles with the current dynamic IPs.
-
-### 4. Workspace Overlay
-
-The ROS 2 source code lives on the Windows host but is compiled inside WSL2:
-
-- **Edit** files in `d:\git\IsaacSim_GeminiRobotics\wsl_ws\src\` (Windows side)
-- **Build** in WSL2 via `bringup.bash` which syncs and compiles
-
-> [!IMPORTANT]
-> Never edit files directly in `~/catkin_ws/src/` inside WSL2. The `bringup.bash` script overwrites that directory with the Windows source files on every run.
-
-### 5. Gemini API Key
-
-```bash
-cp .env.example private/.env
-# Edit private/.env with your API key from https://aistudio.google.com/apikey
-```
-
----
-
-## Build & Run Workflow
+The reasoning engine decomposes natural language instructions into synchronized physical actions through a **4-turn Chain-of-Thought (CoT) multi-agent pipeline**:
 
 ```mermaid
-flowchart LR
-    Edit["Edit source on Windows<br/>(wsl_ws/src/)"] --> Bringup["Run bringup.bash<br/>(syncs + builds)"]
-    Bringup --> Launch["Select launch target<br/>(interactive menu)"]
-    Launch --> Test["Test in Isaac Sim"]
-    Test --> Commit["git add + commit + push<br/>(from Windows)"]
+sequenceDiagram
+    autonumber
+    actor User as Operator / Web GUI
+    participant Node as gemini_robotics_node
+    participant Arch as Spatial Architect (📐)
+    participant Opt as Agility Optimizer (⚡)
+    participant Orch as Orchestrator (🦾)
+    participant Ctrl as multi_robot_controller
+
+    User->>Node: Goal Directive ("Build a 9-layer tower" or "3x3 Grid")
+    Note over Node,Arch: Turn 1 → Turn 2: Spatial Layout Reasoning
+    Node->>Arch: Synthesize 2D spatial arrangement
+    Arch-->>Node: 2D ASCII Grid + Target Coordinates (X, Y, Z, Yaw)
+    Note over Node,Opt: Turn 2 → Turn 3: Concurrency & Velocity Optimization
+    Node->>Opt: Evaluate concurrency & speed recommendations
+    Opt-->>Node: Directive: speed='fast', dispatch parallel arm picks
+    Note over Node,Orch: Turn 3 → Turn 4: Tool Execution & Dispatch
+    Node->>Orch: Generate Function Calling tool calls
+    Orch->>Ctrl: execute: pick(FR3_1, Block1, fast) + pick(FR3_2, Block4, fast)
+    Ctrl-->>Node: Action Results & Gripper Verification
 ```
 
-### Building
+### 1. Spatial Architect (📐)
+- **Role**: Spatial geometry and arrangement expert.
+- **Reasoning**: Generates a 2D ASCII visual grid representing the target table layout. Maps complex semantic patterns (pyramids, circles, coplanar grids, multi-tower configurations) into millimeter-accurate relative offsets using `place_relative`.
 
-```bash
-# Inside WSL2
-cd ~/catkin_ws
-./bringup.bash   # Syncs files, fixes line endings, builds, sources overlay
-```
+### 2. Agility & Performance Optimizer (⚡)
+- **Role**: Task throughput and execution agility optimizer.
+- **Reasoning**: Evaluates the physical layout and recommends `speed='fast'` and bold parallel arm dispatches. Because low-level ROS 2 mutex locks (`center_occupied_by`) and singularity-free DLS IK already mathematically guarantee hardware safety, this agent eliminates artificial serialization.
 
-Or manually:
-```bash
-cd ~/catkin_ws
-colcon build --symlink-install --packages-select isaac_ros2_control
-source install/setup.bash
-```
+### 3. Orchestrator & VLA Dispatcher (🦾)
+- **Role**: Action synthesizer and Function Calling dispatcher.
+- **Reasoning**: Binds spatial plans and speed directives into concrete ROS 2 tool dispatches (`pick`, `place`, `place_relative`, `verify_tower`), monitoring arm states until goal completion.
 
 ---
 
-## Launch Sequence
+## 🔬 Scientific Evaluation & Benchmarking Suite
 
-### Terminal 1 — Simulation (Windows)
+The repository includes a publication-grade evaluation suite designed for robotics and Physical AI papers (grounded in SayCan, RoCo, SMART-LLM, and BiGym protocols):
 
-Run via the launcher menu or directly:
-```cmd
-cd D:\git\IsaacSim_GeminiRobotics
-launcher.bat
-```
+### Standardized Benchmark Scenarios
 
-### Terminal 2 — Controllers (WSL2)
+| Scenario | Name | Blocks | Description | Coordination Archetype |
+|---|---|:---:|---|---|
+| **S1** | Primitive Pick & Place | 1 | Single-arm reach, grasp, transport, and place | Baseline Affordance & IK |
+| **S2** | Cooperative 3-Layer Tower | 3 | 3 robots each place 1 block sequentially | Decoupled Pick, Serial Place |
+| **S3** | Monolithic 9-Layer Tower | 9 | Complete 9-block tower construction | Workspace Contention & Stability |
+| **S4** | 3×3 Coplanar Square Grid | 9 | Planar matrix arrangement centered at origin | Spatial Reasoning & ASCII CoT |
+| **S5** | Coplanar Triangle / Pyramid | 6 | 3-tier planar formation (3 base, 2 mid, 1 tip) | Non-Cardinal Relative Offsets |
+| **S6** | Cross-Table Staging & Relay | 2 | Sequential handoffs between disjoint workspaces | Dependency Chain Scheduling |
+| **S7** | Dynamic Disturbance Recovery | 6 | Adversarial perturbation recovery | Closed-Loop Visual Replanning |
+
+### Execution Commands
 
 ```bash
-cd ~/catkin_ws && ./bringup.bash
-# Select the appropriate launch option from the menu
-```
-
-### Terminal 3 — Trigger VLM Planning (WSL2)
-
-```bash
+# In WSL2 terminal with ROS 2 environment sourced:
+source /opt/ros/jazzy/setup.bash
 source ~/catkin_ws/install/setup.bash
-ros2 service call /gemini/plan_task std_srvs/srv/Trigger
+
+# Run 20 trials for scenarios S1, S2, and S3
+ros2 run isaac_ros2_control experiment_runner --scenarios S1,S2,S3 --trials 20
+
+# Run full benchmark suite (all 7 scenarios)
+ros2 run isaac_ros2_control experiment_runner --scenarios all --trials 20
+
+# Run rule-based baseline comparison
+ros2 run isaac_ros2_control experiment_runner --scenarios S1,S2,S3 --trials 20 --baseline
+
+# Compile publication LaTeX tables and vector plots
+ros2 run isaac_ros2_control analyze_experiments --log-dir /mnt/d/git/IsaacSim_GeminiRobotics/logs/experiments
 ```
 
-Or use the **Web Dashboard** chat interface to send goals directly.
+Generated outputs:
+- `logs/experiments/tables/*.tex`: LaTeX tables with 95% Wilson Score confidence intervals.
+- `logs/experiments/figures/*.pdf`: Publication-quality vector figures.
+- `logs/experiments/summaries/*.csv`: Raw CSV datasets for empirical analysis.
 
 ---
 
-## Key Technical Details
+## 🦾 Motion Control & Kinematics
 
-### 3x FR3 Layout
+### 50 Hz Control Loop & State Machine
+The motion controller executes a 50 Hz state machine per arm:
+1. `APPROACH_HOVER`: Move to pre-grasp hover position ($Z = Z_{\text{target}} + 0.12\,\text{m}$).
+2. `LOWER`: Descend vertically to target height.
+3. `GRIPPER_CLOSE` / `GRIPPER_OPEN`: Trigger gripper actuation with physical touch verification.
+4. `LIFT`: Ascend back to clearance height ($Z = 0.35\,\text{m}$).
+5. `TRANSPORT`: Transfer to target location.
+6. `RETRACT_HOME`: Return to resting home posture.
 
-Three Franka FR3 arms are mounted at $R = 0.45\,\text{m}$ around the center, with source tables at $R = 1.05\,\text{m}$ behind each robot. All robots face the central target table.
+### Tuned Agile Motion Dynamics
+Phase step counts per motion segment:
+- **`fast`**: **20 steps** (0.4 s per phase at 50 Hz)
+- **`normal`**: **40 steps** (0.8 s per phase at 50 Hz)
+- **`slow`**: **70 steps** (1.4 s per phase at 50 Hz)
 
-| Robot | Base Position (m) | Facing |
-|-------|-------------------|--------|
-| FR3_1 | `[0.0, -0.45, 0.20]` | +Y (toward center) |
-| FR3_2 | `[0.39, 0.225, 0.20]` | Center (210°) |
-| FR3_3 | `[-0.39, 0.225, 0.20]` | Center (330°) |
-
-### Damped Least Squares IK
-
+### Damped Least Squares (DLS) Inverse Kinematics
 $$\mathbf{J}^\dagger = \mathbf{J}^T (\mathbf{J} \mathbf{J}^T + \lambda^2 \mathbf{I})^{-1}$$
 $$\Delta \mathbf{q} = \mathbf{J}^\dagger \mathbf{e} + (\mathbf{I} - \mathbf{J}^\dagger \mathbf{J}) k_{\text{null}} (\mathbf{q}_{\text{home}} - \mathbf{q})$$
 
-The null-space term keeps joints near their home configuration while tracking the Cartesian target.
+The null-space term keeps joints near their comfortable home configuration while accurately tracking Cartesian end-effector targets, mitigating kinematic singularities and joint limit saturation.
 
-### Dynamic TF Tracking
+### Workspace Collision Mutex
+The central workbench zone is protected by an atomic mutex lock in `multi_robot_controller.py`:
+- Before descending into the central target area, a robot arm must acquire `center_occupied_by`.
+- If another arm holds the lock, the requesting robot holds in a high-clearance hover state, registering a contention event for telemetry tracking.
+- Locks are automatically released when the robot lifts back above clearance height or returns home.
 
-Block transforms are published by Isaac Sim into the `/tf` tree. Controllers look up block positions relative to each robot's base frame (`fr3_link0`, `FR3_2_fr3_link0`, `FR3_3_fr3_link0`) in real time.
+---
+
+## 🛠️ Build & Development Workflow
+
+```mermaid
+flowchart LR
+    Edit["Edit source on Windows<br/>(wsl_ws/src/)"] --> Sync["Run bringup.bash in WSL2<br/>(syncs + builds)"]
+    Sync --> Launch["Select launch target<br/>(interactive menu)"]
+    Launch --> Sim["Test in Isaac Sim"]
+    Sim --> Bench["Run experiment_runner"]
+```
+
+### Sync & Build Rules
+- All source files live in `wsl_ws/src/` on the Windows drive.
+- `bringup.bash` in WSL2 syncs from the Windows mount, strips CRLF endings, and builds via `colcon build --symlink-install`.
+- **Do not** edit code directly inside `~/catkin_ws/src/` in WSL2, as it is refreshed on each bringup.
+
+### Web Dashboard Build
+```bash
+cd gemini_web_gui
+npm install
+npm run build
+```
+Verify zero TypeScript and Vite bundle errors prior to committing.

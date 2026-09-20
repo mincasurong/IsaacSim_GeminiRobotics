@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-20
+
+### Added
+- **Interactive React Flow v12 Agent Workflow Graph**:
+  - Implemented `@xyflow/react` v12 visual canvas (`AgentWorkflowGraph.tsx`) with 5 specialized node types:
+    - `GoalNode`: Active natural language mission tracker.
+    - `AgentPersonaNode`: Dynamic cards for Orchestrator (🦾), Spatial Architect (📐), and Agility Optimizer (⚡) with speaking state glows.
+    - `RobotArmNode`: Real-time hardware telemetry for FR3_1, FR3_2, FR3_3 tracking operational phase, utilization %, and active block target.
+    - `MutexNode`: Central table collision arbiter monitor showing real-time `LOCKED [FR3_x]` vs `IDLE / FREE` mutex states.
+    - `ConstructionNode`: Live tower stacking progress and height counters.
+  - Animated particle edge traces reflecting real-time communication and physical arm operations.
+  - Integrated MiniMap, zoom controls, and canvas navigation.
+- **Glassmorphic Lab UI Redesign**:
+  - Elevated dark obsidian aesthetic with frosted backdrop blur (`backdrop-filter: blur(12px)`), neon borders, and glowing status badges.
+  - Tabbed Dashboard Switcher providing instantaneous toggling between:
+    1. `[🔀 Workflow Graph]` (default interactive canvas)
+    2. `[🗺️ 2D Workspace]` (SVG digital twin)
+    3. `[⏱️ Gantt]` (execution & contention timeline)
+    4. `[📊 KPIs & Trace]` (utilization bars & discrete event logs)
+  - Quick Prompt chips above the chat input for rapid one-click testing of geometric formations (`⚡ Fast 9-Layer Tower`, `📐 3x3 Coplanar Grid`, `🔺 Triangle Pyramid`, `🔄 Table 1 to 3 Relay`).
+  - Monospace font formatting in chat message cards for ASCII spatial reasoning grids.
+- **Agility & Performance Optimizer (⚡)**:
+  - Transformed Turn 3 from a restrictive safety verifier into an open-minded Agility & Performance Optimizer.
+  - Grounded multi-agent reasoning in the fact that low-level ROS 2 mutex locks (`center_occupied_by`) and DLS null-space kinematics already prevent hardware collisions, enabling the agents to command `speed='fast'` and bold parallel arm actions.
+  - High-velocity motion dynamics: `speed='fast'` now executes in 20 steps/phase (0.4s per motion segment at 50Hz, down from 30); default tool dispatch speed upgraded to `fast`.
+
+## [0.3.0] - 2026-09-18
+
+### Added
+- **Publication-Grade Scientific Benchmarking & Evaluation Suite**:
+  - Grounded in robotics VLA literature protocols (SayCan, RoCo, SMART-LLM, BiGym) to support arXiv publications.
+  - **7 Standardized Benchmark Scenarios** (`experiment_scenarios.py`) across 5 difficulty tiers:
+    - `S1`: Single-Robot Primitive Pick & Place (1 block).
+    - `S2`: 3-Robot Cooperative 3-Layer Tower (3 blocks).
+    - `S3`: Full 9-Block Monolithic Cooperative Tower (9 blocks).
+    - `S4`: 3×3 Coplanar Square Grid Formation (9 blocks).
+    - `S5`: Coplanar Triangle / Pyramid Formation (6 blocks).
+    - `S6`: Cross-Table Staging & Relay Transfer (2 blocks).
+    - `S7`: Dynamic Disturbance Recovery (6 blocks).
+  - **Automated Batch Trial Runner** (`experiment_runner.py`): Automated environment reset (`/multi_robot/reset`), trial sequencing, timeout handling, ground-truth TF verification, and rule-based baseline comparison (`--baseline`).
+  - **Telemetry Experiment Logger** (`experiment_logger.py`): Captures 35+ metrics across Task-Level (TSR, GCR, makespan), Coordination (Gini workload balance, center lock contention), Physical Execution (pick/place success, TF displacement error), and LLM VLA throughput.
+  - **Publication Analytics & Plot Generator** (`analyze_experiments.py`): Automatically computes statistics (Wilson score 95% CIs) and compiles publication-ready LaTeX tables (`table1_success_rate.tex`, `table2_timing_breakdown.tex`, `table3_robot_coordination.tex`) and vector figures (`fig2_success_rate.pdf`, `fig3_utilization_heatmap.pdf`).
+- **Spatial Architect (📐) & Relative Placement API**:
+  - Added 2D ASCII Grid Chain-of-Thought (CoT) reasoning for spatial layout generation.
+  - Added `place_relative` function calling tool for grid, offset, and relative coordinate placement.
+  - Ground-truth TF distance injection for proximity-first grasping and real-time workspace state tracking (`workspace_state.py`).
+
 ## [0.2.0] - 2026-08-30
 
 ### Added

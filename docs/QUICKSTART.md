@@ -104,16 +104,40 @@ In Isaac Sim, press the **▶ Play** button to start the physics simulation. You
 
 ## Step 7: Send a Goal
 
-In the web dashboard chat, type:
+In the web dashboard (`http://localhost:5173`), you can:
+- Click any of the **Quick Prompt Chips** above the input bar:
+  - `⚡ Fast 9-Layer Tower`
+  - `📐 3x3 Coplanar Grid`
+  - `🔺 Triangle Pyramid`
+  - `🔄 Table 1 to 3 Relay`
+- Or type any custom spatial mission in natural language:
+  > *"Arrange 6 blocks into a flat triangle formation on the central table"*
 
-> *"Build a 9-layer tower using all three robots"*
+Switch to the **`[🔀 Workflow Graph]`** tab to watch the Gemini Multi-Agent team (Orchestrator 🦾, Spatial Architect 📐, Performance Optimizer ⚡) brainstorm the plan and dispatch parallel arm operations across FR3_1, FR3_2, and FR3_3 in real time!
 
-Watch the Gemini VLA agent decompose the task, assign blocks to robots, and execute coordinated pick-and-place operations in real time!
+---
+
+## Step 8: Run Benchmark Experiments (Optional)
+
+To run automated scientific evaluation trials:
+
+```bash
+# In WSL2 terminal
+source /opt/ros/jazzy/setup.bash
+source ~/catkin_ws/install/setup.bash
+
+# Run 20 trials across scenarios S1, S2, and S3
+ros2 run isaac_ros2_control experiment_runner --scenarios S1,S2,S3 --trials 20
+
+# Compile publication-grade LaTeX tables & vector figures
+ros2 run isaac_ros2_control analyze_experiments --log-dir /mnt/d/git/IsaacSim_GeminiRobotics/logs/experiments
+```
 
 ---
 
 ## What's Next?
 
-- 📖 **Deep Dive**: See [DEVELOPMENT.md](DEVELOPMENT.md) for architecture and contributor setup
+- 📖 **Deep Dive**: See [DEVELOPMENT.md](DEVELOPMENT.md) for full architecture and technical specifications
+- 🎮 **Web GUI Guide**: See [gemini_web_gui/README.md](../gemini_web_gui/README.md) for React Flow dashboard details
+- 📜 **Changelog**: Browse [CHANGELOG.md](CHANGELOG.md) for version release history
 - 🔧 **Troubleshooting**: Check the [README troubleshooting section](../README.md#-troubleshooting)
-- 📝 **History**: Browse [DEV_LOG.md](DEV_LOG.md) for engineering notes and decisions

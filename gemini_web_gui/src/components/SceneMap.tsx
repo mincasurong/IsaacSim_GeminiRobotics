@@ -90,20 +90,37 @@ export default function SceneMap({
   tfTransforms,
   detectedObjects,
 }: SceneMapProps) {
-  const [legendTab, setLegendTab] = useState<'kitchen' | 'blocks'>('kitchen');
+  const hasKitchenScene = Boolean(
+    (tfTransforms && Object.keys(tfTransforms).some(k => k.startsWith('Dish') || k.startsWith('Cup') || k.startsWith('LongBar') || k.startsWith('dish') || k.startsWith('cup') || k.startsWith('bar'))) ||
+    metrics?.collaborative_active ||
+    (Array.isArray(actions) && actions.some(a => {
+      const raw = String(a?.raw || '').toLowerCase();
+      return raw.includes('dish') || raw.includes('cup') || raw.includes('bar');
+    }))
+  );
+
+  const [legendTab, setLegendTab] = useState<'kitchen' | 'blocks'>(hasKitchenScene ? 'kitchen' : 'blocks');
 
   // Check if dual arm collaboration is currently active
   const isDualArmCollaborating = Boolean(
     metrics?.collaborative_active ||
     (metrics?.collaborative_pair && metrics.collaborative_pair.length >= 2) ||
     metrics?.center_occupied_by?.includes('DUAL') ||
-    actions.some(a => {
-      const pa = parseAction(a.raw);
-      return (
-        pa.action.includes('dual') ||
-        (pa.target && (pa.target.toLowerCase().includes('bar') || pa.target.toLowerCase().includes('tray')))
-      ) && !results.some(r => r.ts.getTime() >= a.ts.getTime());
-    })
+    (Array.isArray(actions) && actions.some(a => {
+      try {
+        const pa = parseAction(a?.raw || '');
+        const act = String(pa.action || '').toLowerCase();
+        const tgt = String(pa.target || '').toLowerCase();
+        const aTime = a?.ts instanceof Date ? a.ts.getTime() : 0;
+        const isDone = Array.isArray(results) && results.some(r => {
+          const rTime = r?.ts instanceof Date ? r.ts.getTime() : 0;
+          return rTime >= aTime;
+        });
+        return (act.includes('dual') || tgt.includes('bar') || tgt.includes('tray')) && !isDone;
+      } catch {
+        return false;
+      }
+    }))
   );
 
   // Compute block states from action history
@@ -279,6 +296,31 @@ export default function SceneMap({
       return { x: nominalSvg.x, y: nominalSvg.y, rot: 0 };
     }
     return { x: 150, y: 140, rot: 0 };
+  };
+
+  // Compute live SVG position for a block (combining /tf live stream, in_gripper tracking, and tower state)
+  const getBlockPos = (blockName: string): { x: number; y: number } => {
+    // 1. Dynamic /tf transform override (if available from Isaac Sim)
+    const tf = tfTransforms && (tfTransforms[blockName] || tfTransforms[blockName.toLowerCase()]);
+    if (tf && typeof tf.x === 'number' && typeof tf.y === 'number') {
+      return worldToSvg(tf.x, tf.y);
+    }
+    // 2. In-gripper state: attach to grasping robot arm base/hand
+    const st = blockStates[blockName];
+    if (st?.state === 'in_gripper' && st.robot) {
+      const base = ROBOT_BASES[st.robot] || ROBOT_BASES.FR3_1;
+      return clampCoord(base.x, base.y - 14);
+    }
+    // 3. On-tower state: stack on central target table
+    if (st?.state === 'on_tower') {
+      const idx = st.towerIndex || 0;
+      return {
+        x: TARGET.x + 15 + (idx % 3) * 10,
+        y: TARGET.y + TABLE_H - 6 - idx * 6,
+      };
+    }
+    // 4. Default: nominal table coordinates
+    return INITIAL_BLOCK_TABLE[blockName] || { x: 150, y: 140 };
   };
 
   const towerBlocks = Object.entries(blockStates)
@@ -463,129 +505,133 @@ export default function SceneMap({
           </text>
         ) : null}
 
-        {/* ── Kitchen Objects Tokens ───────────────────────── */}
-        {/* Dishes (Concentric Ceramic Platter Styling) */}
-        {['Dish1', 'Dish2', 'Dish3'].map(dishKey => {
-          const def = KITCHEN_OBJECTS[dishKey];
-          const pos = getKitchenObjectPos(dishKey);
-          const st = kitchenStates[dishKey];
-          if (!def) return null;
+        {/* ── Kitchen Objects Tokens (Active in Kitchen Scene or when selected) ── */}
+        {(hasKitchenScene || legendTab === 'kitchen') && (
+          <>
+            {/* Dishes (Concentric Ceramic Platter Styling) */}
+            {['Dish1', 'Dish2', 'Dish3'].map(dishKey => {
+              const def = KITCHEN_OBJECTS[dishKey];
+              const pos = getKitchenObjectPos(dishKey);
+              const st = kitchenStates[dishKey];
+              if (!def) return null;
 
-          return (
-            <g key={dishKey} filter="url(#shadow)" style={{ cursor: 'pointer' }}>
-              {/* Outer Ceramic Rim */}
-              <circle cx={pos.x} cy={pos.y} r={11.5} fill={def.color} stroke={def.stroke} strokeWidth={1.8} />
-              {/* Concentric Plate Rim Accent */}
-              <circle cx={pos.x} cy={pos.y} r={9.5} fill="none" stroke={def.stroke} strokeWidth={0.5} strokeDasharray="2 1" opacity={0.4} />
-              {/* Inner Plate Well (Depth) */}
-              <circle cx={pos.x} cy={pos.y} r={7.2} fill="none" stroke={def.stroke} strokeWidth={0.8} opacity={0.65} />
-              {/* Ceramic Glaze Reflection Highlight */}
-              <circle cx={pos.x - 3} cy={pos.y - 3} r={2.2} fill="#ffffff" opacity={0.45} />
-              {/* Dish Identifier */}
-              <text x={pos.x} y={pos.y + 2.5} textAnchor="middle" fill="#1e293b" fontSize={6} fontWeight="bold" fontFamily={monoFont}>
-                {dishKey.replace('Dish', 'D')}
-              </text>
-              <title>{def.label} ({dishKey}) [{st?.state}]</title>
+              return (
+                <g key={dishKey} filter="url(#shadow)" style={{ cursor: 'pointer' }}>
+                  {/* Outer Ceramic Rim */}
+                  <circle cx={pos.x} cy={pos.y} r={11.5} fill={def.color} stroke={def.stroke} strokeWidth={1.8} />
+                  {/* Concentric Plate Rim Accent */}
+                  <circle cx={pos.x} cy={pos.y} r={9.5} fill="none" stroke={def.stroke} strokeWidth={0.5} strokeDasharray="2 1" opacity={0.4} />
+                  {/* Inner Plate Well (Depth) */}
+                  <circle cx={pos.x} cy={pos.y} r={7.2} fill="none" stroke={def.stroke} strokeWidth={0.8} opacity={0.65} />
+                  {/* Ceramic Glaze Reflection Highlight */}
+                  <circle cx={pos.x - 3} cy={pos.y - 3} r={2.2} fill="#ffffff" opacity={0.45} />
+                  {/* Dish Identifier */}
+                  <text x={pos.x} y={pos.y + 2.5} textAnchor="middle" fill="#1e293b" fontSize={6} fontWeight="bold" fontFamily={monoFont}>
+                    {dishKey.replace('Dish', 'D')}
+                  </text>
+                  <title>{def.label} ({dishKey}) [{st?.state}]</title>
+                </g>
+              );
+            })}
+
+            {/* Cups (Cylindrical Mug with Handle Notch & Rim Styling) */}
+            {['Cup1', 'Cup2', 'Cup3'].map(cupKey => {
+              const def = KITCHEN_OBJECTS[cupKey];
+              const pos = getKitchenObjectPos(cupKey);
+              const st = kitchenStates[cupKey];
+              if (!def) return null;
+
+              return (
+                <g key={cupKey} filter="url(#shadow)" style={{ cursor: 'pointer' }}>
+                  {/* Cup Cylinder Body */}
+                  <circle cx={pos.x} cy={pos.y} r={7.5} fill={def.color} stroke={def.stroke} strokeWidth={1.5} />
+                  {/* Inner Liquid Rim / Well */}
+                  <circle cx={pos.x} cy={pos.y} r={5} fill="rgba(15, 23, 42, 0.7)" stroke={def.stroke} strokeWidth={0.8} opacity={0.8} />
+                  {/* Liquid Surface */}
+                  <circle cx={pos.x} cy={pos.y} r={3.8} fill={def.color} opacity={0.45} />
+                  {/* Handle Notch Arc on Right Side */}
+                  <path
+                    d={`M ${pos.x + 6} ${pos.y - 3.5} C ${pos.x + 11} ${pos.y - 3}, ${pos.x + 11} ${pos.y + 3}, ${pos.x + 6} ${pos.y + 3.5}`}
+                    fill="none"
+                    stroke={def.stroke}
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                  />
+                  {/* Cup Identifier */}
+                  <text x={pos.x} y={pos.y + 2.5} textAnchor="middle" fill="#ffffff" fontSize={6} fontWeight="bold" fontFamily={monoFont}>
+                    {cupKey.replace('Cup', 'C')}
+                  </text>
+                  <title>{def.label} ({cupKey}) [{st?.state}]</title>
+                </g>
+              );
+            })}
+
+            {/* Oversized Long Bar (Elongated Rounded Bar Spanning Reach) */}
+            <g key="LongBar1" filter="url(#shadow)" style={{ cursor: 'pointer' }}>
+              <g transform={`translate(${barPos.x}, ${barPos.y}) rotate(${barPos.rot})`}>
+                {/* Rounded Long Bar Body */}
+                <rect
+                  x={-27}
+                  y={-5.5}
+                  width={54}
+                  height={11}
+                  rx={5}
+                  fill="url(#barGrad)"
+                  stroke="#c084fc"
+                  strokeWidth={isDualArmCollaborating ? 2.2 : 1.4}
+                />
+                {/* Center Runner Metallic Spine */}
+                <line x1={-20} y1={0} x2={20} y2={0} stroke="rgba(255,255,255,0.3)" strokeWidth={0.8} strokeDasharray="3 2" />
+                {/* Dual Contact Grasp Points: Blue (FR3_1) & Yellow (FR3_2) */}
+                <circle cx={-18} cy={0} r={2.8} fill="#38bdf8" stroke="#ffffff" strokeWidth={0.8}>
+                  <title>FR3_1 Grasp Contact</title>
+                </circle>
+                <circle cx={18} cy={0} r={2.8} fill="#facc15" stroke="#ffffff" strokeWidth={0.8}>
+                  <title>FR3_2 Grasp Contact</title>
+                </circle>
+                {/* Bar Label */}
+                <text x={0} y={2.2} textAnchor="middle" fill="#f8fafc" fontSize={6} fontWeight="bold" fontFamily={monoFont} opacity={0.95}>
+                  LONG BAR
+                </text>
+                {/* Pulsating Glow Aura during Co-Transport */}
+                {isDualArmCollaborating && (
+                  <rect x={-30} y={-8.5} width={60} height={17} rx={7} fill="none" stroke="#c084fc" strokeWidth={1.5}>
+                    <animate attributeName="opacity" values="0.9;0.2;0.9" dur="1.2s" repeatCount="indefinite" />
+                  </rect>
+                )}
+              </g>
+
+              {/* Dynamic Kinematic Dual-Arm Linkage Lines during Co-Transport */}
+              {isDualArmCollaborating && (
+                <g>
+                  <line
+                    x1={ROBOT_BASES.FR3_1.x}
+                    y1={ROBOT_BASES.FR3_1.y - 12}
+                    x2={barGrasp1.x}
+                    y2={barGrasp1.y}
+                    stroke="#38bdf8"
+                    strokeWidth={2}
+                    strokeDasharray="4 2"
+                    opacity={0.85}
+                    filter="url(#glow)"
+                  />
+                  <line
+                    x1={ROBOT_BASES.FR3_2.x}
+                    y1={ROBOT_BASES.FR3_2.y - 12}
+                    x2={barGrasp2.x}
+                    y2={barGrasp2.y}
+                    stroke="#facc15"
+                    strokeWidth={2}
+                    strokeDasharray="4 2"
+                    opacity={0.85}
+                    filter="url(#glow)"
+                  />
+                </g>
+              )}
+              <title>Oversized Long Bar (Dual-Arm Affordance: FR3_1 + FR3_2)</title>
             </g>
-          );
-        })}
-
-        {/* Cups (Cylindrical Mug with Handle Notch & Rim Styling) */}
-        {['Cup1', 'Cup2', 'Cup3'].map(cupKey => {
-          const def = KITCHEN_OBJECTS[cupKey];
-          const pos = getKitchenObjectPos(cupKey);
-          const st = kitchenStates[cupKey];
-          if (!def) return null;
-
-          return (
-            <g key={cupKey} filter="url(#shadow)" style={{ cursor: 'pointer' }}>
-              {/* Cup Cylinder Body */}
-              <circle cx={pos.x} cy={pos.y} r={7.5} fill={def.color} stroke={def.stroke} strokeWidth={1.5} />
-              {/* Inner Liquid Rim / Well */}
-              <circle cx={pos.x} cy={pos.y} r={5} fill="rgba(15, 23, 42, 0.7)" stroke={def.stroke} strokeWidth={0.8} opacity={0.8} />
-              {/* Liquid Surface */}
-              <circle cx={pos.x} cy={pos.y} r={3.8} fill={def.color} opacity={0.45} />
-              {/* Handle Notch Arc on Right Side */}
-              <path
-                d={`M ${pos.x + 6} ${pos.y - 3.5} C ${pos.x + 11} ${pos.y - 3}, ${pos.x + 11} ${pos.y + 3}, ${pos.x + 6} ${pos.y + 3.5}`}
-                fill="none"
-                stroke={def.stroke}
-                strokeWidth={1.8}
-                strokeLinecap="round"
-              />
-              {/* Cup Identifier */}
-              <text x={pos.x} y={pos.y + 2.5} textAnchor="middle" fill="#ffffff" fontSize={6} fontWeight="bold" fontFamily={monoFont}>
-                {cupKey.replace('Cup', 'C')}
-              </text>
-              <title>{def.label} ({cupKey}) [{st?.state}]</title>
-            </g>
-          );
-        })}
-
-        {/* Oversized Long Bar (Elongated Rounded Bar Spanning Reach) */}
-        <g key="LongBar1" filter="url(#shadow)" style={{ cursor: 'pointer' }}>
-          <g transform={`translate(${barPos.x}, ${barPos.y}) rotate(${barPos.rot})`}>
-            {/* Rounded Long Bar Body */}
-            <rect
-              x={-27}
-              y={-5.5}
-              width={54}
-              height={11}
-              rx={5}
-              fill="url(#barGrad)"
-              stroke="#c084fc"
-              strokeWidth={isDualArmCollaborating ? 2.2 : 1.4}
-            />
-            {/* Center Runner Metallic Spine */}
-            <line x1={-20} y1={0} x2={20} y2={0} stroke="rgba(255,255,255,0.3)" strokeWidth={0.8} strokeDasharray="3 2" />
-            {/* Dual Contact Grasp Points: Blue (FR3_1) & Yellow (FR3_2) */}
-            <circle cx={-18} cy={0} r={2.8} fill="#38bdf8" stroke="#ffffff" strokeWidth={0.8}>
-              <title>FR3_1 Grasp Contact</title>
-            </circle>
-            <circle cx={18} cy={0} r={2.8} fill="#facc15" stroke="#ffffff" strokeWidth={0.8}>
-              <title>FR3_2 Grasp Contact</title>
-            </circle>
-            {/* Bar Label */}
-            <text x={0} y={2.2} textAnchor="middle" fill="#f8fafc" fontSize={6} fontWeight="bold" fontFamily={monoFont} opacity={0.95}>
-              LONG BAR
-            </text>
-            {/* Pulsating Glow Aura during Co-Transport */}
-            {isDualArmCollaborating && (
-              <rect x={-30} y={-8.5} width={60} height={17} rx={7} fill="none" stroke="#c084fc" strokeWidth={1.5}>
-                <animate attributeName="opacity" values="0.9;0.2;0.9" dur="1.2s" repeatCount="indefinite" />
-              </rect>
-            )}
-          </g>
-
-          {/* Dynamic Kinematic Dual-Arm Linkage Lines during Co-Transport */}
-          {isDualArmCollaborating && (
-            <g>
-              <line
-                x1={ROBOT_BASES.FR3_1.x}
-                y1={ROBOT_BASES.FR3_1.y - 12}
-                x2={barGrasp1.x}
-                y2={barGrasp1.y}
-                stroke="#38bdf8"
-                strokeWidth={2}
-                strokeDasharray="4 2"
-                opacity={0.85}
-                filter="url(#glow)"
-              />
-              <line
-                x1={ROBOT_BASES.FR3_2.x}
-                y1={ROBOT_BASES.FR3_2.y - 12}
-                x2={barGrasp2.x}
-                y2={barGrasp2.y}
-                stroke="#facc15"
-                strokeWidth={2}
-                strokeDasharray="4 2"
-                opacity={0.85}
-                filter="url(#glow)"
-              />
-            </g>
-          )}
-          <title>Oversized Long Bar (Dual-Arm Affordance: FR3_1 + FR3_2)</title>
-        </g>
+          </>
+        )}
 
         {/* ── Unknown / Detected Object Fallback Tokens ─────── */}
         {detectedObjects && (
@@ -624,54 +670,48 @@ export default function SceneMap({
             })
         )}
 
-        {/* ── Legacy Blocks (when on tables or on tower) ───── */}
-        {/* Tower blocks (stacked on target) */}
-        {towerBlocks.map(([blockName, s], i) => {
+        {/* ── Blocks: Dynamic Positions (Source Tables, In-Gripper, or Stacking Tower) ── */}
+        {Object.entries(blockStates).map(([blockName, s]) => {
+          const pos = getBlockPos(blockName);
           const shape = BLOCK_SHAPES[blockName] || 'cube';
-          const bx = TARGET.x + 15 + (i % 3) * 10;
-          const by = TARGET.y + TABLE_H - 6 - (s.towerIndex || 0) * 6;
           const color = BLOCK_COLORS[blockName] || C.textMuted;
+          const isInGripper = s.state === 'in_gripper';
+          const isOnTower = s.state === 'on_tower';
+
           return (
-            <rect
-              key={blockName}
-              x={bx}
-              y={by}
-              width={10}
-              height={5}
-              rx={shape === 'cylinder' ? 2.5 : 1}
-              fill={color}
-              stroke="rgba(255,255,255,0.3)"
-              strokeWidth={0.5}
-              opacity={0.95}
-              filter="url(#shadow)"
-            >
-              <title>{BLOCK_LABELS[blockName] || blockName} (Layer {(s.towerIndex || 0) + 1})</title>
-            </rect>
+            <g key={blockName} filter="url(#shadow)" style={{ cursor: 'pointer' }}>
+              {shape === 'cube' ? (
+                <rect
+                  x={pos.x - 5}
+                  y={pos.y - 5}
+                  width={10}
+                  height={10}
+                  rx={2}
+                  fill={color}
+                  stroke={isInGripper ? '#38bdf8' : (isOnTower ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.25)')}
+                  strokeWidth={isInGripper ? 1.5 : 0.6}
+                  opacity={0.95}
+                />
+              ) : (
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={5}
+                  fill={color}
+                  stroke={isInGripper ? '#38bdf8' : (isOnTower ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.25)')}
+                  strokeWidth={isInGripper ? 1.5 : 0.6}
+                  opacity={0.95}
+                />
+              )}
+              {isInGripper && (
+                <circle cx={pos.x} cy={pos.y} r={7.5} fill="none" stroke="#38bdf8" strokeWidth={1} opacity={0.75}>
+                  <animate attributeName="r" values="6.5;9;6.5" dur="1s" repeatCount="indefinite" />
+                </circle>
+              )}
+              <title>{BLOCK_LABELS[blockName] || blockName} [{s.state}{isOnTower ? ` Layer ${(s.towerIndex || 0) + 1}` : ''}]</title>
+            </g>
           );
         })}
-
-        {/* Blocks on source tables */}
-        {Object.entries(blockStates)
-          .filter(([, s]) => s.state === 'on_table')
-          .map(([blockName]) => {
-            const pos = INITIAL_BLOCK_TABLE[blockName];
-            if (!pos) return null;
-            const shape = BLOCK_SHAPES[blockName] || 'cube';
-            const color = BLOCK_COLORS[blockName] || C.textMuted;
-            return (
-              <g key={blockName} filter="url(#shadow)">
-                {shape === 'cube' ? (
-                  <rect x={pos.x - 5} y={pos.y} width={10} height={10} rx={2} fill={color} stroke="rgba(255,255,255,0.2)" strokeWidth={0.5}>
-                    <title>{BLOCK_LABELS[blockName] || blockName}</title>
-                  </rect>
-                ) : (
-                  <circle cx={pos.x} cy={pos.y + 5} r={5} fill={color} stroke="rgba(255,255,255,0.2)" strokeWidth={0.5}>
-                    <title>{BLOCK_LABELS[blockName] || blockName}</title>
-                  </circle>
-                )}
-              </g>
-            );
-          })}
 
         {/* ── Robot Bases & Trajectories ──────────────────── */}
         {Object.entries(ROBOT_BASES).map(([name, rb]) => {

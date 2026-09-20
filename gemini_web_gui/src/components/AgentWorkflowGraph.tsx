@@ -485,10 +485,12 @@ const nodeTypes = {
   constructionNode: ConstructionNode,
 };
 
+const FIT_VIEW_OPTIONS = { padding: 0.2 };
+
 /* ─────────────────────────────────────────────────────────────
    Main Agent Workflow Graph Component
 ───────────────────────────────────────────────────────────── */
-export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
+const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
   metrics,
   chatMessages,
   actions,
@@ -509,23 +511,31 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
   const r2 = metrics?.robots?.FR3_2;
   const r3 = metrics?.robots?.FR3_3;
 
-  const isR1Active = r1 && r1.phase !== 'IDLE' && r1.phase !== 'QUEUED';
-  const isR2Active = r2 && r2.phase !== 'IDLE' && r2.phase !== 'QUEUED';
-  const isR3Active = r3 && r3.phase !== 'IDLE' && r3.phase !== 'QUEUED';
+  const isR1Active = Boolean(r1 && r1.phase !== 'IDLE' && r1.phase !== 'QUEUED');
+  const isR2Active = Boolean(r2 && r2.phase !== 'IDLE' && r2.phase !== 'QUEUED');
+  const isR3Active = Boolean(r3 && r3.phase !== 'IDLE' && r3.phase !== 'QUEUED');
 
-  // Collaborative Linkage Detection (Dual-Arm)
+  // Collaborative Linkage Detection (Dual-Arm) with defensive string and type guards
   const isDualArmCollaborating = Boolean(
     metrics?.collaborative_active === true ||
     metrics?.center_occupied_by === 'DUAL_FR3_1_FR3_2' ||
-    metrics?.center_occupied_by?.includes('DUAL') ||
-    (metrics?.collaborative_pair && metrics.collaborative_pair.length >= 2) ||
-    actions.some(a => {
-      const pa = parseAction(a.raw);
-      return (
-        pa.action.includes('dual') ||
-        (pa.target && (pa.target.toLowerCase().includes('bar') || pa.target.toLowerCase().includes('tray')))
-      ) && (!results || !results.some(r => r.ts.getTime() >= a.ts.getTime()));
-    })
+    (typeof metrics?.center_occupied_by === 'string' && metrics.center_occupied_by.includes('DUAL')) ||
+    (Array.isArray(metrics?.collaborative_pair) && metrics.collaborative_pair.length >= 2) ||
+    (Array.isArray(actions) && actions.some(a => {
+      try {
+        const pa = parseAction(a?.raw || '');
+        const act = String(pa?.action || '').toLowerCase();
+        const tgt = String(pa?.target || '').toLowerCase();
+        const aTime = a?.ts instanceof Date ? a.ts.getTime() : 0;
+        const isFinished = Array.isArray(results) && results.some(r => {
+          const rTime = r?.ts instanceof Date ? r.ts.getTime() : 0;
+          return rTime >= aTime;
+        });
+        return (act.includes('dual') || tgt.includes('bar') || tgt.includes('tray')) && !isFinished;
+      } catch {
+        return false;
+      }
+    }))
   );
 
   const rawPair = metrics?.collaborative_pair;
@@ -666,19 +676,30 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
       isVlaSpeaking,
       isArchitectSpeaking,
       isOptimizerSpeaking,
-      latestVla,
-      latestArchitect,
-      latestOptimizer,
-      r1,
-      r2,
-      r3,
+      latestVla?.text,
+      latestArchitect?.text,
+      latestOptimizer?.text,
+      r1?.phase,
+      r1?.target,
+      r1?.busy_pct,
+      r1?.tasks_completed,
+      r2?.phase,
+      r2?.target,
+      r2?.busy_pct,
+      r2?.tasks_completed,
+      r3?.phase,
+      r3?.target,
+      r3?.busy_pct,
+      r3?.tasks_completed,
       isR1Active,
       isR2Active,
       isR3Active,
-      metrics,
+      metrics?.tower_height,
+      metrics?.center_occupied_by,
       actions.length,
       isDualArmCollaborating,
-      collabPair,
+      collabPair[0],
+      collabPair[1],
       collabObject,
     ]
   );
@@ -844,7 +865,9 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
       isR3Active,
       metrics?.center_occupied_by,
       isDualArmCollaborating,
-      collabPair,
+      collabPair[0],
+      collabPair[1],
+      collabObject,
     ]
   );
 
@@ -898,7 +921,7 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={0.3}
         maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
@@ -949,3 +972,5 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
     </div>
   );
 };
+
+export const AgentWorkflowGraph = React.memo<AgentWorkflowGraphProps>(AgentWorkflowGraphComponent);

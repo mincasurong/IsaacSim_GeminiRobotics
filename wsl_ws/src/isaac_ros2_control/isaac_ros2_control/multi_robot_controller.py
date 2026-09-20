@@ -62,7 +62,7 @@ KITCHEN_AFFORDANCES = {
         'rim_offset_radius': 0.0,
         'gripper_close': 0.015,
         'gripper_open': 0.040,
-        'verification_range': (0.008, 0.028),
+        'verification_range': (0.010, 0.038),
         'grasp_mode': 'top_down_symmetric',
         'lift_height': 0.100,
         'place_z_offset': 0.035,
@@ -896,16 +896,22 @@ class MultiRobotController(Node):
         try:
             trans = self.tf_buffer.lookup_transform(frame, 'world', rclpy.time.Time())
             
-            all_candidate_objects = (
-                [f"Block{i}" for i in range(1, 10)] +
-                [f"Dish{i}" for i in range(1, 4)] +
-                [f"Cup{i}" for i in range(1, 4)]
-            )
+            if obj_type == 'block':
+                candidate_objects = [f"Block{i}" for i in range(1, 10)]
+                dist_thresh = 0.045
+                z_thresh = 0.28
+            else:
+                candidate_objects = (
+                    [f"Dish{i}" for i in range(1, 4)] +
+                    [f"Cup{i}" for i in range(1, 4)]
+                )
+                dist_thresh = 0.06
+                z_thresh = 0.25
             
             objects_on_stack = 0
             max_obj_z = None
             
-            for obj_name in all_candidate_objects:
+            for obj_name in candidate_objects:
                 if obj_name == active_obj:
                     continue  # Do not count currently held object
                 try:
@@ -914,8 +920,8 @@ class MultiRobotController(Node):
                     by = b_trans.transform.translation.y
                     bz = b_trans.transform.translation.z
                     dist = np.hypot(bx - target_x, by - target_y)
-                    # 0.06m threshold detects vertically stacked/nested items
-                    if dist < 0.06 and bz >= 0.25:
+                    # Detect vertically stacked/nested items within zone
+                    if dist < dist_thresh and bz >= z_thresh:
                         objects_on_stack += 1
                         if max_obj_z is None or bz > max_obj_z:
                             max_obj_z = bz
@@ -1308,8 +1314,13 @@ class MultiRobotController(Node):
 
                 elif state == 'LIFT':
                     gripper_pos = getattr(self, f'current_gripper{robot_id}')
-                    vmin, vmax = affordance.get('verification_range', (0.008, 0.028))
-                    pick_success = (vmin <= gripper_pos <= vmax)
+                    vmin, vmax = affordance.get('verification_range', (0.010, 0.038))
+                    if obj_type == 'block':
+                        # Franka FR3 fingers stop at ~0.030m when gripping a 60mm block.
+                        # An empty gripper closes down to < 0.010m.
+                        pick_success = (0.010 <= gripper_pos <= 0.039)
+                    else:
+                        pick_success = (vmin <= gripper_pos <= vmax)
 
                     is_auto = getattr(self, f'is_autonomous_cycle{robot_id}', False)
 

@@ -123,25 +123,28 @@ function App() {
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action_result', messageType: 'std_msgs/String' })
           .subscribe((m: any) => { setActionResults(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
 
-        // Subscribe to /tf transforms
+        // Subscribe to /tf transforms (throttled to 10Hz to prevent render flooding)
+        let lastTfDispatch = 0;
+        const pendingTf: Record<string, { x: number; y: number; z?: number; rotation?: any }> = {};
         new ROSLIB.Topic({ ros: ros.current, name: '/tf', messageType: 'tf2_msgs/TFMessage' })
           .subscribe((m: any) => {
             if (m && Array.isArray(m.transforms)) {
-              setTfTransforms(prev => {
-                const updated = { ...prev };
-                for (const t of m.transforms) {
-                  const frameId = t.child_frame_id?.replace(/^\//, '');
-                  if (frameId && t.transform?.translation) {
-                    updated[frameId] = {
-                      x: t.transform.translation.x,
-                      y: t.transform.translation.y,
-                      z: t.transform.translation.z,
-                      rotation: t.transform.rotation,
-                    };
-                  }
+              for (const t of m.transforms) {
+                const frameId = t.child_frame_id?.replace(/^\//, '');
+                if (frameId && t.transform?.translation) {
+                  pendingTf[frameId] = {
+                    x: t.transform.translation.x,
+                    y: t.transform.translation.y,
+                    z: t.transform.translation.z,
+                    rotation: t.transform.rotation,
+                  };
                 }
-                return updated;
-              });
+              }
+              const now = Date.now();
+              if (now - lastTfDispatch >= 100) {
+                lastTfDispatch = now;
+                setTfTransforms({ ...pendingTf });
+              }
             }
           });
 

@@ -1,3 +1,4 @@
 scenario_id,trial_num,exit_status,task_success,gcr,blocks_placed,blocks_target,makespan_sec,planning_time_sec,execution_time_sec,agent_turns,replans,hallucinations,workload_gini,pick_sr,place_sr,api_calls,avg_api_latency,tower_stable,final_height_tf,mean_error_m,r1_actions,r2_actions,r3_actions,r1_busy_pct,r2_busy_pct,r3_busy_pct
 S1,1,DRY_RUN,1,1.0,1,1,1.0031,0,1.0031,0,0,0,0.0,0.0,0.0,0,0.0,1,1,0.0,0,0,0,0.0,0.0,0.0
 S1,2,DRY_RUN,1,1.0,1,1,1.0032,0,1.0032,0,0,0,0.0,0.0,0.0,0,0.0,1,1,0.0,0,0,0,0.0,0.0,0.0
+S1,1,DRY_RUN,1,1.0,1,1,1.0034,0,1.0034,0,0,0,0.0,0.0,0.0,0,0.0,1,1,0.0,0,0,0,0.0,0.0,0.0

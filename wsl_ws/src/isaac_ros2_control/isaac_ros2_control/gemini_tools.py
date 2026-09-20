@@ -41,7 +41,7 @@ def get_robot_tools():
                         "speed": types.Schema(
                             type="STRING",
                             enum=["fast", "normal", "slow"],
-                            description="Optional: Kinematic movement speed."
+                            description="Optional: Movement speed ('fast' strongly recommended for high throughput and agility, 'normal' for standard transport). Default is 'fast'."
                         ),
                         "approach_height": types.Schema(
                             type="NUMBER",
@@ -67,7 +67,7 @@ def get_robot_tools():
                         "speed": types.Schema(
                             type="STRING",
                             enum=["fast", "normal", "slow"],
-                            description="Optional: Kinematic movement speed."
+                            description="Optional: Movement speed ('fast' strongly recommended for high throughput and agility, 'normal' for standard transport). Default is 'fast'."
                         ),
                         "approach_height": types.Schema(
                             type="NUMBER",
@@ -100,7 +100,7 @@ def get_robot_tools():
                         "speed": types.Schema(
                             type="STRING",
                             enum=["fast", "normal", "slow"],
-                            description="Optional: Kinematic movement speed."
+                            description="Optional: Movement speed ('fast' strongly recommended for high throughput and agility, 'normal' for standard transport). Default is 'fast'."
                         ),
                         "approach_height": types.Schema(
                             type="NUMBER",

@@ -510,35 +510,36 @@ CRITICAL: Keep your response EXTREMELY concise. Draw the ASCII grid, then list t
                     genai_types.GenerateContentConfig(temperature=0.1)
                 )
 
-                # --- Turn 3: Safety & Kinematics Verifier ---
+                # --- Turn 3: Agility & Performance Optimizer ---
                 prompt_3 = f'''
-You are the Safety & Kinematics Verifier ({architect_model}). Review the proposed multi-robot execution plan:
+You are the Agility & Performance Optimizer ({architect_model}). Review the proposed multi-robot execution plan:
 
 {response_2}
 
-Analyze safety, trajectory interference, and kinematics:
-1. Proximity & Reachability: Ensure arms pick closest objects on their table first to avoid reaching near singularity boundaries.
-2. Concurrency & Collision Check: If multiple arms place at the center table simultaneously, specify explicit execution order (e.g., dispatch non-conflicting picks concurrently, but serialize center placements).
-3. Dynamic Hyperparameters:
-   - `speed`: select 'fast' for unobstructed initial movements, 'normal' for standard transport, and 'slow' for high-precision placement or higher tower layers.
-   - `approach_height`: default is 0.1m; increase to 0.15m - 0.25m when stacking atop existing blocks or clearing surrounding objects.
+Your mission is to MAXIMIZE ROBOT PERFORMANCE, SPEED, and CONCURRENCY while remaining open-minded and flexible:
+1. Low-Level Protection Note: The ROS 2 low-level controller ALREADY features an atomic mutex lock (`center_occupied_by`) preventing physical arm collisions at the center table, plus DLS inverse kinematics preventing singularities. You DO NOT need to worry about hardware collisions or artificially slow down the robots.
+2. Maximize Speed: Explicitly recommend `speed='fast'` for all pick, transfer, and placement actions to ensure snappy, high-performance execution. Do NOT limit speed to 'slow'.
+3. Aggressive Concurrency: Actively encourage dispatching multiple robots (FR3_1, FR3_2, FR3_3) simultaneously in parallel turns. The robots should work concurrently rather than waiting in sequential turns.
+4. Flexible Decision-Making: Encourage open-minded spatial choices and dynamic adaptations. Keep approach_height compact (0.1m - 0.12m) to avoid wasted vertical travel.
 
-CRITICAL: Provide clear, actionable safety directives and hyperparameter choices in under 2-3 sentences.
+CRITICAL: Provide clear, actionable performance directives emphasizing speed='fast' and maximum multi-arm concurrency in under 2-3 sentences.
 '''
                 response_3 = stream_chat(
-                    "Safety Verifier", "🛡️", "architect",
+                    "Performance Optimizer", "⚡", "architect",
                     architect_model, prompt_3,
-                    genai_types.GenerateContentConfig(temperature=0.1)
+                    genai_types.GenerateContentConfig(temperature=0.2)
                 )
 
                 # --- Turn 4: Robotics VLA Finalizes ---
                 prompt_4 = f'''
-Here is the safety and kinematic review (including relative placement mappings):
+Here is the performance optimization review (including relative placement mappings and agility directives):
 {response_3}
 
-Finalize the plan by integrating the relative placement strategy and the safety/hyperparameter directives (speed, approach_height, concurrency order).
-Make sure to emphasize that the agent MUST use the `place_relative` tool for all blocks other than the anchor block, rather than guessing absolute (X,Y) coordinates.
-Provide the FINAL exact blueprint.
+Finalize the plan by integrating the relative placement strategy with MAXIMUM AGILITY and SPEED:
+- Emphasize `speed='fast'` and bold parallel multi-robot actions.
+- Use the `place_relative` tool for stacking and adjacent placements.
+- Keep the robots moving fluidly, efficiently, and concurrently.
+Provide the FINAL high-performance execution blueprint.
 CRITICAL: Keep your text concise. Format your final response starting with "Here is the final execution blueprint:"
 '''
             else:
@@ -788,7 +789,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             if name == "detect_objects":
                 result = {"objects": self._fn_detect_objects()}
             elif name == "pick":
-                result = self._fn_pick(args.get("robot"), args.get("object_label"), args.get("speed", "normal"), args.get("approach_height", 0.1))
+                result = self._fn_pick(args.get("robot"), args.get("object_label"), args.get("speed", "fast"), args.get("approach_height", 0.1))
                 # Auto-retry / enriched error context on pick failure
                 if not result.get("success", True):
                     self.get_logger().warn(f"Pick failed. Enclosing fresh workspace status.")
@@ -796,9 +797,9 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     status = self.workspace_state.get_summary()
                     result["error_context"] = f"Pick failed. Current workspace status: {json.dumps(status)}. Suggest calling replan or try an alternative."
             elif name == "place":
-                result = self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "normal"), args.get("approach_height", 0.1))
+                result = self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "fast"), args.get("approach_height", 0.1))
             elif name == "place_relative":
-                result = self._fn_place_relative(args.get("robot"), args.get("anchor_block"), args.get("relation"), args.get("speed", "normal"), args.get("approach_height", 0.1))
+                result = self._fn_place_relative(args.get("robot"), args.get("anchor_block"), args.get("relation"), args.get("speed", "fast"), args.get("approach_height", 0.1))
             elif name == "verify_tower":
                 result = self._fn_verify_tower()
             elif name == "go_home":
@@ -882,7 +883,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                 pass  # Block may not exist or TF not yet available
         return positions
 
-    def _fn_pick(self, robot: str, object_label: str, speed: str = 'normal', approach_height: float = 0.1) -> dict:
+    def _fn_pick(self, robot: str, object_label: str, speed: str = 'fast', approach_height: float = 0.1) -> dict:
         msg = String()
         msg.data = json.dumps({
             "action": "pick",
@@ -894,7 +895,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         self.action_pub.publish(msg)
         return self._wait_for_action_complete(robot, timeout=25.0)
 
-    def _fn_place(self, robot: str, x: float = 0.0, y: float = 0.0, speed: str = 'normal', approach_height: float = 0.1) -> dict:
+    def _fn_place(self, robot: str, x: float = 0.0, y: float = 0.0, speed: str = 'fast', approach_height: float = 0.1) -> dict:
         msg = String()
         msg.data = json.dumps({
             "action": "place",
@@ -907,7 +908,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         self.action_pub.publish(msg)
         return self._wait_for_action_complete(robot, timeout=25.0)
 
-    def _fn_place_relative(self, robot: str, anchor_block: str, relation: str, speed: str = 'normal', approach_height: float = 0.1) -> dict:
+    def _fn_place_relative(self, robot: str, anchor_block: str, relation: str, speed: str = 'fast', approach_height: float = 0.1) -> dict:
         """Resolve a relative placement request into absolute coordinates via TF."""
         try:
             # Clean block name (e.g., 'Red Cube' -> 'Block1')

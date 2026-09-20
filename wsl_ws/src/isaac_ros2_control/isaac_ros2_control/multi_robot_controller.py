@@ -288,11 +288,11 @@ class MultiRobotController(Node):
                     return
                 setattr(self, f'active_target{r_id}', block_name)
                 
-                # Dynamic Hyperparameters
-                speed = cmd.get('speed', 'normal')
-                if speed == 'fast': setattr(self, f'steps_per_phase{r_id}', 30)
-                elif speed == 'slow': setattr(self, f'steps_per_phase{r_id}', 90)
-                else: setattr(self, f'steps_per_phase{r_id}', 60)
+                # Dynamic Hyperparameters (Optimized for High Agility & Speed)
+                speed = cmd.get('speed', 'fast')
+                if speed == 'fast': setattr(self, f'steps_per_phase{r_id}', 20)
+                elif speed == 'slow': setattr(self, f'steps_per_phase{r_id}', 70)
+                else: setattr(self, f'steps_per_phase{r_id}', 40)
                 
                 setattr(self, f'hover_height{r_id}', float(cmd.get('approach_height', 0.1)))
                 self._set_state(r_id, 'INIT')
@@ -301,11 +301,11 @@ class MultiRobotController(Node):
                 setattr(self, f'target_x{r_id}', cmd.get('x', 0.0))
                 setattr(self, f'target_y{r_id}', cmd.get('y', 0.0))
                 
-                # Dynamic Hyperparameters
-                speed = cmd.get('speed', 'normal')
-                if speed == 'fast': setattr(self, f'steps_per_phase{r_id}', 30)
-                elif speed == 'slow': setattr(self, f'steps_per_phase{r_id}', 90)
-                else: setattr(self, f'steps_per_phase{r_id}', 60)
+                # Dynamic Hyperparameters (Optimized for High Agility & Speed)
+                speed = cmd.get('speed', 'fast')
+                if speed == 'fast': setattr(self, f'steps_per_phase{r_id}', 20)
+                elif speed == 'slow': setattr(self, f'steps_per_phase{r_id}', 70)
+                else: setattr(self, f'steps_per_phase{r_id}', 40)
                 
                 setattr(self, f'hover_height{r_id}', float(cmd.get('approach_height', 0.1)))
                 curr_state = getattr(self, f'state{r_id}')

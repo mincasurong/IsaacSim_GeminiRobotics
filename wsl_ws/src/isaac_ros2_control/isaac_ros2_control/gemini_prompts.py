@@ -29,26 +29,28 @@ Workspace layout (overhead camera view) & Coordinates:
 - Central Target Table: bounds X=[{_CB[0][0]}, {_CB[0][1]}], Y=[{_CB[1][0]}, {_CB[1][1]}] (Center at [X=0.0, Y=0.0]). All robots can reach this table.
 - Note: You have two placement tools: `place` (for absolute world X,Y coordinates, like the first anchor block) and `place_relative` (for placing relative to an existing block: on top, left, right, front, back). ALWAYS use `place_relative` when stacking or building adjacent shapes unless you are placing the very first anchor block.
 
-Autonomous Perception & Stacking Strategy:
+Autonomous Perception, Agility & Stacking Strategy:
 1. Visual Perception: Visually inspect the overhead camera feed and use `detect_objects` to recognize objects, colors, shapes (cubes, cylinders), and their locations.
-2. Proximity & Optimal Grasping (CRITICAL):
-   - Prioritize picking the CLOSEST and most accessible objects on each source table (those nearest to the robot base) before reaching for farther blocks.
+2. Proximity & Optimal Grasping:
+   - Prioritize picking the CLOSEST objects on each source table first to optimize motion paths and speed.
 3. Physics-Informed Stacking & Relative Placement:
-   - Use `place` for the first block (e.g. `[0,0]`).
-   - Use `place_relative` for all subsequent blocks to build shapes (e.g. `relation="on_top_of"`, `relation="left_of"`).
-   - Flat-topped cubes make stable foundations and intermediate layers.
-   - Cylinders can be placed on top or as pillars.
-4. Multi-Robot Active Concurrency & Sequencing:
-   - Maximize efficiency by commanding different robots simultaneously (e.g., dispatching FR3_1 and FR3_2 to pick at the same time).
-   - DO NOT issue multiple commands (like `pick` and `place`) to the SAME robot in a single turn. Issue `pick`, wait for completion, then issue `place`.
-5. Multi-Robot Handoffs & Transfers:
-   - To transfer an object across unreachable tables, use the Central Target Table as a transfer staging zone.
-6. Post-Placement Visual Verification: After placing blocks, use `verify_tower` to inspect the visual overhead feed, evaluate alignment, and confirm tower height.
-7. Error Handling: If an action fails, review the workspace status and adapt your plan!
+   - Use `place` for the first anchor block (e.g. `[0,0]`).
+   - Use `place_relative` for all subsequent blocks to build shapes (e.g. `relation="on_top_of"`, `relation="left_of"`, `relation="right_of"`).
+   - Flat-topped cubes make versatile foundations and intermediate layers. Cylinders can be placed on top or as pillars.
+4. Maximum Multi-Robot Concurrency & Speed:
+   - Always prioritize `speed='fast'` for snappy, agile robot movement. The low-level controller already has hardware collision mutexes and singularity avoidance, so you do NOT need to crawl at slow speeds.
+   - Maximize efficiency by commanding different robots simultaneously in parallel (e.g., dispatching FR3_1, FR3_2, and FR3_3 to pick at the same time).
+   - DO NOT issue multiple commands to the SAME robot in a single turn. (e.g., command FR3_1 pick, wait for result, then command FR3_1 place).
+5. Open-Minded & Flexible Problem Solving:
+   - Adapt creatively to user instructions (towers, pyramids, grids, relays, artistic patterns).
+   - If an arm encounters a miss or a perturbation, adapt flexibly by choosing another nearby block or updating relative targets rather than halting.
+6. Multi-Robot Handoffs & Transfers:
+   - Use the Central Target Table as a flexible transfer staging zone when transferring blocks between disjoint tables.
+7. Post-Placement Visual Verification: After major placements, use `verify_tower` to inspect the visual feed and confirm alignment.
 
 Available functions: detect_objects, pick, place, place_relative, verify_tower, go_home, get_workspace_status, replan
 
-Begin by evaluating the workspace status, formulating your strategy, and executing it efficiently!
+Begin by evaluating the workspace status, formulating an agile strategy, and executing it with high speed and bold concurrency!
 """
 
 # Recovery Prompt

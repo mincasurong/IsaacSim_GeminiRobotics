@@ -60,7 +60,93 @@ export interface MetricsData {
   robots: Record<string, RobotMetrics>;
   tower_height: number;
   center_occupied_by: string | null;
+  collaborative_active?: boolean;
+  collaborative_pair?: string[];
+  collaborative_object?: string;
 }
+
+export interface KitchenObjectDef {
+  name: string;
+  label: string;
+  shape: 'plate' | 'cup' | 'bar';
+  color: string;
+  stroke: string;
+  nominalPos: { x: number; y: number };
+  assignedRobot?: string;
+  affordance: 'single_arm' | 'dual_arm';
+}
+
+export const KITCHEN_OBJECTS: Record<string, KitchenObjectDef> = {
+  Dish1: {
+    name: 'Dish1',
+    label: 'White Ceramic Dish 1',
+    shape: 'plate',
+    color: '#f8fafc',
+    stroke: '#94a3b8',
+    nominalPos: { x: -0.10, y: -1.05 },
+    assignedRobot: 'FR3_1',
+    affordance: 'single_arm',
+  },
+  Dish2: {
+    name: 'Dish2',
+    label: 'Cobalt Blue Dish 2',
+    shape: 'plate',
+    color: '#38bdf8',
+    stroke: '#0284c7',
+    nominalPos: { x: 0.00, y: -1.15 },
+    assignedRobot: 'FR3_1',
+    affordance: 'single_arm',
+  },
+  Dish3: {
+    name: 'Dish3',
+    label: 'Terracotta Dish 3',
+    shape: 'plate',
+    color: '#fb923c',
+    stroke: '#ea580c',
+    nominalPos: { x: 0.10, y: -1.05 },
+    assignedRobot: 'FR3_1',
+    affordance: 'single_arm',
+  },
+  Cup1: {
+    name: 'Cup1',
+    label: 'Mustard Cup 1',
+    shape: 'cup',
+    color: '#facc15',
+    stroke: '#ca8a04',
+    nominalPos: { x: 0.82, y: 0.43 },
+    assignedRobot: 'FR3_2',
+    affordance: 'single_arm',
+  },
+  Cup2: {
+    name: 'Cup2',
+    label: 'Mint Tea Mug 2',
+    shape: 'cup',
+    color: '#4ade80',
+    stroke: '#16a34a',
+    nominalPos: { x: 1.00, y: 0.48 },
+    assignedRobot: 'FR3_2',
+    affordance: 'single_arm',
+  },
+  Cup3: {
+    name: 'Cup3',
+    label: 'Espresso Cup 3',
+    shape: 'cup',
+    color: '#a8a29e',
+    stroke: '#57534e',
+    nominalPos: { x: 0.91, y: 0.62 },
+    assignedRobot: 'FR3_2',
+    affordance: 'single_arm',
+  },
+  LongBar1: {
+    name: 'LongBar1',
+    label: 'Oversized Long Bar',
+    shape: 'bar',
+    color: '#c084fc',
+    stroke: '#9333ea',
+    nominalPos: { x: 0.20, y: -0.11 },
+    affordance: 'dual_arm',
+  },
+};
 
 export const LOG_COLORS: Record<number, string> = { 10: C.textMuted, 20: C.green, 30: C.yellow, 40: C.red, 50: '#f472b6' };
 export const LOG_LABELS: Record<number, string> = { 10: 'DBG', 20: 'INF', 30: 'WRN', 40: 'ERR', 50: 'FTL' };
@@ -118,16 +204,24 @@ export const btnCtrl: React.CSSProperties = {
 export const parseAction = (raw: string) => {
   try {
     const o = JSON.parse(raw);
+    const robots: string[] = Array.isArray(o.robots) ? o.robots : (o.robot ? [o.robot] : []);
+    const robotStr = o.robot || (robots.length > 0 ? robots.join('+') : '');
+    const target = o.target || o.object || o.object_label || '';
+    const x = o.x ?? o.target_x ?? (Array.isArray(o.destination) ? o.destination[0] : undefined);
+    const y = o.y ?? o.target_y ?? (Array.isArray(o.destination) ? o.destination[1] : undefined);
     return {
       action: o.action || '?',
-      robot: o.robot || '',
-      target: o.target || '',
-      x: o.x,
-      y: o.y,
-      detail: `${o.robot || ''} ${o.target || ''}${o.x !== undefined ? ` x=${o.x}` : ''}${o.y !== undefined ? ` y=${o.y}` : ''}`.trim(),
+      robot: robotStr,
+      robots,
+      target,
+      x,
+      y,
+      destination: o.destination,
+      sync_mode: o.sync_mode,
+      detail: `${robotStr} ${target}${x !== undefined ? ` x=${x}` : ''}${y !== undefined ? ` y=${y}` : ''}`.trim(),
     };
   } catch {
-    return { action: '?', robot: '', target: '', x: undefined, y: undefined, detail: raw };
+    return { action: '?', robot: '', robots: [] as string[], target: '', x: undefined, y: undefined, detail: raw };
   }
 };
 
@@ -139,3 +233,26 @@ export const parseResult = (raw: string) => {
     return { success: false, message: raw, robot_id: '' };
   }
 };
+
+export function resolveObjectKey(target: string): string | null {
+  if (!target) return null;
+  const t = target.toLowerCase().trim();
+  if (t.includes('dish1') || t.includes('white dish') || t.includes('plate1')) return 'Dish1';
+  if (t.includes('dish2') || t.includes('blue dish') || t.includes('plate2')) return 'Dish2';
+  if (t.includes('dish3') || t.includes('terracotta') || t.includes('clay') || t.includes('plate3')) return 'Dish3';
+  if (t.includes('cup1') || t.includes('mustard') || t.includes('amber')) return 'Cup1';
+  if (t.includes('cup2') || t.includes('mint') || t.includes('green cup') || t.includes('tea')) return 'Cup2';
+  if (t.includes('cup3') || t.includes('espresso') || t.includes('charcoal')) return 'Cup3';
+  if (t.includes('longbar') || t.includes('long bar') || t.includes('bar') || t.includes('tray')) return 'LongBar1';
+  if (t.includes('block1') || t.includes('red')) return 'Block1';
+  if (t.includes('block2') || t.includes('green')) return 'Block2';
+  if (t.includes('block3') || t.includes('blue')) return 'Block3';
+  if (t.includes('block4') || t.includes('yellow')) return 'Block4';
+  if (t.includes('block5') || t.includes('magenta')) return 'Block5';
+  if (t.includes('block6') || t.includes('cyan')) return 'Block6';
+  if (t.includes('block7') || t.includes('orange')) return 'Block7';
+  if (t.includes('block8') || t.includes('purple')) return 'Block8';
+  if (t.includes('block9') || t.includes('lime')) return 'Block9';
+  return null;
+}
+

@@ -199,9 +199,20 @@ class GeminiRoboticsNode(Node):
     def _result_callback(self, msg):
         try:
             res = json.loads(msg.data)
-            robot_id = str(res.get("robot_id", ""))
+            robot_id = str(res.get("robot") or res.get("robot_id") or "")
+            if "status" in res and "success" not in res:
+                res["success"] = (str(res["status"]).upper() == "SUCCESS")
+            elif "success" in res and "status" not in res:
+                res["status"] = "SUCCESS" if res["success"] else "FAILURE"
+
             if robot_id:
                 self.action_results[robot_id] = res
+                if "DUAL_" in robot_id.upper():
+                    pair = robot_id.replace("DUAL_", "").replace("dual_", "")
+                    self.action_results[pair] = res
+                    self.action_results[f"DUAL_{pair}"] = res
+                elif "_" in robot_id and not robot_id.startswith("FR3_"):
+                    self.action_results[f"DUAL_{robot_id}"] = res
             else:
                 self.action_results["global"] = res
         except Exception as e:
@@ -456,24 +467,27 @@ class GeminiRoboticsNode(Node):
                         dists.append((block_name, pos, d))
                     dists.sort(key=lambda x: x[2])
                     ranked = ", ".join([f"{b}({round(d,2)}m)" for b, _, d in dists[:5]])
-                    lines.append(f"  {robot_name}: nearest blocks → {ranked}")
+                    lines.append(f"  {robot_name}: nearest objects → {ranked}")
                 proximity_text = "\n".join(lines)
 
             # --- Turn 1: Robotics VLA Drafts Initial Plan ---
             prompt_1 = f'''
-You are the Robotics VLA Orchestrator ({robotics_model}). The user wants to build: "{goal_text}".
+You are the Robotics VLA Orchestrator ({robotics_model}). The user wants to build / accomplish: "{goal_text}".
 
 Workspace layout:
 - FR3_1 (Bottom arm): operates on Source Table 1 ([0.0, -1.05]) and the Central Target Table ([0.0, 0.0])
 - FR3_2 (Top-right arm): operates on Source Table 2 ([0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
 - FR3_3 (Top-left arm): operates on Source Table 3 ([-0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
 
-MEASURED block distances from each robot base (pick CLOSEST blocks first!):
+{gemini_prompts.KITCHEN_AFFORDANCE_RULES}
+
+MEASURED object distances from each robot base (pick CLOSEST objects first!):
 {proximity_text if proximity_text else "(TF data not yet available — use visual proximity from the camera image)"}
 
-Draft an initial plan assigning tasks to the robots to achieve the user's goal.
-1. Proximity Rule: ALWAYS pick the block with the SHORTEST distance from the robot base first. The distances above are measured in meters — lower = closer = pick first.
-2. Concurrency: Maximize MULTI-ROBOT CONCURRENCY so multiple arms can pick/place simultaneously.
+Draft an initial plan assigning tasks to the robots to achieve the user's goal:
+1. Affordance Rule: Dishes and cups are SINGLE-ARM affordances. The oversized Long Bar STRICTLY requires DUAL-ARM collaborative transport (e.g. FR3_1 + FR3_2).
+2. Proximity Rule: ALWAYS pick the closest objects from the robot base first. The distances above are measured in meters.
+3. Concurrency: Maximize MULTI-ROBOT CONCURRENCY so multiple arms can pick/place simultaneously. If two arms carry the Long Bar, the third arm can pick/place single-arm kitchenware in parallel!
 CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
 '''
             req_1 = [
@@ -487,23 +501,19 @@ CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
                 genai_types.GenerateContentConfig(temperature=0.2)
             )
             
-            is_complex = any(kw in goal_text.lower() for kw in ['tower', 'layer', 'stack', 'build', 'pattern', 'replan', 'arrange'])
+            is_complex = any(kw in goal_text.lower() for kw in [
+                'tower', 'layer', 'stack', 'build', 'pattern', 'replan', 'arrange',
+                'kitchen', 'table', 'dining', 'dish', 'plate', 'cup', 'mug', 'bar',
+                'longbar', 'transport', 'dual', 'clear', 'organize', 'set'
+            ])
             
             if is_complex:
-                # --- Turn 2: Spatial Architect Corrects Geometry ---
-                prompt_2 = f'''
-You are the Spatial Architect ({architect_model}). The Robotics VLA has proposed the following schedule for building: "{goal_text}".
-
-{response_1}
-
-Your job is strictly GEOMETRIC and MATHEMATICAL CORRECTION.
-Do NOT try to guess raw absolute (X,Y) coordinates for complex shapes! Instead, use Relative Placement.
-1. First, draw an ASCII top-down grid of the desired shape using `[]` for blocks and `.` for empty space.
-2. Second, pick ONE block to be the central anchor placed at (0, 0).
-3. Third, map all other blocks relative to that anchor using the relation keywords: `on_top_of`, `left_of`, `right_of`, `front_of`, `back_of`.
-
-CRITICAL: Keep your response EXTREMELY concise. Draw the ASCII grid, then list the exact relative placement mappings.
-'''
+                # --- Turn 2: Spatial Architect Corrects Geometry & Layout ---
+                prompt_2 = gemini_prompts.get_spatial_architect_prompt(
+                    architect_model=architect_model,
+                    goal_text=goal_text,
+                    draft_plan=response_1
+                )
                 response_2 = stream_chat(
                     "Spatial Architect", "📐", "architect",
                     architect_model, prompt_2,
@@ -511,19 +521,10 @@ CRITICAL: Keep your response EXTREMELY concise. Draw the ASCII grid, then list t
                 )
 
                 # --- Turn 3: Agility & Performance Optimizer ---
-                prompt_3 = f'''
-You are the Agility & Performance Optimizer ({architect_model}). Review the proposed multi-robot execution plan:
-
-{response_2}
-
-Your mission is to MAXIMIZE ROBOT PERFORMANCE, SPEED, and CONCURRENCY while remaining open-minded and flexible:
-1. Low-Level Protection Note: The ROS 2 low-level controller ALREADY features an atomic mutex lock (`center_occupied_by`) preventing physical arm collisions at the center table, plus DLS inverse kinematics preventing singularities. You DO NOT need to worry about hardware collisions or artificially slow down the robots.
-2. Maximize Speed: Explicitly recommend `speed='fast'` for all pick, transfer, and placement actions to ensure snappy, high-performance execution. Do NOT limit speed to 'slow'.
-3. Aggressive Concurrency: Actively encourage dispatching multiple robots (FR3_1, FR3_2, FR3_3) simultaneously in parallel turns. The robots should work concurrently rather than waiting in sequential turns.
-4. Flexible Decision-Making: Encourage open-minded spatial choices and dynamic adaptations. Keep approach_height compact (0.1m - 0.12m) to avoid wasted vertical travel.
-
-CRITICAL: Provide clear, actionable performance directives emphasizing speed='fast' and maximum multi-arm concurrency in under 2-3 sentences.
-'''
+                prompt_3 = gemini_prompts.get_agility_optimizer_prompt(
+                    optimizer_model=architect_model,
+                    geometric_plan=response_2
+                )
                 response_3 = stream_chat(
                     "Performance Optimizer", "⚡", "architect",
                     architect_model, prompt_3,
@@ -532,13 +533,14 @@ CRITICAL: Provide clear, actionable performance directives emphasizing speed='fa
 
                 # --- Turn 4: Robotics VLA Finalizes ---
                 prompt_4 = f'''
-Here is the performance optimization review (including relative placement mappings and agility directives):
+Here is the performance optimization review (including relative placement mappings, dual-arm waypoints, and agility directives):
 {response_3}
 
-Finalize the plan by integrating the relative placement strategy with MAXIMUM AGILITY and SPEED:
+Finalize the plan by integrating the spatial layout with MAXIMUM AGILITY, SPEED, and DUAL-ARM CONCURRENCY:
 - Emphasize `speed='fast'` and bold parallel multi-robot actions.
-- Use the `place_relative` tool for stacking and adjacent placements.
-- Keep the robots moving fluidly, efficiently, and concurrently.
+- Use `dual_arm_transport` for oversized long bar collaborative transfer.
+- Use `place_relative` for dining place settings and stacking.
+- Keep all unconstrained arms moving fluidly and concurrently.
 Provide the FINAL high-performance execution blueprint.
 CRITICAL: Keep your text concise. Format your final response starting with "Here is the final execution blueprint:"
 '''
@@ -799,7 +801,39 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             elif name == "place":
                 result = self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "fast"), args.get("approach_height", 0.1))
             elif name == "place_relative":
-                result = self._fn_place_relative(args.get("robot"), args.get("anchor_block"), args.get("relation"), args.get("speed", "fast"), args.get("approach_height", 0.1))
+                anchor = args.get("anchor_block") or args.get("anchor_object") or args.get("anchor")
+                result = self._fn_place_relative(args.get("robot"), anchor, args.get("relation"), args.get("speed", "fast"), args.get("approach_height", 0.1))
+            elif name in ["dual_arm_transport", "dual_carry"]:
+                result = self._fn_dual_arm_transport(
+                    robots=args.get("robots"),
+                    object_label=args.get("object_label") or args.get("object") or "LongBar1",
+                    destination=args.get("destination"),
+                    target_position=args.get("target_position"),
+                    target_x=args.get("target_x"),
+                    target_y=args.get("target_y"),
+                    target_z=args.get("target_z", 0.05),
+                    speed=args.get("speed", "fast"),
+                    sync_mode=args.get("sync_mode", "rigid_body"),
+                    approach_height=args.get("approach_height", 0.12)
+                )
+            elif name == "clear_table":
+                result = self._fn_clear_table(
+                    robot=args.get("robot"),
+                    object_label=args.get("object_label") or args.get("target", ""),
+                    zone=args.get("zone", "counter"),
+                    destination=args.get("destination"),
+                    speed=args.get("speed", "fast"),
+                    approach_height=args.get("approach_height", 0.10)
+                )
+            elif name == "organize_table":
+                result = self._fn_organize_table(
+                    robot=args.get("robot"),
+                    object_label=args.get("object_label") or args.get("target", ""),
+                    layout=args.get("layout", "dining"),
+                    destination=args.get("destination"),
+                    speed=args.get("speed", "fast"),
+                    approach_height=args.get("approach_height", 0.10)
+                )
             elif name == "verify_tower":
                 result = self._fn_verify_tower()
             elif name == "go_home":
@@ -812,7 +846,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                 result = {"error": f"Unknown function: {name}"}
                 
             # Log action history
-            if name in ["pick", "place", "go_home"]:
+            if name in ["pick", "place", "place_relative", "dual_arm_transport", "dual_carry", "clear_table", "organize_table", "go_home"]:
                 self.workspace_state.record_action(f"{name} {args}", result.get("success", True), result.get("message", ""))
                 
             return result
@@ -823,20 +857,74 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
 
     def _wait_for_action_complete(self, robot_id: str, timeout=30.0):
         """Wait for the controller to publish a result for a specific robot."""
-        self.action_results.pop(robot_id, None)
+        candidate_keys = [str(robot_id)]
+        if str(robot_id).startswith("FR3_"):
+            candidate_keys.append(str(robot_id)[4:])
+        elif str(robot_id).isdigit():
+            candidate_keys.append(f"FR3_{robot_id}")
+
+        for k in candidate_keys:
+            self.action_results.pop(k, None)
+
         import time
         start_time = time.time()
         while time.time() - start_time < timeout:
             if self.cancel_current_task:
                 return {"success": False, "message": "Action aborted due to task cancellation.", "elapsed_sec": round(time.time() - start_time, 4)}
             time.sleep(0.1)  # Yield to the MultiThreadedExecutor
-            if robot_id in self.action_results:
-                res = self.action_results.pop(robot_id)
-                if "elapsed_sec" not in res:
-                    res["elapsed_sec"] = round(time.time() - start_time, 4)
-                return res
+            for k in candidate_keys:
+                if k in self.action_results:
+                    res = self.action_results.pop(k)
+                    if "elapsed_sec" not in res:
+                        res["elapsed_sec"] = round(time.time() - start_time, 4)
+                    return res
         return {"success": False, "message": f"Timeout waiting for controller for robot {robot_id}", "elapsed_sec": round(time.time() - start_time, 4)}
 
+    def _wait_for_collaborative_action_complete(self, robots: list, timeout: float = 35.0) -> dict:
+        """Wait for action result from collaborative dual-arm execution."""
+        r1 = str(robots[0])
+        r2 = str(robots[1])
+        candidate_keys = [
+            f"DUAL_{r1}_{r2}",
+            f"DUAL_{r2}_{r1}",
+            f"{r1}_{r2}",
+            f"{r2}_{r1}",
+            r1,
+            r2,
+            "global"
+        ]
+        for k in candidate_keys:
+            self.action_results.pop(k, None)
+
+        import time
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if self.cancel_current_task:
+                return {
+                    "success": False,
+                    "message": "Collaborative action aborted due to task cancellation.",
+                    "elapsed_sec": round(time.time() - start_time, 4)
+                }
+            time.sleep(0.1)
+            for k in candidate_keys:
+                if k in self.action_results:
+                    res = self.action_results.pop(k)
+                    if "elapsed_sec" not in res:
+                        res["elapsed_sec"] = round(time.time() - start_time, 4)
+                    return res
+            # Check any result containing 'DUAL' or both robot IDs
+            for stored_key, stored_res in list(self.action_results.items()):
+                if "DUAL" in str(stored_key).upper() or (r1 in str(stored_key) and r2 in str(stored_key)):
+                    self.action_results.pop(stored_key)
+                    if "elapsed_sec" not in stored_res:
+                        stored_res["elapsed_sec"] = round(time.time() - start_time, 4)
+                    return stored_res
+
+        return {
+            "success": False,
+            "message": f"Timeout waiting for collaborative controller for robots {robots}",
+            "elapsed_sec": round(time.time() - start_time, 4)
+        }
 
     # Concrete Primitive Implementations
 
@@ -848,17 +936,26 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         self.last_detections = detections
 
         # Enrich detections with TF-based proximity data
-        block_positions = self._query_block_positions()
-        if block_positions:
+        object_positions = self._query_object_positions()
+        if object_positions:
             # Build a proximity summary for each robot
             proximity_info = []
             for robot_name, base_xy in self.robot_bases.items():
                 distances = []
-                for block_name, pos in block_positions.items():
+                for obj_name, pos in object_positions.items():
                     d = np.hypot(pos[0] - base_xy[0], pos[1] - base_xy[1])
-                    distances.append({"block": block_name, "world_xy": [round(pos[0], 3), round(pos[1], 3)], "distance_m": round(d, 3)})
+                    distances.append({
+                        "object": obj_name,
+                        "block": obj_name,
+                        "world_xy": [round(pos[0], 3), round(pos[1], 3)],
+                        "distance_m": round(d, 3)
+                    })
                 distances.sort(key=lambda x: x["distance_m"])
-                proximity_info.append({"robot": robot_name, "blocks_by_distance": distances})
+                proximity_info.append({
+                    "robot": robot_name,
+                    "objects_by_distance": distances,
+                    "blocks_by_distance": distances
+                })
             
             # Attach proximity data to the detection result
             return {"visual_detections": detections, "proximity": proximity_info}
@@ -868,27 +965,37 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         self.detection_pub.publish(msg)
         return detections
 
-    def _query_block_positions(self) -> dict:
-        """Query TF for world-frame XY positions of all 9 blocks."""
+    def _query_object_positions(self) -> dict:
+        """Query TF for world-frame XY positions of all objects (kitchenware and blocks)."""
         positions = {}
-        for i in range(1, 10):
-            block_name = f"Block{i}"
+        object_names = [
+            "Dish1", "Dish2", "Dish3",
+            "Cup1", "Cup2", "Cup3",
+            "LongBar1", "LongBar"
+        ] + [f"Block{i}" for i in range(1, 10)]
+
+        for obj_name in object_names:
             try:
                 trans = self.tf_buffer.lookup_transform(
-                    'world', block_name, rclpy.time.Time(), timeout=Duration(seconds=0.1))
+                    'world', obj_name, rclpy.time.Time(), timeout=Duration(seconds=0.05))
                 x = trans.transform.translation.x
                 y = trans.transform.translation.y
-                positions[block_name] = (x, y)
+                positions[obj_name] = (x, y)
             except Exception:
-                pass  # Block may not exist or TF not yet available
+                pass  # Object may not exist or TF not yet available
         return positions
+
+    def _query_block_positions(self) -> dict:
+        """Backward-compatible query for object positions."""
+        return self._query_object_positions()
 
     def _fn_pick(self, robot: str, object_label: str, speed: str = 'fast', approach_height: float = 0.1) -> dict:
         msg = String()
+        resolved_label = gemini_utils.resolve_object_key(object_label) or object_label
         msg.data = json.dumps({
             "action": "pick",
             "robot": robot,
-            "target": object_label,
+            "target": resolved_label,
             "speed": speed,
             "approach_height": approach_height
         })
@@ -911,38 +1018,155 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
     def _fn_place_relative(self, robot: str, anchor_block: str, relation: str, speed: str = 'fast', approach_height: float = 0.1) -> dict:
         """Resolve a relative placement request into absolute coordinates via TF."""
         try:
-            # Clean block name (e.g., 'Red Cube' -> 'Block1')
-            block_key = gemini_utils.resolve_block_key(anchor_block)
+            # Clean object/block name (e.g. 'White Dish' -> 'Dish1', 'Red Cube' -> 'Block1')
+            block_key = gemini_utils.resolve_object_key(anchor_block) or gemini_utils.resolve_block_key(anchor_block)
             if not block_key:
-                return {"success": False, "message": f"Could not resolve anchor block name: {anchor_block}"}
+                return {"success": False, "message": f"Could not resolve anchor object name: {anchor_block}"}
             
             # Lookup anchor in TF
             transform = self.tf_buffer.lookup_transform('world', block_key, rclpy.time.Time())
             anchor_x = transform.transform.translation.x
             anchor_y = transform.transform.translation.y
             
-            # Apply offset
-            block_size = 0.045 # 4.5cm block width + tolerance
+            # Adaptive spacing offset based on object affordance
+            obj_type = gemini_utils.get_object_type(block_key)
+            if obj_type == 'dish':
+                spacing = 0.16  # plate diameter ~0.20m, rim-to-rim spacing
+            elif obj_type == 'cup':
+                spacing = 0.10  # cup diameter ~0.08m
+            elif obj_type == 'long_bar':
+                spacing = 0.25  # long bar half-span
+            else:
+                spacing = 0.045  # 4.5cm block width + tolerance
+
             target_x, target_y = anchor_x, anchor_y
             
             if relation == "left_of":
-                target_y += block_size
+                target_y += spacing
             elif relation == "right_of":
-                target_y -= block_size
+                target_y -= spacing
             elif relation == "front_of":
-                target_x += block_size
+                target_x += spacing
             elif relation == "back_of":
-                target_x -= block_size
+                target_x -= spacing
             elif relation == "on_top_of":
-                pass # Same X, Y. The multi_robot_controller dynamically computes Z.
+                pass  # Same X, Y. The multi_robot_controller dynamically computes Z.
             else:
                 return {"success": False, "message": f"Unknown relation: {relation}"}
                 
-            self.get_logger().info(f"\033[96m[TOOL] place_relative resolved {relation} {anchor_block} to X:{target_x:.3f}, Y:{target_y:.3f}\033[0m")
+            self.get_logger().info(f"\033[96m[TOOL] place_relative resolved {relation} {anchor_block} ({block_key}) to X:{target_x:.3f}, Y:{target_y:.3f}\033[0m")
             return self._fn_place(robot, float(target_x), float(target_y), speed, approach_height)
         except Exception as e:
             self.get_logger().error(f"Error in place_relative: {e}")
             return {"success": False, "message": f"TF lookup failed for {anchor_block}: {e}"}
+
+    def _fn_dual_arm_transport(
+        self,
+        robots: list,
+        object_label: str = "LongBar1",
+        destination: list = None,
+        target_position: list = None,
+        target_x: float = None,
+        target_y: float = None,
+        target_z: float = 0.05,
+        speed: str = "fast",
+        sync_mode: str = "rigid_body",
+        approach_height: float = 0.12
+    ) -> dict:
+        """Dispatch a coordinated dual-arm transport command and await collaborative result."""
+        if not robots or len(robots) < 2:
+            return {"success": False, "message": f"dual_arm_transport requires at least 2 robots, got {robots}"}
+
+        obj_name = gemini_utils.resolve_object_key(object_label) or object_label or "LongBar1"
+
+        if destination is not None and len(destination) >= 2:
+            tx = float(destination[0])
+            ty = float(destination[1])
+            tz = float(destination[2]) if len(destination) > 2 else 0.05
+            dest = [tx, ty, tz]
+        elif target_position is not None and len(target_position) >= 2:
+            tx = float(target_position[0])
+            ty = float(target_position[1])
+            tz = float(target_position[2]) if len(target_position) > 2 else 0.05
+            dest = [tx, ty, tz]
+        elif target_x is not None and target_y is not None:
+            tz = float(target_z) if target_z is not None else 0.05
+            dest = [float(target_x), float(target_y), tz]
+        else:
+            dest = [0.0, 0.0, 0.05]
+
+        msg = String()
+        action_payload = {
+            "action": "dual_carry",
+            "robots": list(robots),
+            "object": obj_name,
+            "target": obj_name,
+            "destination": dest,
+            "sync_mode": sync_mode if sync_mode in ["rigid_body", "leader_follower"] else "rigid_body",
+            "speed": speed,
+            "approach_height": approach_height
+        }
+        msg.data = json.dumps(action_payload)
+        self.get_logger().info(
+            f"\033[95m[TOOL] dual_arm_transport dispatched for {robots} carrying {obj_name} to {dest}\033[0m"
+        )
+        self.action_pub.publish(msg)
+        return self._wait_for_collaborative_action_complete(robots, timeout=35.0)
+
+    def _fn_clear_table(
+        self,
+        robot: str,
+        object_label: str = "",
+        zone: str = "counter",
+        destination: list = None,
+        speed: str = "fast",
+        approach_height: float = 0.10
+    ) -> dict:
+        """Command single arm to clear kitchenware to designated zones."""
+        msg = String()
+        target_name = gemini_utils.resolve_object_key(object_label) if object_label else ""
+        payload = {
+            "action": "clear_table",
+            "robot": robot,
+            "target": target_name,
+            "zone": zone,
+            "speed": speed,
+            "approach_height": approach_height
+        }
+        if destination:
+            payload["destination"] = destination
+        msg.data = json.dumps(payload)
+        self.get_logger().info(f"\033[96m[TOOL] clear_table dispatched for {robot}, target: '{target_name}', zone: '{zone}'\033[0m")
+        self.action_pub.publish(msg)
+        return self._wait_for_action_complete(robot, timeout=30.0)
+
+    def _fn_organize_table(
+        self,
+        robot: str,
+        object_label: str = "",
+        layout: str = "dining",
+        destination: list = None,
+        speed: str = "fast",
+        approach_height: float = 0.10
+    ) -> dict:
+        """Command single arm to organize kitchenware into dining place settings."""
+        msg = String()
+        target_name = gemini_utils.resolve_object_key(object_label) if object_label else ""
+        payload = {
+            "action": "organize_table",
+            "robot": robot,
+            "target": target_name,
+            "layout": layout,
+            "speed": speed,
+            "approach_height": approach_height
+        }
+        if destination:
+            payload["destination"] = destination
+        msg.data = json.dumps(payload)
+        self.get_logger().info(f"\033[96m[TOOL] organize_table dispatched for {robot}, target: '{target_name}', layout: '{layout}'\033[0m")
+        self.action_pub.publish(msg)
+        return self._wait_for_action_complete(robot, timeout=30.0)
+
 
 
     def _fn_go_home(self, robot: str) -> dict:

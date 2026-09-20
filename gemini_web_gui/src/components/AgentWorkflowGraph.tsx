@@ -13,13 +13,14 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Cpu, ShieldAlert, ShieldCheck, Box, Compass, Activity } from 'lucide-react';
-import { type MetricsData, type ChatMessage, type RobotAction } from './theme';
+import { type MetricsData, type ChatMessage, type RobotAction, parseAction } from './theme';
 
 interface AgentWorkflowGraphProps {
   metrics: MetricsData | null;
   chatMessages: ChatMessage[];
   actions: RobotAction[];
   userGoal: string;
+  results?: RobotAction[];
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -206,28 +207,36 @@ const RobotArmNode = ({
     tasksCompleted: number;
     color: string;
     isBusy: boolean;
+    isCollaborating?: boolean;
+    collabObject?: string;
   };
 }) => {
   const isExecuting = data.phase && data.phase !== 'IDLE' && data.phase !== 'QUEUED';
+  const isCollab = Boolean(data.isCollaborating);
 
   return (
     <div
       style={{
-        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95))',
-        border: isExecuting
-          ? `1.5px solid ${data.color}`
-          : '1px solid rgba(148, 163, 184, 0.2)',
-        boxShadow: isExecuting
-          ? `0 0 20px ${data.color}33, 0 10px 25px rgba(0,0,0,0.5)`
-          : '0 6px 20px rgba(0, 0, 0, 0.35)',
+        background: isCollab
+          ? 'linear-gradient(135deg, rgba(30, 20, 50, 0.95), rgba(15, 23, 42, 0.95))'
+          : 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95))',
+        border: isCollab
+          ? '1.8px solid #c084fc'
+          : (isExecuting ? `1.5px solid ${data.color}` : '1px solid rgba(148, 163, 184, 0.2)'),
+        boxShadow: isCollab
+          ? '0 0 24px rgba(192, 132, 252, 0.4), 0 10px 25px rgba(0,0,0,0.5)'
+          : (isExecuting ? `0 0 20px ${data.color}33, 0 10px 25px rgba(0,0,0,0.5)` : '0 6px 20px rgba(0, 0, 0, 0.35)'),
         borderRadius: 14,
         padding: '12px 14px',
         width: 240,
         color: '#f8fafc',
         fontFamily: 'system-ui, -apple-system, sans-serif',
+        position: 'relative',
       }}
     >
       <Handle type="target" position={Position.Top} style={{ background: data.color, width: 8, height: 8 }} />
+      <Handle type="source" id="right" position={Position.Right} style={{ background: isCollab ? '#c084fc' : data.color, width: 7, height: 7, opacity: 0.6 }} />
+      <Handle type="target" id="left" position={Position.Left} style={{ background: isCollab ? '#c084fc' : data.color, width: 7, height: 7, opacity: 0.6 }} />
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -236,12 +245,12 @@ const RobotArmNode = ({
               width: 26,
               height: 26,
               borderRadius: 6,
-              background: `${data.color}22`,
-              border: `1px solid ${data.color}55`,
+              background: isCollab ? 'rgba(192, 132, 252, 0.25)' : `${data.color}22`,
+              border: isCollab ? '1px solid #c084fc' : `1px solid ${data.color}55`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: data.color,
+              color: isCollab ? '#c084fc' : data.color,
             }}
           >
             <Cpu size={15} />
@@ -258,27 +267,48 @@ const RobotArmNode = ({
             fontWeight: 700,
             padding: '3px 8px',
             borderRadius: 8,
-            background: isExecuting ? `${data.color}25` : 'rgba(255,255,255,0.06)',
-            color: isExecuting ? data.color : '#94a3b8',
-            border: isExecuting ? `1px solid ${data.color}66` : '1px solid rgba(255,255,255,0.08)',
+            background: isCollab ? 'rgba(192, 132, 252, 0.25)' : (isExecuting ? `${data.color}25` : 'rgba(255,255,255,0.06)'),
+            color: isCollab ? '#c084fc' : (isExecuting ? data.color : '#94a3b8'),
+            border: isCollab ? '1px solid #c084fc' : (isExecuting ? `1px solid ${data.color}66` : '1px solid rgba(255,255,255,0.08)'),
             textTransform: 'uppercase',
           }}
         >
-          {data.phase || 'IDLE'}
+          {isCollab ? 'DUAL_SYNC' : (data.phase || 'IDLE')}
         </div>
       </div>
 
       <div style={{ fontSize: 11, marginBottom: 8, background: 'rgba(0,0,0,0.25)', padding: '6px 8px', borderRadius: 6 }}>
         <div style={{ color: '#94a3b8', fontSize: 9.5, marginBottom: 2 }}>CURRENT TARGET</div>
-        <div style={{ fontWeight: 600, color: data.target ? '#f1f5f9' : '#64748b' }}>
-          {data.target ? data.target : 'No active block target'}
+        <div style={{ fontWeight: 600, color: (isCollab || data.target) ? '#f1f5f9' : '#64748b' }}>
+          {isCollab ? (data.collabObject || 'LongBar1') : (data.target ? data.target : 'No active block target')}
         </div>
       </div>
+
+      {isCollab && (
+        <div
+          style={{
+            marginBottom: 8,
+            padding: '3px 8px',
+            borderRadius: 6,
+            background: 'rgba(192, 132, 252, 0.2)',
+            border: '1px solid rgba(192, 132, 252, 0.5)',
+            color: '#f3e8ff',
+            fontSize: 9.5,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+          }}
+        >
+          <span>🤝</span>
+          <span>DUAL-ARM SYNC ({data.collabObject || 'LongBar1'})</span>
+        </div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#94a3b8' }}>
         <span>Utilization: <b style={{ color: '#f8fafc' }}>{Math.round(data.busyPct)}%</b></span>
         <span>Tasks: <b style={{ color: '#22c55e' }}>{data.tasksCompleted}</b></span>
-        <span style={{ color: '#38bdf8', fontWeight: 600 }}>⚡ 20 stp</span>
+        <span style={{ color: isCollab ? '#c084fc' : '#38bdf8', fontWeight: 600 }}>{isCollab ? '🤝 SYNC' : '⚡ 20 stp'}</span>
       </div>
 
       <Handle type="source" position={Position.Bottom} style={{ background: data.color, width: 8, height: 8 }} />
@@ -294,22 +324,29 @@ const MutexNode = ({
 }: {
   data: {
     occupiedBy: string | null;
+    isCollaborative?: boolean;
   };
 }) => {
-  const isLocked = Boolean(data.occupiedBy);
+  const isDualLocked = Boolean(
+    data.isCollaborative ||
+    data.occupiedBy?.includes('DUAL')
+  );
+  const isLocked = Boolean(data.occupiedBy) || isDualLocked;
 
   return (
     <div
       style={{
-        background: isLocked
-          ? 'linear-gradient(135deg, rgba(234, 88, 12, 0.25), rgba(15, 23, 42, 0.95))'
-          : 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(15, 23, 42, 0.95))',
-        border: isLocked
-          ? '1.5px solid #f97316'
-          : '1.5px solid rgba(16, 185, 129, 0.4)',
-        boxShadow: isLocked
-          ? '0 0 25px rgba(249, 115, 22, 0.35)'
-          : '0 0 15px rgba(16, 185, 129, 0.2)',
+        background: isDualLocked
+          ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(15, 23, 42, 0.95))'
+          : (isLocked
+            ? 'linear-gradient(135deg, rgba(234, 88, 12, 0.25), rgba(15, 23, 42, 0.95))'
+            : 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(15, 23, 42, 0.95))'),
+        border: isDualLocked
+          ? '1.8px solid #c084fc'
+          : (isLocked ? '1.5px solid #f97316' : '1.5px solid rgba(16, 185, 129, 0.4)'),
+        boxShadow: isDualLocked
+          ? '0 0 25px rgba(192, 132, 252, 0.4)'
+          : (isLocked ? '0 0 25px rgba(249, 115, 22, 0.35)' : '0 0 15px rgba(16, 185, 129, 0.2)'),
         borderRadius: 14,
         padding: '10px 14px',
         width: 230,
@@ -317,7 +354,7 @@ const MutexNode = ({
         fontFamily: 'system-ui, -apple-system, sans-serif',
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: isLocked ? '#f97316' : '#10b981', width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Top} style={{ background: isDualLocked ? '#c084fc' : (isLocked ? '#f97316' : '#10b981'), width: 8, height: 8 }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div
@@ -325,7 +362,7 @@ const MutexNode = ({
             width: 28,
             height: 28,
             borderRadius: 7,
-            background: isLocked ? '#ea580c' : '#10b981',
+            background: isDualLocked ? '#9333ea' : (isLocked ? '#ea580c' : '#10b981'),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -338,19 +375,23 @@ const MutexNode = ({
           <div style={{ fontSize: 9.5, textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700 }}>
             Central Table Arbiter
           </div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: isLocked ? '#fb923c' : '#34d399' }}>
-            {isLocked ? `LOCKED (${data.occupiedBy})` : 'UNLOCKED / CLEAR'}
+          <div style={{ fontSize: 12, fontWeight: 700, color: isDualLocked ? '#e9d5ff' : (isLocked ? '#fb923c' : '#34d399') }}>
+            {isDualLocked
+              ? `LOCKED (${data.occupiedBy || 'DUAL_ARM'})`
+              : (isLocked ? `LOCKED (${data.occupiedBy})` : 'UNLOCKED / CLEAR')}
           </div>
         </div>
       </div>
 
       <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, lineHeight: 1.3 }}>
-        {isLocked
-          ? `Arbitrating exclusive entry for ${data.occupiedBy} to prevent multi-arm center collision.`
-          : 'Safe for next arm entry into target table.'}
+        {isDualLocked
+          ? 'Arbitrating exclusive dual-arm clearance for oversized long bar collaborative transport.'
+          : (isLocked
+            ? `Arbitrating exclusive entry for ${data.occupiedBy} to prevent multi-arm center collision.`
+            : 'Safe for next arm entry into target table.')}
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={{ background: isLocked ? '#f97316' : '#10b981', width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Bottom} style={{ background: isDualLocked ? '#c084fc' : (isLocked ? '#f97316' : '#10b981'), width: 8, height: 8 }} />
     </div>
   );
 };
@@ -452,6 +493,7 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
   chatMessages,
   actions,
   userGoal,
+  results,
 }) => {
   // Find latest messages per persona
   const latestVla = [...chatMessages].reverse().find(m => m.role === 'vla');
@@ -470,6 +512,27 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
   const isR1Active = r1 && r1.phase !== 'IDLE' && r1.phase !== 'QUEUED';
   const isR2Active = r2 && r2.phase !== 'IDLE' && r2.phase !== 'QUEUED';
   const isR3Active = r3 && r3.phase !== 'IDLE' && r3.phase !== 'QUEUED';
+
+  // Collaborative Linkage Detection (Dual-Arm)
+  const isDualArmCollaborating = Boolean(
+    metrics?.collaborative_active === true ||
+    metrics?.center_occupied_by === 'DUAL_FR3_1_FR3_2' ||
+    metrics?.center_occupied_by?.includes('DUAL') ||
+    (metrics?.collaborative_pair && metrics.collaborative_pair.length >= 2) ||
+    actions.some(a => {
+      const pa = parseAction(a.raw);
+      return (
+        pa.action.includes('dual') ||
+        (pa.target && (pa.target.toLowerCase().includes('bar') || pa.target.toLowerCase().includes('tray')))
+      ) && (!results || !results.some(r => r.ts.getTime() >= a.ts.getTime()));
+    })
+  );
+
+  const rawPair = metrics?.collaborative_pair;
+  const collabPair = (rawPair && Array.isArray(rawPair) && rawPair.length >= 2)
+    ? rawPair
+    : ['FR3_1', 'FR3_2'];
+  const collabObject = metrics?.collaborative_object || 'LongBar1';
 
   // Construct Flow Nodes
   const nodes: Node[] = useMemo(
@@ -537,6 +600,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           tasksCompleted: r1?.tasks_completed || 0,
           color: '#ef4444',
           isBusy: isR1Active,
+          isCollaborating: isDualArmCollaborating && collabPair.includes('FR3_1'),
+          collabObject: collabObject,
         },
       },
       {
@@ -552,6 +617,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           tasksCompleted: r2?.tasks_completed || 0,
           color: '#10b981',
           isBusy: isR2Active,
+          isCollaborating: isDualArmCollaborating && collabPair.includes('FR3_2'),
+          collabObject: collabObject,
         },
       },
       {
@@ -567,6 +634,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           tasksCompleted: r3?.tasks_completed || 0,
           color: '#3b82f6',
           isBusy: isR3Active,
+          isCollaborating: isDualArmCollaborating && collabPair.includes('FR3_3'),
+          collabObject: collabObject,
         },
       },
 
@@ -577,6 +646,7 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
         position: { x: 380, y: 550 },
         data: {
           occupiedBy: metrics?.center_occupied_by || null,
+          isCollaborative: isDualArmCollaborating,
         },
       },
 
@@ -607,106 +677,164 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
       isR3Active,
       metrics,
       actions.length,
+      isDualArmCollaborating,
+      collabPair,
+      collabObject,
     ]
   );
 
   // Construct Flow Edges with dynamic animations
   const edges: Edge[] = useMemo(
-    () => [
-      // Goal to Agents
-      {
-        id: 'e-goal-orch',
-        source: 'goal',
-        target: 'orchestrator',
-        animated: isVlaSpeaking,
-        style: { stroke: isVlaSpeaking ? '#38bdf8' : '#64748b', strokeWidth: isVlaSpeaking ? 2.5 : 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isVlaSpeaking ? '#38bdf8' : '#64748b' },
-      },
-      {
-        id: 'e-orch-arch',
-        source: 'orchestrator',
-        target: 'architect',
-        animated: isArchitectSpeaking,
-        style: { stroke: isArchitectSpeaking ? '#a78bfa' : '#64748b', strokeWidth: isArchitectSpeaking ? 2.5 : 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isArchitectSpeaking ? '#a78bfa' : '#64748b' },
-      },
-      {
-        id: 'e-arch-opt',
-        source: 'architect',
-        target: 'optimizer',
-        animated: isOptimizerSpeaking,
-        style: { stroke: isOptimizerSpeaking ? '#fbbf24' : '#64748b', strokeWidth: isOptimizerSpeaking ? 2.5 : 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isOptimizerSpeaking ? '#fbbf24' : '#64748b' },
-      },
-
-      // Optimizer / Orchestrator dispatching to Robots
-      {
-        id: 'e-opt-r1',
-        source: 'optimizer',
-        target: 'robot1',
-        animated: isR1Active,
-        style: { stroke: isR1Active ? '#ef4444' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR1Active ? 2 : 1 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isR1Active ? '#ef4444' : '#64748b' },
-      },
-      {
-        id: 'e-opt-r2',
-        source: 'optimizer',
-        target: 'robot2',
-        animated: isR2Active,
-        style: { stroke: isR2Active ? '#10b981' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR2Active ? 2 : 1 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isR2Active ? '#10b981' : '#64748b' },
-      },
-      {
-        id: 'e-opt-r3',
-        source: 'optimizer',
-        target: 'robot3',
-        animated: isR3Active,
-        style: { stroke: isR3Active ? '#3b82f6' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR3Active ? 2 : 1 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isR3Active ? '#3b82f6' : '#64748b' },
-      },
-
-      // Robots through Mutex
-      {
-        id: 'e-r1-mutex',
-        source: 'robot1',
-        target: 'mutex',
-        animated: metrics?.center_occupied_by === 'FR3_1',
-        style: {
-          stroke: metrics?.center_occupied_by === 'FR3_1' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
-          strokeWidth: metrics?.center_occupied_by === 'FR3_1' ? 2.5 : 1,
+    () => {
+      const baseEdges: Edge[] = [
+        // Goal to Agents
+        {
+          id: 'e-goal-orch',
+          source: 'goal',
+          target: 'orchestrator',
+          animated: isVlaSpeaking,
+          style: { stroke: isVlaSpeaking ? '#38bdf8' : '#64748b', strokeWidth: isVlaSpeaking ? 2.5 : 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: isVlaSpeaking ? '#38bdf8' : '#64748b' },
         },
-      },
-      {
-        id: 'e-r2-mutex',
-        source: 'robot2',
-        target: 'mutex',
-        animated: metrics?.center_occupied_by === 'FR3_2',
-        style: {
-          stroke: metrics?.center_occupied_by === 'FR3_2' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
-          strokeWidth: metrics?.center_occupied_by === 'FR3_2' ? 2.5 : 1,
+        {
+          id: 'e-orch-arch',
+          source: 'orchestrator',
+          target: 'architect',
+          animated: isArchitectSpeaking,
+          style: { stroke: isArchitectSpeaking ? '#a78bfa' : '#64748b', strokeWidth: isArchitectSpeaking ? 2.5 : 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: isArchitectSpeaking ? '#a78bfa' : '#64748b' },
         },
-      },
-      {
-        id: 'e-r3-mutex',
-        source: 'robot3',
-        target: 'mutex',
-        animated: metrics?.center_occupied_by === 'FR3_3',
-        style: {
-          stroke: metrics?.center_occupied_by === 'FR3_3' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
-          strokeWidth: metrics?.center_occupied_by === 'FR3_3' ? 2.5 : 1,
+        {
+          id: 'e-arch-opt',
+          source: 'architect',
+          target: 'optimizer',
+          animated: isOptimizerSpeaking,
+          style: { stroke: isOptimizerSpeaking ? '#fbbf24' : '#64748b', strokeWidth: isOptimizerSpeaking ? 2.5 : 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: isOptimizerSpeaking ? '#fbbf24' : '#64748b' },
         },
-      },
 
-      // Mutex to Construction Output
-      {
-        id: 'e-mutex-const',
-        source: 'mutex',
-        target: 'construction',
-        animated: Boolean(metrics?.center_occupied_by),
-        style: { stroke: '#38bdf8', strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#38bdf8' },
-      },
-    ],
+        // Optimizer / Orchestrator dispatching to Robots
+        {
+          id: 'e-opt-r1',
+          source: 'optimizer',
+          target: 'robot1',
+          animated: isR1Active,
+          style: { stroke: isR1Active ? '#ef4444' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR1Active ? 2 : 1 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: isR1Active ? '#ef4444' : '#64748b' },
+        },
+        {
+          id: 'e-opt-r2',
+          source: 'optimizer',
+          target: 'robot2',
+          animated: isR2Active,
+          style: { stroke: isR2Active ? '#10b981' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR2Active ? 2 : 1 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: isR2Active ? '#10b981' : '#64748b' },
+        },
+        {
+          id: 'e-opt-r3',
+          source: 'optimizer',
+          target: 'robot3',
+          animated: isR3Active,
+          style: { stroke: isR3Active ? '#3b82f6' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR3Active ? 2 : 1 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: isR3Active ? '#3b82f6' : '#64748b' },
+        },
+
+        // Robots through Mutex
+        {
+          id: 'e-r1-mutex',
+          source: 'robot1',
+          target: 'mutex',
+          animated: metrics?.center_occupied_by === 'FR3_1',
+          style: {
+            stroke: metrics?.center_occupied_by === 'FR3_1' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
+            strokeWidth: metrics?.center_occupied_by === 'FR3_1' ? 2.5 : 1,
+          },
+        },
+        {
+          id: 'e-r2-mutex',
+          source: 'robot2',
+          target: 'mutex',
+          animated: metrics?.center_occupied_by === 'FR3_2',
+          style: {
+            stroke: metrics?.center_occupied_by === 'FR3_2' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
+            strokeWidth: metrics?.center_occupied_by === 'FR3_2' ? 2.5 : 1,
+          },
+        },
+        {
+          id: 'e-r3-mutex',
+          source: 'robot3',
+          target: 'mutex',
+          animated: metrics?.center_occupied_by === 'FR3_3',
+          style: {
+            stroke: metrics?.center_occupied_by === 'FR3_3' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
+            strokeWidth: metrics?.center_occupied_by === 'FR3_3' ? 2.5 : 1,
+          },
+        },
+
+        // Mutex to Construction Output
+        {
+          id: 'e-mutex-const',
+          source: 'mutex',
+          target: 'construction',
+          animated: Boolean(metrics?.center_occupied_by),
+          style: { stroke: '#38bdf8', strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: '#38bdf8' },
+        },
+      ];
+
+      // Dynamic Dual-Arm Collaborative Linkage Edge
+      if (isDualArmCollaborating) {
+        const rNodeMap: Record<string, string> = {
+          FR3_1: 'robot1',
+          FR3_2: 'robot2',
+          FR3_3: 'robot3',
+          R1: 'robot1',
+          R2: 'robot2',
+          R3: 'robot3',
+          '1': 'robot1',
+          '2': 'robot2',
+          '3': 'robot3',
+        };
+        const rOrder: Record<string, number> = { robot1: 1, robot2: 2, robot3: 3 };
+        const validNodes = new Set(['robot1', 'robot2', 'robot3']);
+        const n1 = rNodeMap[collabPair[0]] || (validNodes.has(collabPair[0]) ? collabPair[0] : 'robot1');
+        const n2 = rNodeMap[collabPair[1]] || (validNodes.has(collabPair[1]) ? collabPair[1] : 'robot2');
+        const [srcNode, tgtNode] = (rOrder[n1] <= rOrder[n2]) ? [n1, n2] : [n2, n1];
+
+        baseEdges.push({
+          id: 'e-collab-dual-arm',
+          source: srcNode,
+          target: tgtNode,
+          sourceHandle: 'right',
+          targetHandle: 'left',
+          animated: true,
+          className: 'collab-glow-edge',
+          style: {
+            stroke: '#c084fc',
+            strokeWidth: 3.5,
+            strokeDasharray: '6 3',
+            filter: 'drop-shadow(0 0 12px #c084fc)',
+          },
+          label: `🤝 Dual-Arm Co-Transport: ${collabObject}`,
+          labelStyle: {
+            fill: '#f3e8ff',
+            fontWeight: 800,
+            fontSize: 10.5,
+            letterSpacing: '0.06em',
+          },
+          labelBgStyle: {
+            fill: 'rgba(24, 16, 42, 0.95)',
+            stroke: '#a855f7',
+            strokeWidth: 1.5,
+            rx: 8,
+            ry: 8,
+          },
+          labelBgPadding: [8, 5],
+        });
+      }
+
+      return baseEdges;
+    },
     [
       isVlaSpeaking,
       isArchitectSpeaking,
@@ -715,6 +843,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
       isR2Active,
       isR3Active,
       metrics?.center_occupied_by,
+      isDualArmCollaborating,
+      collabPair,
     ]
   );
 
@@ -800,6 +930,22 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           }}
         />
       </ReactFlow>
+
+      <style>{`
+        @keyframes pulseCollabEdge {
+          0%, 100% {
+            filter: drop-shadow(0 0 5px #a855f7) drop-shadow(0 0 12px #c084fc);
+            stroke: #c084fc;
+          }
+          50% {
+            filter: drop-shadow(0 0 14px #e879f9) drop-shadow(0 0 28px #a855f7);
+            stroke: #f0abfc;
+          }
+        }
+        .collab-glow-edge path {
+          animation: pulseCollabEdge 1.4s ease-in-out infinite !important;
+        }
+      `}</style>
     </div>
   );
 };

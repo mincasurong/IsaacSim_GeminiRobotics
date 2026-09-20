@@ -40,6 +40,8 @@ function App() {
   const [actions, setActions] = useState<RobotAction[]>([]);
   const [actionResults, setActionResults] = useState<RobotAction[]>([]);
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
+  const [tfTransforms, setTfTransforms] = useState<Record<string, { x: number; y: number; z?: number; rotation?: any }>>({});
+  const [detectedObjects, setDetectedObjects] = useState<any>(null);
   const [logAutoScroll, setLogAutoScroll] = useState(true);
   const [minLogLevel, setMinLogLevel] = useState(20);
 
@@ -121,6 +123,34 @@ function App() {
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action_result', messageType: 'std_msgs/String' })
           .subscribe((m: any) => { setActionResults(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
 
+        // Subscribe to /tf transforms
+        new ROSLIB.Topic({ ros: ros.current, name: '/tf', messageType: 'tf2_msgs/TFMessage' })
+          .subscribe((m: any) => {
+            if (m && Array.isArray(m.transforms)) {
+              setTfTransforms(prev => {
+                const updated = { ...prev };
+                for (const t of m.transforms) {
+                  const frameId = t.child_frame_id?.replace(/^\//, '');
+                  if (frameId && t.transform?.translation) {
+                    updated[frameId] = {
+                      x: t.transform.translation.x,
+                      y: t.transform.translation.y,
+                      z: t.transform.translation.z,
+                      rotation: t.transform.rotation,
+                    };
+                  }
+                }
+                return updated;
+              });
+            }
+          });
+
+        // Subscribe to /gemini/detected_objects
+        new ROSLIB.Topic({ ros: ros.current, name: '/gemini/detected_objects', messageType: 'std_msgs/String' })
+          .subscribe((m: any) => {
+            try { setDetectedObjects(JSON.parse(m.data)); } catch {}
+          });
+
         // Subscribe to chat replies from the VLA agent
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/chat_reply', messageType: 'std_msgs/String' })
           .subscribe((m: any) => {
@@ -173,6 +203,21 @@ function App() {
   const filteredLogs = logs.filter(l => l.level >= minLogLevel);
   const renderMarkdown = (t: string) => t.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
+  // Active execution detection to disable quick prompt chips when robots are moving
+  const isExecuting = Boolean(
+    metrics && Object.values(metrics.robots || {}).some(r => r.phase && r.phase !== 'IDLE' && r.phase !== 'INIT' && r.phase !== 'QUEUED')
+  ) || Boolean(metrics?.collaborative_active);
+
+  // Quick prompt chip click debounce (300ms)
+  const lastChipClickRef = useRef<number>(0);
+  const handleChipClick = (promptText: string) => {
+    const now = Date.now();
+    if (now - lastChipClickRef.current < 300) return;
+    lastChipClickRef.current = now;
+    if (isExecuting) return;
+    setText(promptText);
+  };
+
 
   /* ── Render ───────────────────────────────────────────── */
   return (
@@ -224,6 +269,13 @@ function App() {
         {metrics && metrics.tower_height > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.3)', fontSize: 11, color: '#38bdf8', fontWeight: 700 }}>
             🏗️ {metrics.tower_height}/9
+          </div>
+        )}
+
+        {/* Collaborative Dual-Arm Active Badge */}
+        {metrics?.collaborative_active && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(192, 132, 252, 0.15)', border: '1px solid rgba(192, 132, 252, 0.4)', fontSize: 11, color: '#c084fc', fontWeight: 700 }}>
+            🤝 Dual-Arm: {metrics.collaborative_object || 'LongBar1'}
           </div>
         )}
 
@@ -319,6 +371,9 @@ function App() {
           {/* Quick Prompts Bar */}
           <div style={{ padding: '6px 24px 0', display: 'flex', gap: 8, overflowX: 'auto', maxWidth: 760, width: '100%', margin: '0 auto' }}>
             {[
+              { label: '🍽️ Set Dining Table', prompt: 'Pick up the plates and cups from the prep tables and arrange them into an organized dining setting on the central dining table with plates centered and cups to the right.' },
+              { label: '🤝 Dual-Arm Bar Transfer', prompt: 'Coordinate FR3_1 and FR3_2 to collaboratively grasp opposite ends of the oversized long bar, lift it synchronously, and transport it to the central dining counter.' },
+              { label: '☕ Clear Cups', prompt: 'Command the nearest available robot arms to pick up all cups from the central table and clear them neatly onto the side counter.' },
               { label: '⚡ Fast 9-Layer Tower', prompt: 'Build a 9-layer tower on the central target table using all blocks with maximum speed and concurrency.' },
               { label: '📐 3x3 Coplanar Grid', prompt: 'Arrange all 9 blocks into a 3x3 coplanar grid on the central target table centered at (0, 0).' },
               { label: '🔺 Triangle Pyramid', prompt: 'Arrange 6 blocks into a flat triangular formation on the central target table (3 in base, 2 in middle, 1 on top).' },
@@ -326,25 +381,29 @@ function App() {
             ].map((qp, idx) => (
               <button
                 key={idx}
-                onClick={() => setText(qp.prompt)}
+                disabled={isExecuting}
+                onClick={() => handleChipClick(qp.prompt)}
                 style={{
                   padding: '4px 10px',
                   borderRadius: 20,
                   fontSize: 10.5,
                   fontWeight: 600,
-                  color: '#94a3b8',
+                  color: isExecuting ? '#64748b' : '#94a3b8',
                   background: 'rgba(255, 255, 255, 0.04)',
                   border: `1px solid ${C.border}`,
-                  cursor: 'pointer',
+                  cursor: isExecuting ? 'not-allowed' : 'pointer',
+                  opacity: isExecuting ? 0.45 : 1,
                   whiteSpace: 'nowrap',
                   transition: 'all 0.15s',
                 }}
                 onMouseEnter={e => {
+                  if (isExecuting) return;
                   e.currentTarget.style.color = '#38bdf8';
                   e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
                   e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)';
                 }}
                 onMouseLeave={e => {
+                  if (isExecuting) return;
                   e.currentTarget.style.color = '#94a3b8';
                   e.currentTarget.style.borderColor = C.border;
                   e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
@@ -494,13 +553,21 @@ function App() {
                   metrics={metrics}
                   chatMessages={messages}
                   actions={actions}
+                  results={actionResults}
                   userGoal={messages.filter(m => m.role === 'user').slice(-1)[0]?.text || 'Build a 9-layer tower on the central target table'}
                 />
               )}
 
               {activeRightTab === 'map' && (
                 <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
-                  <SceneMap actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
+                  <SceneMap
+                    actions={actions}
+                    results={actionResults}
+                    metrics={metrics}
+                    fontSize={fontSize}
+                    tfTransforms={tfTransforms}
+                    detectedObjects={detectedObjects}
+                  />
                 </div>
               )}
 

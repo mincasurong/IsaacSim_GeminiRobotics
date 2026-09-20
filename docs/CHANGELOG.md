@@ -5,7 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-20
+
+### Added
+- **Kitchen Manipulation Environment** (`isaacsim_scripts/kitchen_three_robot.py`, 934 lines):
+  - Standalone procedural kitchen scene with 3 Franka FR3 robotic arms at equilateral positions.
+  - 100% self-contained rigid-body kitchen assets (no external USD/Nucleus downloads):
+    - 3× Flat Dishes/Plates: 72mm diam × 18mm, 0.18 kg, rim-pinch grasp mode.
+    - 3× Cups/Mugs: 62mm diam × 85mm, 0.15 kg, cylindrical-clamp grasp mode.
+    - 1× Oversized Long Bar (440mm × 46mm × 26mm, 0.65 kg) spanning FR3_1 + FR3_2 reach.
+  - Calibrated physics materials: static friction μ_s ≥ 1.0, dynamic μ_d ≥ 0.85.
+  - Synthetic overhead RGB-D camera: `/overhead_camera/rgb`, `/depth`, `/camera_info`.
+  - Dynamic `/tf` OmniGraph ActionGraph for all objects and robot bases.
+  - `--test` and `--headless` CLI flags for CI/CD pipelines.
+- **Kitchenware Affordance Taxonomy** (`KITCHEN_AFFORDANCES` in `multi_robot_controller.py`):
+  - Per-type grasping params: approach height, grasp Z offset, gripper travel, lift height, place Z offset.
+  - `dish` → rim_pinch; `cup` → cylindrical_clamp; `block` → top_down_symmetric; `long_bar` → dual_clamping.
+  - `CLEARING_ZONES` and `DINING_ORGANIZATION_LAYOUT` for predefined place-setting coordinates.
+- **11-Phase Synchronized Dual-Arm Collaborative Manipulation** (`multi_robot_controller.py`):
+  - State machine for FR3_1+FR3_2 (or FR3_2+FR3_3) to simultaneously grasp opposite ends of the long bar.
+  - Synchronized approach → contact verification → rigid-body lift → coupled Cartesian transport → release.
+  - MoveIt quintic polynomial trajectory with DLS elbow null-space IK bias.
+  - Mutex token `DUAL_FR3_1_FR3_2` prevents collision with single-arm tasks.
+- **VLA Gemini Kitchen Extension** (M4):
+  - `gemini_tools.py`: New `dual_arm_transport` function declaration (robots pair, object label, destination, sync_mode).
+  - `gemini_utils.py`: `resolve_object_key()` with punctuation normalization and alias resolution.
+  - `gemini_prompts.py`: Kitchen affordance rules for Spatial Architect and Agility Optimizer.
+  - `gemini_robotics_node.py`: Coordinated dual-arm action dispatch with reverse-keyed pair handling.
+- **Web Dashboard Kitchen Integration** (M5):
+  - `SceneMap.tsx`: Live 2D SVG kitchen object tokens (dishes, cups, long bar) with `/tf` world-to-SVG projection.
+  - `AgentWorkflowGraph.tsx`: Dashed purple animated edge between FR3_1 and FR3_2 during dual-arm co-transport.
+  - `App.tsx`: Kitchen quick prompt chips (`🍽️ Set Dining Table`, `🤝 Dual-Arm Bar Transfer`, `☕ Clear Cups`) with 300ms debounce.
+  - Collaborative dual-arm header badge showing active object during long-bar transport.
+  - `/tf` and `/gemini/detected_objects` real-time ROS 2 topic subscriptions.
+- **250-Test E2E Suite** (`tests/`): Four-tier test pyramid covering unit, integration, E2E, and boundary/property-based tests.
+
 ## [0.4.0] - 2026-09-20
+
 
 ### Added
 - **Interactive React Flow v12 Agent Workflow Graph**:

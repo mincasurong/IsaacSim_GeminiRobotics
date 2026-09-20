@@ -17,7 +17,7 @@ def get_robot_tools():
         types.Tool(function_declarations=[
             types.FunctionDeclaration(
                 name="detect_objects",
-                description="Take an overhead photo and detect all colored blocks/cylinders on the table. Returns list of objects with positions.",
+                description="Take an overhead photo and detect all objects (kitchenware: dishes/plates, cups/mugs, long bar, and colored blocks/cylinders) on the tables. Returns list of objects with positions.",
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={},
@@ -25,7 +25,7 @@ def get_robot_tools():
             ),
             types.FunctionDeclaration(
                 name="pick",
-                description="Command a robot arm to pick up a specific object from the table.",
+                description="Command a single robot arm to pick up a specific object (kitchenware dishes, cups, or colored blocks).",
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={
@@ -36,7 +36,7 @@ def get_robot_tools():
                         ),
                         "object_label": types.Schema(
                             type="STRING",
-                            description="Color and shape label of the object to pick, e.g. 'Red Cube', 'Blue Cylinder'"
+                            description="Label, color, or type of the object to pick, e.g. 'Dish1', 'Cup1', 'White Plate', 'Coffee Mug', 'Red Cube', 'Block1'."
                         ),
                         "speed": types.Schema(
                             type="STRING",
@@ -53,7 +53,7 @@ def get_robot_tools():
             ),
             types.FunctionDeclaration(
                 name="place",
-                description="Place the currently held object at the specified absolute world X, Y coordinates. You can place objects anywhere in the workspace (central table, floor, source trays, etc). Z-height will be automatically calculated to stack on top of objects at that location if any.",
+                description="Place the currently held object at the specified absolute world X, Y coordinates (e.g. central dining table, side counters, place settings). Z-height is automatically calculated based on the surface or stacked objects.",
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={
@@ -79,7 +79,7 @@ def get_robot_tools():
             ),
             types.FunctionDeclaration(
                 name="place_relative",
-                description="Place the currently held object relative to an existing block on the central table (e.g. on top, to the left, right, front, back). The system will automatically calculate the correct coordinates based on the anchor block's current position.",
+                description="Place the currently held object relative to an existing object on the table (e.g. place cup right_of dish, stack plate on_top_of plate, or arrange blocks). Coordinates and spacing are automatically calculated based on object affordances.",
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={
@@ -90,12 +90,12 @@ def get_robot_tools():
                         ),
                         "anchor_block": types.Schema(
                             type="STRING", 
-                            description="The name of the block already placed on the table to use as a reference point (e.g., 'Block1', 'Red Cube')."
+                            description="The name of the object already placed to use as reference (e.g., 'Dish1', 'Cup1', 'Block1', 'White Plate', 'Red Cube')."
                         ),
                         "relation": types.Schema(
                             type="STRING",
                             enum=["on_top_of", "left_of", "right_of", "front_of", "back_of"],
-                            description="Where to place the object relative to the anchor block. 'on_top_of' stacks it. 'left_of'/etc places it adjacently."
+                            description="Where to place the object relative to the anchor object. 'on_top_of' stacks it. 'left_of', 'right_of', 'front_of', 'back_of' place it adjacently (e.g. cup to the right of a dish)."
                         ),
                         "speed": types.Schema(
                             type="STRING",
@@ -108,6 +108,131 @@ def get_robot_tools():
                         ),
                     },
                     required=["robot", "anchor_block", "relation"],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="dual_arm_transport",
+                description="Command two adjacent robot arms to simultaneously grasp opposite ends of an oversized object (e.g. LongBar1, serving tray), synchronously lift, transport along a coupled Cartesian trajectory maintaining rigid grasp separation, and place it at the target destination.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "robots": types.Schema(
+                            type="ARRAY",
+                            items=types.Schema(type="STRING", enum=["FR3_1", "FR3_2", "FR3_3"]),
+                            description="Pair of two adjacent robot arms executing collaborative transport, e.g. ['FR3_1', 'FR3_2'] or ['FR3_2', 'FR3_3']."
+                        ),
+                        "object_label": types.Schema(
+                            type="STRING",
+                            description="Label of the oversized object to collaboratively transport, e.g. 'LongBar', 'LongBar1', 'Serving Tray'."
+                        ),
+                        "object": types.Schema(
+                            type="STRING",
+                            description="Optional canonical name or alias for the object (e.g. 'LongBar1')."
+                        ),
+                        "destination": types.Schema(
+                            type="ARRAY",
+                            items=types.Schema(type="NUMBER"),
+                            description="Target destination coordinates [x, y, z] in world frame (e.g. [0.0, 0.0, 0.05])."
+                        ),
+                        "target_position": types.Schema(
+                            type="ARRAY",
+                            items=types.Schema(type="NUMBER"),
+                            description="Optional: Target destination [x, y, z] in world frame (e.g. [0.0, 0.0, 0.05])."
+                        ),
+                        "target_x": types.Schema(
+                            type="NUMBER",
+                            description="Target destination center X coordinate in world frame."
+                        ),
+                        "target_y": types.Schema(
+                            type="NUMBER",
+                            description="Target destination center Y coordinate in world frame."
+                        ),
+                        "target_z": types.Schema(
+                            type="NUMBER",
+                            description="Optional: Target destination center Z coordinate in world frame. Default is 0.05."
+                        ),
+                        "speed": types.Schema(
+                            type="STRING",
+                            enum=["fast", "normal", "slow"],
+                            description="Optional: Movement speed ('fast' strongly recommended for agile trajectory tracking). Default is 'fast'."
+                        ),
+                        "sync_mode": types.Schema(
+                            type="STRING",
+                            enum=["rigid_body", "leader_follower"],
+                            description="Optional: Kinematic coordination mode ('rigid_body' for constant grasp separation). Default is 'rigid_body'."
+                        ),
+                        "approach_height": types.Schema(
+                            type="NUMBER",
+                            description="Optional: Hover height above grasp points before descending (meters). Default is 0.12."
+                        ),
+                    },
+                    required=["robots", "object_label"],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="clear_table",
+                description="Command a single robot arm to clear kitchenware (dishes, cups) from the central table to dedicated clearing zones (dish rack, cup tray, or side counter).",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "robot": types.Schema(
+                            type="STRING",
+                            enum=["FR3_1", "FR3_2", "FR3_3"],
+                            description="Which robot arm to dispatch for clearing."
+                        ),
+                        "object_label": types.Schema(
+                            type="STRING",
+                            description="Optional: Specific kitchenware object to clear (e.g. 'Dish1', 'Cup1'). If omitted, clears the nearest item."
+                        ),
+                        "zone": types.Schema(
+                            type="STRING",
+                            enum=["counter", "dish_rack", "cup_tray"],
+                            description="Clearing destination zone. Default is 'counter'."
+                        ),
+                        "speed": types.Schema(
+                            type="STRING",
+                            enum=["fast", "normal", "slow"],
+                            description="Optional: Movement speed ('fast' recommended). Default is 'fast'."
+                        ),
+                        "approach_height": types.Schema(
+                            type="NUMBER",
+                            description="Optional: Hover approach height (meters). Default is 0.10."
+                        ),
+                    },
+                    required=["robot"],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="organize_table",
+                description="Command a single robot arm to arrange kitchenware (dishes, cups) into designated place settings or dining layout configurations on the central dining table.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "robot": types.Schema(
+                            type="STRING",
+                            enum=["FR3_1", "FR3_2", "FR3_3"],
+                            description="Which robot arm to dispatch for organizing."
+                        ),
+                        "object_label": types.Schema(
+                            type="STRING",
+                            description="Optional: Specific kitchenware object to organize (e.g. 'Dish1', 'Cup1')."
+                        ),
+                        "layout": types.Schema(
+                            type="STRING",
+                            enum=["dining", "tea_service", "buffet"],
+                            description="Target organization layout. Default is 'dining'."
+                        ),
+                        "speed": types.Schema(
+                            type="STRING",
+                            enum=["fast", "normal", "slow"],
+                            description="Optional: Movement speed ('fast' recommended). Default is 'fast'."
+                        ),
+                        "approach_height": types.Schema(
+                            type="NUMBER",
+                            description="Optional: Hover approach height (meters). Default is 0.10."
+                        ),
+                    },
+                    required=["robot"],
                 ),
             ),
             types.FunctionDeclaration(
@@ -154,4 +279,151 @@ def get_robot_tools():
 
 
 ROBOT_TOOLS = get_robot_tools()
+
+# Dictionary definitions of all tool schemas for inspection without google.genai dependency
+GEMINI_TOOL_DECLARATIONS = [
+    {
+        "name": "detect_objects",
+        "description": "Take an overhead photo and detect all objects (kitchenware: dishes/plates, cups/mugs, long bar, and colored blocks/cylinders) on the tables. Returns list of objects with positions.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "pick",
+        "description": "Command a single robot arm to pick up a specific object (kitchenware dishes, cups, or colored blocks).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "robot": {"type": "string", "enum": ["FR3_1", "FR3_2", "FR3_3"]},
+                "object_label": {"type": "string"},
+                "speed": {"type": "string", "enum": ["fast", "normal", "slow"]},
+                "approach_height": {"type": "number"}
+            },
+            "required": ["robot", "object_label"]
+        }
+    },
+    {
+        "name": "place",
+        "description": "Place the currently held object at the specified absolute world X, Y coordinates.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "robot": {"type": "string", "enum": ["FR3_1", "FR3_2", "FR3_3"]},
+                "x": {"type": "number"},
+                "y": {"type": "number"},
+                "speed": {"type": "string", "enum": ["fast", "normal", "slow"]},
+                "approach_height": {"type": "number"}
+            },
+            "required": ["robot", "x", "y"]
+        }
+    },
+    {
+        "name": "place_relative",
+        "description": "Place the currently held object relative to an existing object on the table.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "robot": {"type": "string", "enum": ["FR3_1", "FR3_2", "FR3_3"]},
+                "anchor_block": {"type": "string"},
+                "relation": {"type": "string", "enum": ["on_top_of", "left_of", "right_of", "front_of", "back_of"]},
+                "speed": {"type": "string", "enum": ["fast", "normal", "slow"]},
+                "approach_height": {"type": "number"}
+            },
+            "required": ["robot", "anchor_block", "relation"]
+        }
+    },
+    {
+        "name": "dual_arm_transport",
+        "description": "Command two adjacent robot arms to simultaneously grasp opposite ends of an oversized object (e.g. LongBar1, serving tray), synchronously lift, transport along a coupled Cartesian trajectory maintaining rigid grasp separation, and place it at the target destination.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "robots": {"type": "array", "items": {"type": "string", "enum": ["FR3_1", "FR3_2", "FR3_3"]}},
+                "object_label": {"type": "string"},
+                "object": {"type": "string"},
+                "destination": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3},
+                "target_position": {"type": "array", "items": {"type": "number"}},
+                "target_x": {"type": "number"},
+                "target_y": {"type": "number"},
+                "target_z": {"type": "number"},
+                "speed": {"type": "string", "enum": ["fast", "normal", "slow"]},
+                "sync_mode": {"type": "string", "enum": ["rigid_body", "leader_follower"]},
+                "approach_height": {"type": "number"}
+            },
+            "required": ["robots", "object_label"]
+        }
+    },
+    {
+        "name": "clear_table",
+        "description": "Command a single robot arm to clear kitchenware (dishes, cups) from the central table to dedicated clearing zones.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "robot": {"type": "string", "enum": ["FR3_1", "FR3_2", "FR3_3"]},
+                "object_label": {"type": "string"},
+                "zone": {"type": "string", "enum": ["counter", "dish_rack", "cup_tray"]},
+                "speed": {"type": "string", "enum": ["fast", "normal", "slow"]},
+                "approach_height": {"type": "number"}
+            },
+            "required": ["robot"]
+        }
+    },
+    {
+        "name": "organize_table",
+        "description": "Command a single robot arm to arrange kitchenware (dishes, cups) into designated place settings or dining layout configurations.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "robot": {"type": "string", "enum": ["FR3_1", "FR3_2", "FR3_3"]},
+                "object_label": {"type": "string"},
+                "layout": {"type": "string", "enum": ["dining", "tea_service", "buffet"]},
+                "speed": {"type": "string", "enum": ["fast", "normal", "slow"]},
+                "approach_height": {"type": "number"}
+            },
+            "required": ["robot"]
+        }
+    },
+    {
+        "name": "verify_tower",
+        "description": "Take a new overhead photo and verify the current workspace state.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "go_home",
+        "description": "Send a robot arm back to its home/rest position.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "robot": {"type": "string", "enum": ["FR3_1", "FR3_2", "FR3_3"]}
+            },
+            "required": ["robot"]
+        }
+    },
+    {
+        "name": "get_workspace_status",
+        "description": "Get the current state of all robots and objects.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "replan",
+        "description": "Trigger a full re-evaluation of the workspace via a multi-agent brainstorm.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    }
+]
+
 

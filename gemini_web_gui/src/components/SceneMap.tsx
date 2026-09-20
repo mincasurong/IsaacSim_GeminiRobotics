@@ -221,38 +221,10 @@ export default function SceneMap({
 
   // Compute live SVG position for a kitchen object
   const getKitchenObjectPos = (key: string): { x: number; y: number; rot: number } => {
-    // 1. Dynamic /tf transform override (if available)
-    if (tfTransforms && (tfTransforms[key] || tfTransforms[key.toLowerCase()])) {
-      const tf = tfTransforms[key] || tfTransforms[key.toLowerCase()];
-      const svg = worldToSvg(tf.x, tf.y);
-      let rot = 0;
-      if (tf.rotation) {
-        const { x: qx, y: qy, z: qz, w: qw } = tf.rotation;
-        const siny_cosp = 2 * (qw * qz + qx * qy);
-        const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
-        rot = (Math.atan2(siny_cosp, cosy_cosp) * 180) / Math.PI;
-      }
-      return { x: svg.x, y: svg.y, rot };
-    }
-
-    // 2. Dynamic /gemini/detected_objects override
-    if (detectedObjects) {
-      let det = null;
-      if (Array.isArray(detectedObjects)) {
-        det = detectedObjects.find((d: any) => d.name === key || d.label === key || d.id === key);
-      } else if (typeof detectedObjects === 'object') {
-        det = detectedObjects[key] || detectedObjects[key.toLowerCase()];
-      }
-      if (det && typeof det.x === 'number' && typeof det.y === 'number') {
-        const svg = worldToSvg(det.x, det.y);
-        return { x: svg.x, y: svg.y, rot: det.yaw ?? det.rotation ?? 0 };
-      }
-    }
-
-    // 3. Synthesized state machine position
     const st = kitchenStates[key];
     const def = KITCHEN_OBJECTS[key];
 
+    // 1. In-gripper states take visual precedence during live transport
     if (st?.state === 'in_dual_gripper') {
       // Bar suspended centered between FR3_1 and FR3_2
       const midX = (ROBOT_BASES.FR3_1.x + ROBOT_BASES.FR3_2.x) / 2;
@@ -267,6 +239,44 @@ export default function SceneMap({
       return { x: pt.x, y: pt.y, rot: 0 };
     }
 
+    // 2. Dynamic /tf transform override (if available and valid)
+    if (tfTransforms && (tfTransforms[key] || tfTransforms[key.toLowerCase()])) {
+      const tf = tfTransforms[key] || tfTransforms[key.toLowerCase()];
+      if (
+        tf &&
+        typeof tf.x === 'number' &&
+        typeof tf.y === 'number' &&
+        !Number.isNaN(tf.x) &&
+        !Number.isNaN(tf.y) &&
+        !(tf.x === 0 && tf.y === 0 && st?.state !== 'placed')
+      ) {
+        const svg = worldToSvg(tf.x, tf.y);
+        let rot = 0;
+        if (tf.rotation) {
+          const { x: qx, y: qy, z: qz, w: qw } = tf.rotation;
+          const siny_cosp = 2 * (qw * qz + qx * qy);
+          const cosy_cosp = 1 - 2 * (qy * qy + qz * qz);
+          rot = (Math.atan2(siny_cosp, cosy_cosp) * 180) / Math.PI;
+        }
+        return { x: svg.x, y: svg.y, rot };
+      }
+    }
+
+    // 3. Dynamic /gemini/detected_objects override
+    if (detectedObjects) {
+      let det = null;
+      if (Array.isArray(detectedObjects)) {
+        det = detectedObjects.find((d: any) => d.name === key || d.label === key || d.id === key);
+      } else if (typeof detectedObjects === 'object') {
+        det = detectedObjects[key] || detectedObjects[key.toLowerCase()];
+      }
+      if (det && typeof det.x === 'number' && typeof det.y === 'number' && !Number.isNaN(det.x) && !Number.isNaN(det.y)) {
+        const svg = worldToSvg(det.x, det.y);
+        return { x: svg.x, y: svg.y, rot: det.yaw ?? det.rotation ?? 0 };
+      }
+    }
+
+    // 4. Synthesized placed state
     if (st?.state === 'placed') {
       // Organized dining table arrangement: dishes centered, cups upper-right, long bar front
       if (key.startsWith('Dish')) {
@@ -300,17 +310,27 @@ export default function SceneMap({
 
   // Compute live SVG position for a block (combining /tf live stream, in_gripper tracking, and tower state)
   const getBlockPos = (blockName: string): { x: number; y: number } => {
-    // 1. Dynamic /tf transform override (if available from Isaac Sim)
-    const tf = tfTransforms && (tfTransforms[blockName] || tfTransforms[blockName.toLowerCase()]);
-    if (tf && typeof tf.x === 'number' && typeof tf.y === 'number') {
-      return worldToSvg(tf.x, tf.y);
-    }
-    // 2. In-gripper state: attach to grasping robot arm base/hand
     const st = blockStates[blockName];
+
+    // 1. In-gripper state: attach to grasping robot arm base/hand
     if (st?.state === 'in_gripper' && st.robot) {
       const base = ROBOT_BASES[st.robot] || ROBOT_BASES.FR3_1;
       return clampCoord(base.x, base.y - 14);
     }
+
+    // 2. Dynamic /tf transform override (if available from Isaac Sim and valid)
+    const tf = tfTransforms && (tfTransforms[blockName] || tfTransforms[blockName.toLowerCase()]);
+    if (
+      tf &&
+      typeof tf.x === 'number' &&
+      typeof tf.y === 'number' &&
+      !Number.isNaN(tf.x) &&
+      !Number.isNaN(tf.y) &&
+      !(tf.x === 0 && tf.y === 0 && st?.state !== 'on_tower')
+    ) {
+      return worldToSvg(tf.x, tf.y);
+    }
+
     // 3. On-tower state: stack on central target table
     if (st?.state === 'on_tower') {
       const idx = st.towerIndex || 0;
@@ -319,6 +339,7 @@ export default function SceneMap({
         y: TARGET.y + TABLE_H - 6 - idx * 6,
       };
     }
+
     // 4. Default: nominal table coordinates
     return INITIAL_BLOCK_TABLE[blockName] || { x: 150, y: 140 };
   };

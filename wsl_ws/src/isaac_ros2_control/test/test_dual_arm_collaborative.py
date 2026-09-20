@@ -100,6 +100,37 @@ from multi_robot_controller import (
 )
 
 
+def setUpModule():
+    if ROS2_AVAILABLE:
+        if not rclpy.ok():
+            rclpy.init()
+
+
+def tearDownModule():
+    if ROS2_AVAILABLE:
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+def create_test_controller():
+    ctrl = MultiRobotController()
+    for pub_name in ['cmd_pub1', 'cmd_pub2', 'cmd_pub3', 'status_pub', 'result_pub', 'metrics_pub']:
+        pub = getattr(ctrl, pub_name, None)
+        if pub is not None and not hasattr(pub, 'last_msg'):
+            pub.last_msg = None
+            def make_spy(p):
+                orig_publish = p.publish
+                def _spy(msg):
+                    p.last_msg = msg
+                    try:
+                        return orig_publish(msg)
+                    except Exception:
+                        pass
+                return _spy
+            pub.publish = make_spy(pub)
+    return ctrl
+
+
 class TestFeature10DualArmKinematics(unittest.TestCase):
     """Test Feature 10: Dual-Arm Kinematic Coordination & Distance Invariance."""
 
@@ -131,29 +162,36 @@ class TestFeature10DualArmKinematics(unittest.TestCase):
 
     def test_world_to_base_coordinate_transform(self):
         """Verify world to robot base coordinate transform for FR3_1 and FR3_2."""
-        ctrl = MultiRobotController()
-        center_world = [0.0, 0.0, 0.20]
+        ctrl = create_test_controller()
+        try:
+            center_world = [0.0, 0.0, 0.20]
 
-        # Robot 1 mounted at [0, -0.45, 0.20], yaw +90 deg
-        p1_local, _ = ctrl.world_to_base(1, center_world)
-        self.assertAlmostEqual(p1_local[0], 0.45, places=3)
-        self.assertAlmostEqual(p1_local[1], 0.0, places=3)
-        self.assertAlmostEqual(p1_local[2], 0.0, places=3)
+            # Robot 1 mounted at [0, -0.45, 0.20], yaw +90 deg
+            p1_local, _ = ctrl.world_to_base(1, center_world)
+            self.assertAlmostEqual(p1_local[0], 0.45, places=3)
+            self.assertAlmostEqual(p1_local[1], 0.0, places=3)
+            self.assertAlmostEqual(p1_local[2], 0.0, places=3)
 
-        # Robot 2 mounted at [0.3897, 0.225, 0.20], yaw +210 deg
-        p2_local, _ = ctrl.world_to_base(2, center_world)
-        self.assertGreater(p2_local[0], 0.3)  # Reaching forward from base
+            # Robot 2 mounted at [0.3897, 0.225, 0.20], yaw +210 deg
+            p2_local, _ = ctrl.world_to_base(2, center_world)
+            self.assertGreater(p2_local[0], 0.3)  # Reaching forward from base
+        finally:
+            ctrl.destroy_node()
 
 
 class TestFeature11SynchronizedApproachContactClosure(unittest.TestCase):
     """Test Feature 11: Synchronized Approach & Simultaneous Contact Grasp."""
 
     def setUp(self):
-        self.ctrl = MultiRobotController()
+        self.ctrl = create_test_controller()
         # Initialize joint states to home
         self.ctrl.current_joints1 = list(self.ctrl.q_home_fr3)
         self.ctrl.current_joints2 = list(self.ctrl.q_home_fr3)
         self.ctrl.current_joints3 = list(self.ctrl.q_home_fr3)
+
+    def tearDown(self):
+        if hasattr(self, 'ctrl') and self.ctrl is not None:
+            self.ctrl.destroy_node()
 
     def test_lock_step_state_machine_initiation(self):
         """Verify _start_dual_carry properly activates dual collaboration and reserves mutex."""
@@ -215,7 +253,11 @@ class TestFeature12CoupledCartesianTransport(unittest.TestCase):
     """Test Feature 12: Coupled Transport & Outward Elbow Null-Space Biasing."""
 
     def setUp(self):
-        self.ctrl = MultiRobotController()
+        self.ctrl = create_test_controller()
+
+    def tearDown(self):
+        if hasattr(self, 'ctrl') and self.ctrl is not None:
+            self.ctrl.destroy_node()
 
     def test_elbow_null_space_biasing_convergence(self):
         """Verify solve_ik_with_elbow_bias converges and keeps elbows outward."""
@@ -252,40 +294,50 @@ class TestFeature13SynchronizedReleaseCompliance(unittest.TestCase):
 
     def test_synchronized_release_opens_grippers(self):
         """Verify release phase commands both grippers to open to 0.040m."""
-        ctrl = MultiRobotController()
-        affordance = ctrl.get_affordance('long_bar')
-        ctrl.dual_active = True
-        ctrl.dual_state = 'DUAL_SYNCHRONIZED_DESCEND'
-        ctrl.dual_robots = [1, 2]
-        ctrl.dual_dest_pos = np.array([0.0, 0.15, 0.22])
-        ctrl.dual_dest_yaw = 0.0
+        ctrl = create_test_controller()
+        try:
+            affordance = ctrl.get_affordance('long_bar')
+            ctrl.dual_active = True
+            ctrl.dual_state = 'DUAL_SYNCHRONIZED_DESCEND'
+            ctrl.dual_robots = [1, 2]
+            ctrl.dual_dest_pos = np.array([0.0, 0.15, 0.22])
+            ctrl.dual_dest_yaw = 0.0
 
-        ctrl._transition_dual_arm_phase()
-        self.assertEqual(ctrl.dual_state, 'DUAL_SYNCHRONIZED_RELEASE')
-        self.assertEqual(ctrl.dual_grip_end, ctrl.gripper_open)
-        self.assertEqual(ctrl.dual_grip_end, 0.040)
+            ctrl._transition_dual_arm_phase()
+            self.assertEqual(ctrl.dual_state, 'DUAL_SYNCHRONIZED_RELEASE')
+            self.assertEqual(ctrl.dual_grip_end, ctrl.gripper_open)
+            self.assertEqual(ctrl.dual_grip_end, 0.040)
+        finally:
+            ctrl.destroy_node()
 
     def test_outward_retreat_vector(self):
         """Verify retreat moves arms outward in opposite directions away from bar."""
-        ctrl = MultiRobotController()
-        ctrl.dual_active = True
-        ctrl.dual_state = 'DUAL_SYNCHRONIZED_RELEASE'
-        ctrl.dual_robots = [1, 2]
-        ctrl.dual_w1_end = np.array([0.40, -0.20, 0.10])
-        ctrl.dual_w2_end = np.array([0.40, 0.20, 0.10])
+        ctrl = create_test_controller()
+        try:
+            ctrl.dual_active = True
+            ctrl.dual_state = 'DUAL_SYNCHRONIZED_RELEASE'
+            ctrl.dual_robots = [1, 2]
+            ctrl.dual_w1_end = np.array([0.40, -0.20, 0.10])
+            ctrl.dual_w2_end = np.array([0.40, 0.20, 0.10])
 
-        ctrl._transition_dual_arm_phase()
-        self.assertEqual(ctrl.dual_state, 'DUAL_SYNCHRONIZED_RETRACT')
-        # Robot 1 moved -X local, Robot 2 moved +X local
-        self.assertLess(ctrl.dual_w1_end[0], 0.40)
-        self.assertGreater(ctrl.dual_w2_end[0], 0.40)
+            ctrl._transition_dual_arm_phase()
+            self.assertEqual(ctrl.dual_state, 'DUAL_SYNCHRONIZED_RETRACT')
+            # Robot 1 moved -X local, Robot 2 moved +X local
+            self.assertLess(ctrl.dual_w1_end[0], 0.40)
+            self.assertGreater(ctrl.dual_w2_end[0], 0.40)
+        finally:
+            ctrl.destroy_node()
 
 
 class TestFeature14CollaborativeTelemetryAndMutex(unittest.TestCase):
     """Test Feature 14: Collaborative Telemetry & Mutex Reservation."""
 
     def setUp(self):
-        self.ctrl = MultiRobotController()
+        self.ctrl = create_test_controller()
+
+    def tearDown(self):
+        if hasattr(self, 'ctrl') and self.ctrl is not None:
+            self.ctrl.destroy_node()
 
     def test_center_mutex_lockout_robot3(self):
         """Verify DUAL_FR3_1_FR3_2 mutex blocks robot 3 in WAIT_FOR_CENTER."""
@@ -365,20 +417,23 @@ class TestActionCommandDispatchDualCarry(unittest.TestCase):
 
     def test_dispatch_dual_carry_command(self):
         """Verify JSON action dispatch triggers dual_carry sequence."""
-        ctrl = MultiRobotController()
-        msg = type('Msg', (), {'data': json.dumps({
-            "action": "dual_carry",
-            "robots": ["FR3_1", "FR3_2"],
-            "object": "LongBar1",
-            "destination": [0.0, 0.15, 0.22],
-            "sync_mode": "rigid_body"
-        })})()
+        ctrl = create_test_controller()
+        try:
+            msg = type('Msg', (), {'data': json.dumps({
+                "action": "dual_carry",
+                "robots": ["FR3_1", "FR3_2"],
+                "object": "LongBar1",
+                "destination": [0.0, 0.15, 0.22],
+                "sync_mode": "rigid_body"
+            })})()
 
-        ctrl._action_cb(msg)
-        self.assertTrue(ctrl.dual_active)
-        self.assertEqual(ctrl.dual_state, 'DUAL_INIT')
-        self.assertEqual(ctrl.dual_target_name, 'LongBar1')
-        self.assertAlmostEqual(ctrl.dual_dest_pos[1], 0.15)
+            ctrl._action_cb(msg)
+            self.assertTrue(ctrl.dual_active)
+            self.assertEqual(ctrl.dual_state, 'DUAL_INIT')
+            self.assertEqual(ctrl.dual_target_name, 'LongBar1')
+            self.assertAlmostEqual(ctrl.dual_dest_pos[1], 0.15)
+        finally:
+            ctrl.destroy_node()
 
 
 if __name__ == '__main__':

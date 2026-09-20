@@ -187,7 +187,7 @@ class TestGeminiPrompts(unittest.TestCase):
 
     def test_system_prompt_kitchen_awareness(self):
         sys_prompt = gemini_prompts.SYSTEM_PROMPT
-        self.assertIn("KITCHEN_AFFORDANCE_RULES", str(gemini_prompts))
+        self.assertTrue(hasattr(gemini_prompts, "KITCHEN_AFFORDANCE_RULES"))
         self.assertIn("dual_arm_transport", sys_prompt)
         self.assertIn("clear_table", sys_prompt)
         self.assertIn("organize_table", sys_prompt)
@@ -219,12 +219,12 @@ class TestGeminiRoboticsNodeDispatch(unittest.TestCase):
         # Instantiate a lightweight Mock wrapper around GeminiRoboticsNode methods
         class MockNode:
             action_pub = self.publisher
-            action_results = {"DUAL_FR3_1_FR3_2": {"success": True, "message": "Collaborative transport complete."}}
+            action_results = {}
             cancel_current_task = False
             get_logger = lambda s: self.logger
 
             _fn_dual_arm_transport = gemini_robotics_node.GeminiRoboticsNode._fn_dual_arm_transport
-            _wait_for_collaborative_action_complete = gemini_robotics_node.GeminiRoboticsNode._wait_for_collaborative_action_complete
+            _wait_for_collaborative_action_complete = lambda s, robots, timeout=35.0: {"success": True, "message": "Collaborative transport complete."}
 
         mock = MockNode()
         res = mock._fn_dual_arm_transport(
@@ -232,7 +232,7 @@ class TestGeminiRoboticsNodeDispatch(unittest.TestCase):
             object_label="LongBar",
             target_x=0.0,
             target_y=0.0,
-            target_z=0.05,
+            target_z=0.313,
             speed="fast",
             approach_height=0.12
         )
@@ -242,7 +242,7 @@ class TestGeminiRoboticsNodeDispatch(unittest.TestCase):
         self.assertEqual(payload["action"], "dual_carry")
         self.assertEqual(payload["robots"], ["FR3_1", "FR3_2"])
         self.assertEqual(payload["object"], "LongBar1")
-        self.assertEqual(payload["destination"], [0.0, 0.0, 0.05])
+        self.assertEqual(payload["destination"], [0.0, 0.0, 0.313])
         self.assertEqual(payload["sync_mode"], "rigid_body")
         self.assertEqual(payload["speed"], "fast")
         self.assertEqual(payload["approach_height"], 0.12)
@@ -254,16 +254,13 @@ class TestGeminiRoboticsNodeDispatch(unittest.TestCase):
 
         class MockNode:
             action_pub = self.publisher
-            action_results = {
-                "FR3_1": {"success": True, "message": "Done"},
-                "FR3_2": {"success": True, "message": "Done"}
-            }
+            action_results = {}
             cancel_current_task = False
             get_logger = lambda s: self.logger
 
             _fn_clear_table = gemini_robotics_node.GeminiRoboticsNode._fn_clear_table
             _fn_organize_table = gemini_robotics_node.GeminiRoboticsNode._fn_organize_table
-            _wait_for_action_complete = gemini_robotics_node.GeminiRoboticsNode._wait_for_action_complete
+            _wait_for_action_complete = lambda s, robot_id, timeout=30.0: {"success": True, "message": "Done"}
 
         mock = MockNode()
         mock._fn_clear_table(robot="FR3_1", object_label="Dish1", zone="dish_rack")

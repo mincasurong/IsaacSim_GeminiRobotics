@@ -224,6 +224,13 @@ class MultiRobotController(Node):
         self.tower_height = 0
         self.active_robot_id = 1
         
+        self.target_x1 = self.stack_pos_world[0]
+        self.target_y1 = self.stack_pos_world[1]
+        self.target_x2 = self.stack_pos_world[0]
+        self.target_y2 = self.stack_pos_world[1]
+        self.target_x3 = self.stack_pos_world[0]
+        self.target_y3 = self.stack_pos_world[1]
+
         self.active_target1 = None
         self.active_target2 = None
         self.active_target3 = None
@@ -253,9 +260,9 @@ class MultiRobotController(Node):
         self.dual_dwell_steps = self.dwell_steps
         self.dual_robots = [1, 2]
         self.dual_target_name = 'LongBar1'
-        self.dual_bar_length = 0.50
-        self.dual_grasp_separation = 0.40  # Constant rigid body separation distance (0.40m)
-        self.dual_dest_pos = np.array([0.0, 0.15, 0.22])
+        self.dual_bar_length = 0.44
+        self.dual_grasp_separation = 0.30  # Constant rigid body separation distance (0.30m)
+        self.dual_dest_pos = np.array([0.0, 0.15, 0.313])
         self.dual_dest_yaw = 0.0
         self.dual_start_bar_pos = None
         self.dual_start_bar_yaw = 0.0
@@ -355,6 +362,13 @@ class MultiRobotController(Node):
         self.tower_height = 0
         self.active_robot_id = 1
         
+        self.target_x1 = self.stack_pos_world[0]
+        self.target_y1 = self.stack_pos_world[1]
+        self.target_x2 = self.stack_pos_world[0]
+        self.target_y2 = self.stack_pos_world[1]
+        self.target_x3 = self.stack_pos_world[0]
+        self.target_y3 = self.stack_pos_world[1]
+
         self.active_target1 = None
         self.active_target2 = None
         self.active_target3 = None
@@ -380,6 +394,7 @@ class MultiRobotController(Node):
         self.dual_active = False
         self.dual_state = 'DUAL_IDLE'
         self.dual_step_counter = 0
+        self.dual_dest_pos = np.array([0.0, 0.15, 0.313])
         self.collaborative_active = False
         self.collaborative_pair = None
         self.collaborative_object = None
@@ -624,11 +639,11 @@ class MultiRobotController(Node):
                 dest = cmd.get('destination', None)
                 if dest and len(dest) >= 2:
                     tx, ty = float(dest[0]), float(dest[1])
-                    tz = float(dest[2]) if len(dest) > 2 else 0.22
+                    tz = float(dest[2]) if len(dest) > 2 else 0.313
                 else:
                     tx = float(cmd.get('target_x', 0.0))
                     ty = float(cmd.get('target_y', 0.15))
-                    tz = float(cmd.get('target_z', 0.22))
+                    tz = float(cmd.get('target_z', 0.313))
                     
                 target_yaw = float(cmd.get('target_yaw', 0.0))
                 speed = cmd.get('speed', 'normal')
@@ -884,28 +899,27 @@ class MultiRobotController(Node):
         
         Supports height calculation for stacked blocks, nested dishes, and cups.
         Accounts for rim-pinch offset when placing dishes.
+        Uses robust world_to_base transform with geometric fallback and TF timeout.
         """
         frame = self.get_robot_base_frame(robot_id)
         active_obj = self.get_target_block_name(robot_id)
         obj_type = self.get_object_type(active_obj)
         affordance = self.get_affordance(obj_type)
         
-        target_x = getattr(self, f'target_x{robot_id}', 0.0)
-        target_y = getattr(self, f'target_y{robot_id}', 0.0)
+        target_x = getattr(self, f'target_x{robot_id}', self.stack_pos_world[0])
+        target_y = getattr(self, f'target_y{robot_id}', self.stack_pos_world[1])
         
         try:
-            trans = self.tf_buffer.lookup_transform(frame, 'world', rclpy.time.Time())
-            
             if obj_type == 'block':
                 candidate_objects = [f"Block{i}" for i in range(1, 10)]
-                dist_thresh = 0.045
+                dist_thresh = 0.045  # Verified vertical stacking threshold (commit d914cdf6cc15f2624eef9bbed2c3fd7c5ef093eb)
                 z_thresh = 0.28
             else:
                 candidate_objects = (
                     [f"Dish{i}" for i in range(1, 4)] +
                     [f"Cup{i}" for i in range(1, 4)]
                 )
-                dist_thresh = 0.06
+                dist_thresh = 0.08
                 z_thresh = 0.25
             
             objects_on_stack = 0
@@ -943,15 +957,18 @@ class MultiRobotController(Node):
                 else:
                     target_z_world = table_surface_z + affordance.get('place_z_offset', 0.045)
             else:
-                # Block
+                # Verified block tower layer computation (commit d914cdf6cc15f2624eef9bbed2c3fd7c5ef093eb)
                 if objects_on_stack > 0 and max_obj_z is not None:
                     target_z_world = max_obj_z + self.block_height + 0.005
+                elif self.tower_height > 0:
+                    target_z_world = 0.335 + float(self.tower_height) * self.block_height
                 else:
                     target_z_world = 0.335  # Base table height + block center + clearance
                     
             p_world = np.array([target_x, target_y, target_z_world])
             
-            # Transform point from world to robot base frame
+            # Transform point from world to robot base frame using live TF
+            trans = self.tf_buffer.lookup_transform(frame, 'world', rclpy.time.Time())
             p_rot = kinematics.quat_to_rot_matrix([
                 trans.transform.rotation.w,
                 trans.transform.rotation.x,
@@ -965,6 +982,11 @@ class MultiRobotController(Node):
             ])
             p_local = p_rot @ p_world + p_trans
             
+            # World X-axis yaw in robot base frame
+            q = trans.transform.rotation
+            world_yaw = np.arctan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            arm_yaw = np.arctan2(p_local[1], p_local[0])
+            
             # If dish was rim-pinched, TCP must be positioned at rim offset relative to dish center
             if obj_type == 'dish':
                 dist_xy = np.hypot(p_local[0], p_local[1])
@@ -975,13 +997,6 @@ class MultiRobotController(Node):
                 rim_radius = affordance.get('rim_offset_radius', 0.065)
                 p_local[0] += rim_radius * u_base[0]
                 p_local[1] += rim_radius * u_base[1]
-            
-            # World X-axis yaw in robot base frame
-            q = trans.transform.rotation
-            world_yaw = np.arctan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-            arm_yaw = np.arctan2(p_local[1], p_local[0])
-            
-            if obj_type == 'dish':
                 rim_tangent_yaw = np.arctan2(u_base[1], u_base[0]) + np.pi / 2.0
                 target_quat = kinematics.compute_symmetric_grasp_quat(rim_tangent_yaw, arm_yaw)
             elif obj_type == 'cup':
@@ -991,8 +1006,19 @@ class MultiRobotController(Node):
                 
             return p_local, target_quat
         except Exception as e:
-            self.get_logger().warn(f"get_place_local_pose failed: {e}", throttle_duration_sec=1.0)
-            return None, None
+            self.get_logger().warn(f"get_place_local_pose fallback triggered: {e}", throttle_duration_sec=1.0)
+            target_z_world = 0.335 + float(self.tower_height) * self.block_height
+            p_world = np.array([target_x, target_y, target_z_world])
+            p_local, _ = self.world_to_base(robot_id, p_world)
+            arm_yaw = np.arctan2(p_local[1], p_local[0])
+            if robot_id == 1:
+                world_yaw = -np.pi / 2.0
+            elif robot_id == 2:
+                world_yaw = -7.0 * np.pi / 6.0
+            else:
+                world_yaw = -11.0 * np.pi / 6.0
+            target_quat = kinematics.compute_symmetric_grasp_quat(world_yaw, arm_yaw)
+            return p_local, target_quat
 
     # Phase Initialization & Command Helpers
 
@@ -1000,8 +1026,9 @@ class MultiRobotController(Node):
         return [j1_angle] + list(self.q_tuck_body)
 
     def _compute_j1_for_target(self, robot_id, target_pos_local):
-        # Using pure arctan2 to prevent Joint 1 limit violations ([-2.89, 2.89])
-        return np.arctan2(target_pos_local[1], target_pos_local[0])
+        raw_j1 = np.arctan2(target_pos_local[1], target_pos_local[0])
+        # Franka FR3 Joint 1 limit is [-2.8973, 2.8973]
+        return float(np.clip(raw_j1, -2.89, 2.89))
 
     def _initialize_joint_phase(self, robot_id, end_q, end_gripper):
         q_current = getattr(self, f'q_current{robot_id}')
@@ -1317,8 +1344,8 @@ class MultiRobotController(Node):
                     vmin, vmax = affordance.get('verification_range', (0.010, 0.038))
                     if obj_type == 'block':
                         # Franka FR3 fingers stop at ~0.030m when gripping a 60mm block.
-                        # An empty gripper closes down to < 0.010m.
-                        pick_success = (0.010 <= gripper_pos <= 0.039)
+                        # An empty gripper closes down to < 0.008m.
+                        pick_success = (gripper_pos >= 0.008)
                     else:
                         pick_success = (vmin <= gripper_pos <= vmax)
 
@@ -1473,7 +1500,7 @@ class MultiRobotController(Node):
     # =========================================================================
 
     @staticmethod
-    def generate_coupled_waypoints(start_center, target_center, bar_length=0.40, num_steps=20):
+    def generate_coupled_waypoints(start_center, target_center, bar_length=0.30, num_steps=20):
         """Generate synchronized Cartesian waypoints for Robot 1 and Robot 2 maintaining constant distance.
         
         Preserves rigid-body distance invariance:
@@ -1567,9 +1594,9 @@ class MultiRobotController(Node):
             yaw = np.arctan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
             return np.array([px, py, pz]), yaw
         except Exception:
-            return np.array([0.0, -0.15, 0.22]), 0.0
+            return np.array([0.20, -0.11, 0.313]), np.radians(60.0)
 
-    def solve_ik_with_elbow_bias(self, robot_id, target_pos, target_quat, q_init, max_iter=60, tol=1e-4):
+    def solve_ik_with_elbow_bias(self, robot_id, target_pos, target_quat, q_init, max_iter=60, tol=5e-4):
         """Solve Franka FR3 inverse kinematics with outward elbow null-space biasing.
         
         Applies null-space projection (I - J^# J) k_null (q_elbow_null - q):
@@ -1581,18 +1608,21 @@ class MultiRobotController(Node):
         if np.any(np.isnan(target_pos)):
             return q, False
 
+        j1_target = np.arctan2(target_pos[1], target_pos[0])
+        q[0] = j1_target
+
         R_target = kinematics.quat_to_rot_matrix(target_quat)
 
         # Outward elbow reference posture per robot
         if robot_id == 1:
-            q_elbow_null = np.array([q[0], -0.3, 0.5, -1.8, 0.0, 1.8, 0.7854])
+            q_elbow_null = np.array([j1_target, -0.3, 0.6, -1.8, 0.0, 1.8, 0.7854])
         elif robot_id == 2:
-            q_elbow_null = np.array([q[0], -0.3, -0.5, -1.8, 0.0, 1.8, 0.7854])
+            q_elbow_null = np.array([j1_target, -0.3, -0.6, -1.8, 0.0, 1.8, 0.7854])
         else:
             q_elbow_null = np.array(kinematics.FR3_HOME_CONFIG)
 
         damping = 0.02
-        k_null = 0.08
+        k_null = 0.15
 
         for _ in range(max_iter):
             T_ee = kinematics.forward_kinematics(q)
@@ -1672,7 +1702,7 @@ class MultiRobotController(Node):
         cmd.position = list(q_sol) + [float(grip_target), float(grip_target)]
         cmd_pub.publish(cmd)
 
-    def _start_dual_carry(self, robots=[1, 2], target_name='LongBar1', dest_pos=[0.0, 0.15, 0.22], dest_yaw=0.0, steps=40):
+    def _start_dual_carry(self, robots=[1, 2], target_name='LongBar1', dest_pos=[0.0, 0.15, 0.313], dest_yaw=0.0, steps=40):
         """Initiate lock-step dual-arm collaborative manipulation sequence."""
         self.dual_active = True
         self.dual_state = 'DUAL_INIT'

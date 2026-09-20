@@ -234,7 +234,7 @@ const RobotArmNode = ({
         position: 'relative',
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: data.color, width: 8, height: 8 }} />
+      <Handle type="target" id="top" position={Position.Top} style={{ background: data.color, width: 8, height: 8 }} />
       <Handle type="source" id="right" position={Position.Right} style={{ background: isCollab ? '#c084fc' : data.color, width: 7, height: 7, opacity: 0.6 }} />
       <Handle type="target" id="left" position={Position.Left} style={{ background: isCollab ? '#c084fc' : data.color, width: 7, height: 7, opacity: 0.6 }} />
 
@@ -311,7 +311,7 @@ const RobotArmNode = ({
         <span style={{ color: isCollab ? '#c084fc' : '#38bdf8', fontWeight: 600 }}>{isCollab ? '🤝 SYNC' : '⚡ 20 stp'}</span>
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={{ background: data.color, width: 8, height: 8 }} />
+      <Handle type="source" id="bottom" position={Position.Bottom} style={{ background: data.color, width: 8, height: 8 }} />
     </div>
   );
 };
@@ -552,6 +552,8 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         id: 'goal',
         type: 'goalNode',
         position: { x: 370, y: 20 },
+        width: 280,
+        height: 95,
         data: { goal: userGoal },
       },
 
@@ -560,6 +562,8 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         id: 'orchestrator',
         type: 'agentNode',
         position: { x: 50, y: 160 },
+        width: 250,
+        height: 130,
         data: {
           role: 'Robotics Orchestrator',
           model: 'gemini-robotics-er-2-preview',
@@ -573,6 +577,8 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         id: 'architect',
         type: 'agentNode',
         position: { x: 370, y: 160 },
+        width: 250,
+        height: 130,
         data: {
           role: 'Spatial Architect',
           model: 'gemini-3.8-flash',
@@ -586,6 +592,8 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         id: 'optimizer',
         type: 'agentNode',
         position: { x: 690, y: 160 },
+        width: 250,
+        height: 130,
         data: {
           role: 'Performance Optimizer',
           model: 'gemini-3.8-flash',
@@ -601,6 +609,8 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         id: 'robot1',
         type: 'robotNode',
         position: { x: 50, y: 350 },
+        width: 240,
+        height: 155,
         data: {
           name: 'FR3_1 (Arm 1)',
           quadrant: 'Bottom Table 1',
@@ -618,6 +628,8 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         id: 'robot2',
         type: 'robotNode',
         position: { x: 370, y: 350 },
+        width: 240,
+        height: 155,
         data: {
           name: 'FR3_2 (Arm 2)',
           quadrant: 'Top-Right Table 2',
@@ -635,6 +647,8 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         id: 'robot3',
         type: 'robotNode',
         position: { x: 690, y: 350 },
+        width: 240,
+        height: 155,
         data: {
           name: 'FR3_3 (Arm 3)',
           quadrant: 'Top-Left Table 3',
@@ -654,6 +668,8 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         id: 'mutex',
         type: 'mutexNode',
         position: { x: 380, y: 550 },
+        width: 230,
+        height: 120,
         data: {
           occupiedBy: metrics?.center_occupied_by || null,
           isCollaborative: isDualArmCollaborating,
@@ -665,6 +681,8 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         id: 'construction',
         type: 'constructionNode',
         position: { x: 370, y: 690 },
+        width: 240,
+        height: 120,
         data: {
           towerHeight: metrics?.tower_height || 0,
           placedCount: actions.length,
@@ -739,6 +757,7 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
           id: 'e-opt-r1',
           source: 'optimizer',
           target: 'robot1',
+          targetHandle: 'top',
           animated: isR1Active,
           style: { stroke: isR1Active ? '#ef4444' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR1Active ? 2 : 1 },
           markerEnd: { type: MarkerType.ArrowClosed, color: isR1Active ? '#ef4444' : '#64748b' },
@@ -747,6 +766,7 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
           id: 'e-opt-r2',
           source: 'optimizer',
           target: 'robot2',
+          targetHandle: 'top',
           animated: isR2Active,
           style: { stroke: isR2Active ? '#10b981' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR2Active ? 2 : 1 },
           markerEnd: { type: MarkerType.ArrowClosed, color: isR2Active ? '#10b981' : '#64748b' },
@@ -755,6 +775,7 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
           id: 'e-opt-r3',
           source: 'optimizer',
           target: 'robot3',
+          targetHandle: 'top',
           animated: isR3Active,
           style: { stroke: isR3Active ? '#3b82f6' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR3Active ? 2 : 1 },
           markerEnd: { type: MarkerType.ArrowClosed, color: isR3Active ? '#3b82f6' : '#64748b' },
@@ -764,6 +785,7 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         {
           id: 'e-r1-mutex',
           source: 'robot1',
+          sourceHandle: 'bottom',
           target: 'mutex',
           animated: metrics?.center_occupied_by === 'FR3_1',
           style: {
@@ -774,6 +796,7 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         {
           id: 'e-r2-mutex',
           source: 'robot2',
+          sourceHandle: 'bottom',
           target: 'mutex',
           animated: metrics?.center_occupied_by === 'FR3_2',
           style: {
@@ -784,6 +807,7 @@ const AgentWorkflowGraphComponent: React.FC<AgentWorkflowGraphProps> = ({
         {
           id: 'e-r3-mutex',
           source: 'robot3',
+          sourceHandle: 'bottom',
           target: 'mutex',
           animated: metrics?.center_occupied_by === 'FR3_3',
           style: {

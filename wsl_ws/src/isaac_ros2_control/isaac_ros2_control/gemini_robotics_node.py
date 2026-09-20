@@ -811,7 +811,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     target_position=args.get("target_position"),
                     target_x=args.get("target_x"),
                     target_y=args.get("target_y"),
-                    target_z=args.get("target_z", 0.05),
+                    target_z=args.get("target_z", 0.313),
                     speed=args.get("speed", "fast"),
                     sync_mode=args.get("sync_mode", "rigid_body"),
                     approach_height=args.get("approach_height", 0.12)
@@ -1068,7 +1068,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         target_position: list = None,
         target_x: float = None,
         target_y: float = None,
-        target_z: float = 0.05,
+        target_z: float = 0.313,
         speed: str = "fast",
         sync_mode: str = "rigid_body",
         approach_height: float = 0.12
@@ -1082,18 +1082,18 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         if destination is not None and len(destination) >= 2:
             tx = float(destination[0])
             ty = float(destination[1])
-            tz = float(destination[2]) if len(destination) > 2 else 0.05
+            tz = float(destination[2]) if len(destination) > 2 else 0.313
             dest = [tx, ty, tz]
         elif target_position is not None and len(target_position) >= 2:
             tx = float(target_position[0])
             ty = float(target_position[1])
-            tz = float(target_position[2]) if len(target_position) > 2 else 0.05
+            tz = float(target_position[2]) if len(target_position) > 2 else 0.313
             dest = [tx, ty, tz]
         elif target_x is not None and target_y is not None:
-            tz = float(target_z) if target_z is not None else 0.05
+            tz = float(target_z) if target_z is not None else 0.313
             dest = [float(target_x), float(target_y), tz]
         else:
-            dest = [0.0, 0.0, 0.05]
+            dest = [0.0, 0.0, 0.313]
 
         msg = String()
         action_payload = {

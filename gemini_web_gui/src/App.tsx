@@ -4,7 +4,7 @@ import {
   Terminal, ChevronDown, ChevronUp,
   Play, Square, RotateCcw, Plus, Minus, Wrench,
   PanelRightOpen, PanelRightClose, User,
-  BarChart3,
+  BarChart3, Network, Map, Clock, Sparkles,
 } from 'lucide-react';
 import { C, btnSmall, btnCtrl, monoFont, stripAnsi, fmt, LOG_COLORS, LOG_LABELS,
   type ChatMessage, type LogEntry, type RobotAction, type MetricsData } from './components/theme';
@@ -12,6 +12,7 @@ import KpiDashboard from './components/KpiDashboard';
 import GanttChart from './components/GanttChart';
 import SceneMap from './components/SceneMap';
 import EventTrace from './components/EventTrace';
+import { AgentWorkflowGraph } from './components/AgentWorkflowGraph';
 
 const ROSLIB = (window as any).ROSLIB;
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -29,6 +30,7 @@ function App() {
   const [sideOpen, setSideOpen] = useState(true);
   const [bottomOpen, setBottomOpen] = useState(true);
   const [rightPanelWidth, setRightPanelWidth] = useState(55);
+  const [activeRightTab, setActiveRightTab] = useState<'graph' | 'map' | 'gantt' | 'telemetry'>('graph');
   const isDragging = useRef(false);
   
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -177,51 +179,62 @@ function App() {
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: C.text, fontSize }}>
 
       {/* ════ Top Bar ════ */}
-      <div style={{ height: 48, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, background: C.bgChat, flexShrink: 0 }}>
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Bot size={16} color="#fff" /></div>
-        <span style={{ fontWeight: 700, color: C.white, fontSize: 15 }}>Gemini Robotics ER</span>
-        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
-        <a href="https://blog.google/technology/google-deepmind/antigravity-ai-coding/" target="_blank" rel="noreferrer" title="Powered by Google Antigravity" style={{ display: 'flex', alignItems: 'center', gap: 5, textDecoration: 'none', opacity: 0.75, transition: 'opacity 0.2s' }} onMouseEnter={e => (e.currentTarget.style.opacity = '1')} onMouseLeave={e => (e.currentTarget.style.opacity = '0.75')}>
-          <img src="/antigravity.svg" alt="Antigravity" style={{ width: 22, height: 22 }} />
-          <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.3 }}>Antigravity</span>
+      <div style={{ height: 50, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, background: 'rgba(13, 17, 26, 0.85)', backdropFilter: 'blur(16px)', flexShrink: 0 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #0ea5e9, #38bdf8)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 15px rgba(56, 189, 248, 0.3)' }}><Bot size={17} color="#fff" /></div>
+        <div>
+          <span style={{ fontWeight: 800, color: C.white, fontSize: 14, letterSpacing: '-0.02em' }}>Gemini Robotics ER</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -2 }}>
+            <span style={{ fontSize: 9.5, color: '#38bdf8', fontWeight: 600, fontFamily: monoFont }}>VLA × FRANKA MULTI-ARM</span>
+          </div>
+        </div>
+        <div style={{ width: 1, height: 22, background: C.border, margin: '0 4px' }} />
+        <a href="https://blog.google/technology/google-deepmind/antigravity-ai-coding/" target="_blank" rel="noreferrer" title="Powered by Google Antigravity" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, transition: 'all 0.2s' }}>
+          <img src="/antigravity.svg" alt="Antigravity" style={{ width: 18, height: 18 }} />
+          <span style={{ fontSize: 10.5, color: C.textDim, fontWeight: 600 }}>Antigravity</span>
         </a>
+
+        {/* Model Indicator Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 6, background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.25)', color: '#fbbf24', fontSize: 10.5, fontWeight: 700 }}>
+          <Sparkles size={12} />
+          <span>Gemini 3.8-Flash (High Agility ⚡)</span>
+        </div>
 
         <div style={{ flex: 1 }} />
 
         {/* Font size */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: 6, border: `1px solid ${C.border}` }}>
           <button onClick={() => setFontSize(s => Math.max(10, s-1))} style={btnSmall}><Minus size={11} /></button>
-          <span style={{ fontSize: 10, color: C.textMuted, width: 20, textAlign: 'center' }}>{fontSize}</span>
+          <span style={{ fontSize: 10, color: C.textMuted, width: 20, textAlign: 'center', fontFamily: monoFont }}>{fontSize}</span>
           <button onClick={() => setFontSize(s => Math.min(20, s+1))} style={btnSmall}><Plus size={11} /></button>
         </div>
 
-        <div style={{ width: 1, height: 20, background: C.border, margin: '0 4px' }} />
+        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
 
         {/* Controls */}
-        <button onClick={triggerBuild} style={{ ...btnCtrl, color: C.blue }}><Wrench size={13} /> Build</button>
+        <button onClick={triggerBuild} style={{ ...btnCtrl, color: C.blue, background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.2)' }}><Wrench size={13} /> Build</button>
         {!bringupRunning
-          ? <button onClick={startBringup} style={{ ...btnCtrl, background: C.accent, color: '#fff', border: 'none' }}><Play size={13} /> Start</button>
-          : <button onClick={stopBringup} style={{ ...btnCtrl, background: C.red, color: '#fff', border: 'none' }}><Square size={13} /> Stop</button>
+          ? <button onClick={startBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(14, 165, 233, 0.35)' }}><Play size={13} /> Start</button>
+          : <button onClick={stopBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(239, 68, 68, 0.35)' }}><Square size={13} /> Stop</button>
         }
-        <button onClick={resetSim} style={{ ...btnCtrl, color: C.yellow }}><RotateCcw size={13} /> Reset</button>
+        <button onClick={resetSim} style={{ ...btnCtrl, color: C.yellow, background: 'rgba(250, 204, 21, 0.08)', borderColor: 'rgba(250, 204, 21, 0.2)' }}><RotateCcw size={13} /> Reset</button>
 
-        <div style={{ width: 1, height: 20, background: C.border, margin: '0 4px' }} />
+        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
 
         {/* Tower height badge */}
         {metrics && metrics.tower_height > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.accent, fontWeight: 700 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.3)', fontSize: 11, color: '#38bdf8', fontWeight: 700 }}>
             🏗️ {metrics.tower_height}/9
           </div>
         )}
 
-        {/* Status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: connected ? C.green : C.red }}>
-          {connected ? <Wifi size={12} /> : <WifiOff size={12} />}
-          <span style={{ fontWeight: 600 }}>{connected ? 'Connected' : 'Offline'}</span>
+        {/* ROS Connection Status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 6, background: connected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: connected ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)', fontSize: 11, color: connected ? C.green : C.red }}>
+          {connected ? <Wifi size={12} color={C.green} /> : <WifiOff size={12} color={C.red} />}
+          <span style={{ fontWeight: 600 }}>{connected ? 'ROS 2 Live' : 'Offline'}</span>
         </div>
 
         {/* Toggle side */}
-        <button onClick={() => setSideOpen(!sideOpen)} style={{ ...btnSmall, marginLeft: 4 }}>
+        <button onClick={() => setSideOpen(!sideOpen)} style={{ ...btnSmall, marginLeft: 2 }}>
           {sideOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
         </button>
       </div>
@@ -230,54 +243,72 @@ function App() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ── Chat Area (center) ──────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'linear-gradient(180deg, #090c14 0%, #0d111a 100%)' }}>
 
           {/* Messages */}
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ maxWidth: 720, width: '100%', margin: '0 auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {messages.map(m => (
-                <div key={m.id} style={{
-                  padding: '20px 0', borderBottom: `1px solid ${C.border}`,
-                  display: 'flex', gap: 14, alignItems: 'flex-start',
-                }}>
-                  <div style={{
-                    width: 30, height: 30, borderRadius: 6, flexShrink: 0,
-                    background: m.role === 'user' ? C.bgHover : (m.role === 'architect' ? C.purple : (m.role === 'vla' ? C.blue : C.accent)),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+            <div style={{ maxWidth: 760, width: '100%', margin: '0 auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {messages.map(m => {
+                const isOrch = m.role === 'vla';
+                const isArch = m.role === 'architect' && (m.senderName?.includes('Spatial') || m.emoji === '📐');
+                const isOpt = m.role === 'architect' && (m.senderName?.includes('Performance') || m.emoji === '⚡');
+                const isUser = m.role === 'user';
+                
+                const borderColor = isOrch ? '#38bdf8' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? 'rgba(148, 163, 184, 0.3)' : 'rgba(34, 197, 94, 0.3)')));
+                const badgeBg = isOrch ? 'rgba(56, 189, 248, 0.15)' : (isArch ? 'rgba(167, 139, 250, 0.15)' : (isOpt ? 'rgba(251, 191, 36, 0.15)' : (isUser ? 'rgba(255,255,255,0.06)' : 'rgba(34, 197, 94, 0.15)')));
+                const badgeColor = isOrch ? '#38bdf8' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? '#94a3b8' : '#22c55e')));
+
+                return (
+                  <div key={m.id} style={{
+                    padding: '14px 16px',
+                    borderRadius: 12,
+                    background: 'rgba(15, 23, 42, 0.65)',
+                    backdropFilter: 'blur(8px)',
+                    border: `1px solid ${C.border}`,
+                    borderLeft: `3px solid ${borderColor}`,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                    display: 'flex', gap: 12, alignItems: 'flex-start',
                   }}>
-                    {m.role === 'user' ? <User size={14} color={C.textDim} /> : (m.emoji ? <span style={{ fontSize: 16, lineHeight: 1 }}>{m.emoji}</span> : <Bot size={14} color="#fff" />)}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: fontSize - 1, fontWeight: 700, color: C.white, marginBottom: 4 }}>
-                      {m.role === 'user' ? 'You' : (m.senderName || 'Gemini Robotics')}
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                      background: badgeBg,
+                      border: `1px solid ${borderColor}55`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {m.role === 'user' ? <User size={15} color="#94a3b8" /> : (m.emoji ? <span style={{ fontSize: 16, lineHeight: 1 }}>{m.emoji}</span> : <Bot size={15} color="#38bdf8" />)}
                     </div>
-                    <div
-                      style={{ fontSize: fontSize, lineHeight: 1.65, color: C.text, wordBreak: 'break-word' }}
-                      dangerouslySetInnerHTML={{ __html: renderMarkdown(m.text) }}
-                    />
-                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 6 }}>{fmt(m.ts)}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 700, color: C.white }}>
+                            {m.role === 'user' ? 'Human Operator' : (m.senderName || 'Gemini Robotics')}
+                          </span>
+                          <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: badgeBg, color: badgeColor, fontWeight: 600, fontFamily: monoFont }}>
+                            {isUser ? 'USER' : (isOrch ? 'ORCHESTRATOR' : (isArch ? 'SPATIAL ARCHITECT' : (isOpt ? 'PERFORMANCE OPTIMIZER' : 'SYSTEM')))}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 10, color: C.textMuted }}>{fmt(m.ts)}</span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: fontSize,
+                          lineHeight: 1.6,
+                          color: '#e2e8f0',
+                          wordBreak: 'break-word',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: (m.role === 'architect' && m.text.includes('[')) ? monoFont : 'inherit',
+                        }}
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(m.text) }}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {messages.length === 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.textMuted, gap: 16 }}>
                   <div style={{ fontSize: 16, fontWeight: 600, color: C.white, marginTop: 40 }}>Welcome to Gemini Robotics ER</div>
                   <div style={{ fontSize: 13, maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
-                    I can orchestrate 3 Franka arms to build towers and organize objects. Try an example command:
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, width: '100%', maxWidth: 480 }}>
-                    {[
-                      "Build a 3-layer tower with the red cube as the base, green cylinder in the middle, and blue cube on top.",
-                      "Move all the cubes to the center target table.",
-                      "Stack the yellow cylinder and lime cube on top of the blue cube."
-                    ].map((example, i) => (
-                      <div key={i} onClick={() => setText(example)}
-                           onMouseEnter={(e) => e.currentTarget.style.background = C.bgHover}
-                           onMouseLeave={(e) => e.currentTarget.style.background = C.bgInput}
-                           style={{ background: C.bgInput, padding: '12px 16px', borderRadius: 12, border: `1px solid ${C.border}`, fontSize: 13, color: C.text, cursor: 'pointer', transition: 'background 0.2s' }}>
-                        {example}
-                      </div>
-                    ))}
+                    Multi-Agent Vision-Language-Action platform for 3 Franka FR3 manipulators.
                   </div>
                 </div>
               )}
@@ -285,9 +316,48 @@ function App() {
             </div>
           </div>
 
+          {/* Quick Prompts Bar */}
+          <div style={{ padding: '6px 24px 0', display: 'flex', gap: 8, overflowX: 'auto', maxWidth: 760, width: '100%', margin: '0 auto' }}>
+            {[
+              { label: '⚡ Fast 9-Layer Tower', prompt: 'Build a 9-layer tower on the central target table using all blocks with maximum speed and concurrency.' },
+              { label: '📐 3x3 Coplanar Grid', prompt: 'Arrange all 9 blocks into a 3x3 coplanar grid on the central target table centered at (0, 0).' },
+              { label: '🔺 Triangle Pyramid', prompt: 'Arrange 6 blocks into a flat triangular formation on the central target table (3 in base, 2 in middle, 1 on top).' },
+              { label: '🔄 Table 1 to 3 Relay', prompt: 'Transfer 2 blocks from Table 1 to Table 3 using the Central Target Table as a staging relay.' },
+            ].map((qp, idx) => (
+              <button
+                key={idx}
+                onClick={() => setText(qp.prompt)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 20,
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  color: '#94a3b8',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: `1px solid ${C.border}`,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.color = '#38bdf8';
+                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.color = '#94a3b8';
+                  e.currentTarget.style.borderColor = C.border;
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                }}
+              >
+                {qp.label}
+              </button>
+            ))}
+          </div>
+
           {/* Input Bar */}
-          <div style={{ borderTop: `1px solid ${C.border}`, background: C.bgChat, padding: '16px 24px' }}>
-            <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center', background: C.bgInput, borderRadius: 14, padding: '4px 6px 4px 16px', border: `1px solid ${C.borderHi}` }}>
+          <div style={{ borderTop: `1px solid ${C.border}`, background: 'rgba(13, 17, 26, 0.85)', backdropFilter: 'blur(16px)', padding: '12px 24px' }}>
+            <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(22, 28, 43, 0.95)', borderRadius: 12, padding: '4px 6px 4px 16px', border: `1px solid ${C.borderHi}`, boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
               <button onClick={toggleMic} style={{
                 width: 32, height: 32, borderRadius: '50%', border: 'none', cursor: 'pointer', flexShrink: 0,
                 background: isRecording ? C.red : 'transparent', color: isRecording ? '#fff' : C.textMuted,
@@ -296,23 +366,25 @@ function App() {
               }}>{isRecording ? <MicOff size={15} /> : <Mic size={15} />}</button>
 
               <input type="text" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendGoal()}
-                placeholder={isRecording ? 'Listening...' : 'Send a goal to Gemini...'}
-                style={{ flex: 1, height: 40, border: 'none', background: 'transparent', color: C.white, fontSize: fontSize, outline: 'none' }}
+                placeholder={isRecording ? 'Listening...' : 'Send goal or shape command to multi-agent team...'}
+                style={{ flex: 1, height: 38, border: 'none', background: 'transparent', color: C.white, fontSize: fontSize, outline: 'none' }}
               />
 
               <button onClick={sendGoal} disabled={!text.trim()} style={{
-                width: 36, height: 36, borderRadius: 10, border: 'none', cursor: text.trim() ? 'pointer' : 'default', flexShrink: 0,
-                background: text.trim() ? C.accent : 'transparent', color: text.trim() ? '#fff' : C.textMuted,
+                width: 34, height: 34, borderRadius: 8, border: 'none', cursor: text.trim() ? 'pointer' : 'default', flexShrink: 0,
+                background: text.trim() ? 'linear-gradient(135deg, #0ea5e9, #0284c7)' : 'transparent', color: text.trim() ? '#fff' : C.textMuted,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'background 0.15s',
-              }}><Send size={15} /></button>
+                boxShadow: text.trim() ? '0 0 10px rgba(14, 165, 233, 0.4)' : 'none',
+                transition: 'all 0.15s',
+              }}><Send size={14} /></button>
             </div>
-            <div style={{ maxWidth: 720, margin: '8px auto 0', fontSize: 11, color: C.textMuted, textAlign: 'center', lineHeight: 1.4 }}>
-              Gemini Robotics ER controls 3 Franka FR3 arms via Isaac Sim.<br/>
-              Made by <a href="https://mincasurong.ai.studio/" target="_blank" rel="noreferrer" style={{ color: C.blue, textDecoration: 'none' }}>m9g</a>
+            <div style={{ maxWidth: 760, margin: '6px auto 0', fontSize: 10.5, color: C.textMuted, textAlign: 'center' }}>
+              Gemini Robotics-ER Orchestrator × Spatial Architect × Performance Optimizer
+              {' · '}
+              <a href="https://mincasurong.ai.studio/" target="_blank" rel="noreferrer" style={{ color: C.blue, textDecoration: 'none' }}>m9g</a>
               {' · '}
               <a href="https://blog.google/technology/google-deepmind/antigravity-ai-coding/" target="_blank" rel="noreferrer" style={{ color: C.textMuted, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
-                <img src="/antigravity.svg" alt="" style={{ width: 13, height: 13, verticalAlign: 'middle' }} />
+                <img src="/antigravity.svg" alt="" style={{ width: 12, height: 12, verticalAlign: 'middle' }} />
                 Powered by Antigravity
               </a>
             </div>
@@ -340,26 +412,112 @@ function App() {
           />
         )}
         {sideOpen && (
-          <div style={{ width: `${rightPanelWidth}%`, background: C.bgSide, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8, color: C.textDim, fontWeight: 600 }}>
-              <BarChart3 size={14} /> System Monitoring Dashboard
+          <div style={{ width: `${rightPanelWidth}%`, background: C.bgSide, display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'relative' }}>
+            {/* Header with high-tech tab switcher */}
+            <div style={{ padding: '8px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(15, 20, 32, 0.85)', backdropFilter: 'blur(10px)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button
+                  onClick={() => setActiveRightTab('graph')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'graph' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                    color: activeRightTab === 'graph' ? '#38bdf8' : C.textDim,
+                    border: activeRightTab === 'graph' ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
+                  }}
+                >
+                  <Network size={12} />
+                  <span>Workflow Graph</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveRightTab('map')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'map' ? 'rgba(167, 139, 250, 0.15)' : 'transparent',
+                    color: activeRightTab === 'map' ? '#a78bfa' : C.textDim,
+                    border: activeRightTab === 'map' ? '1px solid rgba(167, 139, 250, 0.35)' : '1px solid transparent',
+                  }}
+                >
+                  <Map size={12} />
+                  <span>2D Workspace</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveRightTab('gantt')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'gantt' ? 'rgba(34, 197, 94, 0.15)' : 'transparent',
+                    color: activeRightTab === 'gantt' ? '#22c55e' : C.textDim,
+                    border: activeRightTab === 'gantt' ? '1px solid rgba(34, 197, 94, 0.35)' : '1px solid transparent',
+                  }}
+                >
+                  <Clock size={12} />
+                  <span>Gantt</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveRightTab('telemetry')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'telemetry' ? 'rgba(251, 191, 36, 0.15)' : 'transparent',
+                    color: activeRightTab === 'telemetry' ? '#fbbf24' : C.textDim,
+                    border: activeRightTab === 'telemetry' ? '1px solid rgba(251, 191, 36, 0.35)' : '1px solid transparent',
+                  }}
+                >
+                  <BarChart3 size={12} />
+                  <span>KPIs & Trace</span>
+                </button>
+              </div>
+
+              {/* Status pill on right of tab bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: C.textMuted }}>
+                {metrics?.center_occupied_by ? (
+                  <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(249, 115, 22, 0.15)', color: '#f97316', border: '1px solid rgba(249, 115, 22, 0.3)', fontWeight: 700 }}>
+                    🔒 Mutex: {metrics.center_occupied_by}
+                  </span>
+                ) : (
+                  <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.25)', fontWeight: 600 }}>
+                    🔓 Center Clear
+                  </span>
+                )}
+              </div>
             </div>
-            
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <KpiDashboard metrics={metrics} fontSize={fontSize} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0, borderLeft: `1px solid ${C.border}` }}>
+
+            {/* Tab content */}
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              {activeRightTab === 'graph' && (
+                <AgentWorkflowGraph
+                  metrics={metrics}
+                  chatMessages={messages}
+                  actions={actions}
+                  userGoal={messages.filter(m => m.role === 'user').slice(-1)[0]?.text || 'Build a 9-layer tower on the central target table'}
+                />
+              )}
+
+              {activeRightTab === 'map' && (
+                <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
                   <SceneMap actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
                 </div>
-              </div>
-              <div style={{ borderTop: `1px solid ${C.border}` }}>
-                <GanttChart actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
-              </div>
-              <div style={{ borderTop: `1px solid ${C.border}`, flex: 1, minHeight: 300, display: 'flex', flexDirection: 'column' }}>
-                <EventTrace actions={actions} results={actionResults} fontSize={fontSize} />
-              </div>
+              )}
+
+              {activeRightTab === 'gantt' && (
+                <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+                  <GanttChart actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
+                </div>
+              )}
+
+              {activeRightTab === 'telemetry' && (
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                  <KpiDashboard metrics={metrics} fontSize={fontSize} />
+                  <div style={{ borderTop: `1px solid ${C.border}`, flex: 1, minHeight: 320 }}>
+                    <EventTrace actions={actions} results={actionResults} fontSize={fontSize} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@xyflow/react": "^12.11.6",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "lucide-react": "^1.31.0",

@@ -17,7 +17,9 @@ setup(
         (os.path.join('lib', package_name), [
             'scripts/multi_robot_controller',
             'scripts/franka_dual_controller',
-            'scripts/gemini_robotics_node'
+            'scripts/gemini_robotics_node',
+            'scripts/experiment_runner',
+            'scripts/analyze_experiments',
         ]),
     ],
     install_requires=['setuptools'],
@@ -32,6 +34,8 @@ setup(
             'multi_robot_controller = isaac_ros2_control.multi_robot_controller:main',
             'franka_dual_controller = isaac_ros2_control.franka_dual_controller:main',
             'gemini_robotics_node = isaac_ros2_control.gemini_robotics_node:main',
+            'experiment_runner = isaac_ros2_control.experiment_runner:main',
+            'analyze_experiments = isaac_ros2_control.analyze_experiments:main',
         ],
     },
 )

@@ -46,6 +46,7 @@ try:
     from isaac_ros2_control import gemini_prompts
     from isaac_ros2_control import gemini_tools
     from isaac_ros2_control import workspace_state
+    from isaac_ros2_control import experiment_logger
 except ImportError:
     try:
         from . import gemini_config
@@ -53,12 +54,14 @@ except ImportError:
         from . import gemini_prompts
         from . import gemini_tools
         from . import workspace_state
+        from . import experiment_logger
     except ImportError:
         import gemini_config
         import gemini_utils
         import gemini_prompts
         import gemini_tools
         import workspace_state
+        import experiment_logger
 
 
 class GeminiRoboticsNode(Node):
@@ -127,6 +130,8 @@ class GeminiRoboticsNode(Node):
         }
         
         self.workspace_state = workspace_state.WorkspaceState()
+        self.experiment_logger = None
+        self.experiment_target_blocks = 9
         
     # Callback Groups
         from rclpy.callback_groups import ReentrantCallbackGroup
@@ -203,7 +208,27 @@ class GeminiRoboticsNode(Node):
             self.get_logger().error(f"Failed to parse action result: {e}")
 
     def _custom_goal_callback(self, msg):
-        self.user_goal = msg.data
+        try:
+            payload = json.loads(msg.data)
+            if isinstance(payload, dict) and "goal" in payload:
+                self.user_goal = payload["goal"]
+                sc_id = payload.get("scenario_id", "CUSTOM")
+                trial_n = payload.get("trial_num", 1)
+                self.experiment_target_blocks = payload.get("blocks_target", 9)
+                self.experiment_logger = experiment_logger.ExperimentLogger(
+                    scenario_id=sc_id,
+                    trial_num=trial_n,
+                    goal_text=self.user_goal,
+                    model_name=self.model_name,
+                    planner_model=gemini_config.get_planner_model()
+                )
+            else:
+                self.user_goal = msg.data
+                self.experiment_target_blocks = 9
+        except Exception:
+            self.user_goal = msg.data
+            self.experiment_target_blocks = 9
+
         self.get_logger().info(f"\033[92m[PROMPT] Received custom goal: {self.user_goal}\033[0m")
         
         # Automatically trigger planning
@@ -229,6 +254,7 @@ class GeminiRoboticsNode(Node):
                 thinking_budget=thinking_budget
             )
 
+        t0 = time.monotonic()
         response = self.client.models.generate_content(
             model=self.model_name,
             contents=[
@@ -238,6 +264,9 @@ class GeminiRoboticsNode(Node):
             ],
             config=genai_types.GenerateContentConfig(**config_kwargs),
         )
+        t_elapsed = time.monotonic() - t0
+        if self.experiment_logger:
+            self.experiment_logger.log_api_call(self.model_name, t_elapsed, success=True)
         return response.text
 
     # Service Handlers
@@ -389,6 +418,7 @@ class GeminiRoboticsNode(Node):
             self.chat_pub.publish(msg)
             
             full_text = ""
+            t_start = time.monotonic()
             try:
                 response = self.client.models.generate_content_stream(
                     model=model_name,
@@ -405,6 +435,11 @@ class GeminiRoboticsNode(Node):
             except Exception as e:
                 self.get_logger().error(f"Streaming error: {e}")
                 
+            t_elapsed = time.monotonic() - t_start
+            if self.experiment_logger:
+                self.experiment_logger.log_brainstorm_turn(sender, model_name, t_elapsed, len(full_text))
+                self.experiment_logger.log_api_call(model_name, t_elapsed, success=True)
+
             return full_text
 
         self.get_logger().info("\033[93m[MULTI-AGENT] Starting Brainstorming...\033[0m")
@@ -585,6 +620,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     )
                 )
             
+            t_gen_start = time.monotonic()
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=contents,
@@ -594,6 +630,9 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     thinking_config=genai_types.ThinkingConfig(thinking_budget=1024),
                 ),
             )
+            t_gen_elapsed = time.monotonic() - t_gen_start
+            if self.experiment_logger:
+                self.experiment_logger.log_api_call(self.model_name, t_gen_elapsed, success=True)
             
             if not response.candidates:
                 self.get_logger().error("No candidates returned from Gemini.")
@@ -608,6 +647,9 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             
             # If there are function calls, execute them in parallel
             func_parts = [p for p in candidate.content.parts if p.function_call]
+            if self.experiment_logger:
+                self.experiment_logger.record_agent_turn(turn + 1, len(func_parts))
+
             if func_parts:
                 self.get_logger().debug(f"\033[95m[GEMINI] Issued {len(func_parts)} parallel function calls.\033[0m")
                 contents.append(candidate.content)
@@ -617,25 +659,53 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                 replan_triggered = False
                 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=len(func_parts)) as executor:
-                    futures = {
-                        executor.submit(self._execute_function, p.function_call.name, p.function_call.args): p.function_call
-                        for p in func_parts
-                    }
+                    futures = {}
+                    for p in func_parts:
+                        fc = p.function_call
+                        if self.experiment_logger:
+                            self.experiment_logger.log_action_dispatched(
+                                robot_id=fc.args.get("robot", "global"),
+                                action=fc.name,
+                                target=fc.args.get("object_label") or fc.args.get("anchor_block"),
+                                params=dict(fc.args) if fc.args else {}
+                            )
+                        futures[executor.submit(self._execute_function, fc.name, fc.args)] = fc
                     
                     for future in concurrent.futures.as_completed(futures):
                         fc = futures[future]
                         self.get_logger().info(f"\033[96m[TOOL] Executing: {fc.name} with args {fc.args}\033[0m")
                         try:
                             res = future.result()
+                            duration = res.get("elapsed_sec", 0.0)
+                            if self.experiment_logger:
+                                self.experiment_logger.log_action_result(
+                                    robot_id=fc.args.get("robot", "global"),
+                                    action=fc.name,
+                                    success=res.get("success", False),
+                                    duration_sec=duration,
+                                    message=res.get("message", ""),
+                                    target=fc.args.get("object_label") or fc.args.get("anchor_block")
+                                )
                             if fc.name == "place" and res.get("success", False):
                                 placement_count += 1
                             if fc.name == "replan":
                                 replan_triggered = True
+                                if self.experiment_logger:
+                                    self.experiment_logger.record_replan("Agent requested replan")
                         except Exception as e:
                             import traceback
                             self.get_logger().error(f"Function {fc.name} failed with exception: {e}")
                             self.get_logger().error(traceback.format_exc())
                             res = {"error": str(e)}
+                            if self.experiment_logger:
+                                self.experiment_logger.log_action_result(
+                                    robot_id=fc.args.get("robot", "global"),
+                                    action=fc.name,
+                                    success=False,
+                                    duration_sec=0.0,
+                                    message=str(e),
+                                    target=fc.args.get("object_label") or fc.args.get("anchor_block")
+                                )
                             
                         response_parts.append(
                             genai_types.Part.from_function_response(
@@ -670,6 +740,8 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     self.get_logger().info("\033[96m[AUTO-VERIFY] 3 placements completed. Triggering auto-verification...\033[0m")
                     placement_count = 0
                     verify_res = self._fn_verify_tower()
+                    if self.experiment_logger:
+                        self.experiment_logger.log_event("physics", "auto_verify_verdict", verify_res)
                     if not verify_res.get("success", True):
                          contents.append(
                             genai_types.Content(
@@ -689,6 +761,25 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                 final_text = " ".join(text_parts) if text_parts else "No text response."
                 self.get_logger().info(f"\033[92m[DONE] Agent finished: {final_text}\033[0m")
                 break
+
+        # Finalize trial metrics if experiment logger is active
+        if self.experiment_logger:
+            try:
+                self.workspace_state.update_from_tf(self.tf_buffer)
+                summary_st = self.workspace_state.get_summary()
+                placed_count = summary_st.get("tower", {}).get("layers", 0)
+                target_blocks = getattr(self, "experiment_target_blocks", 9)
+                is_success = (placed_count >= target_blocks)
+                self.experiment_logger.finalize_trial(
+                    task_success=is_success,
+                    blocks_placed=placed_count,
+                    blocks_target=target_blocks,
+                    tower_stable=True,
+                    final_tower_height_tf=placed_count,
+                    exit_status="COMPLETED"
+                )
+            except Exception as e:
+                self.get_logger().error(f"Failed to finalize trial metrics: {e}")
 
     def _execute_function(self, name: str, args: dict) -> dict:
         """Dispatch function calls to actual robot controllers."""
@@ -736,11 +827,14 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         start_time = time.time()
         while time.time() - start_time < timeout:
             if self.cancel_current_task:
-                return {"success": False, "message": "Action aborted due to task cancellation."}
+                return {"success": False, "message": "Action aborted due to task cancellation.", "elapsed_sec": round(time.time() - start_time, 4)}
             time.sleep(0.1)  # Yield to the MultiThreadedExecutor
             if robot_id in self.action_results:
-                return self.action_results.pop(robot_id)
-        return {"success": False, "message": f"Timeout waiting for controller for robot {robot_id}"}
+                res = self.action_results.pop(robot_id)
+                if "elapsed_sec" not in res:
+                    res["elapsed_sec"] = round(time.time() - start_time, 4)
+                return res
+        return {"success": False, "message": f"Timeout waiting for controller for robot {robot_id}", "elapsed_sec": round(time.time() - start_time, 4)}
 
 
     # Concrete Primitive Implementations

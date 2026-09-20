@@ -51,6 +51,7 @@ install/
 wsl_ws/build/
 wsl_ws/install/
 wsl_ws/log/
+logs/experiments/raw/*.jsonl
 
 # ─── NVIDIA Example Scripts (vendored, not part of this project) ──
 isaacsim_scripts/camera_manual.py

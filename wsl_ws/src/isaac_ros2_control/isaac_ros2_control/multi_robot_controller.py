@@ -155,6 +155,7 @@ class MultiRobotController(Node):
         self._robot_was_busy = {1: False, 2: False, 3: False}
         self._tasks_completed = {1: 0, 2: 0, 3: 0}
         self._tasks_failed = {1: 0, 2: 0, 3: 0}
+        self._action_start_time = {1: None, 2: None, 3: None, 'global': None}
 
         # 50 Hz Control Loop Timer
         self.timer = self.create_timer(0.02, self._timer_callback)
@@ -244,6 +245,7 @@ class MultiRobotController(Node):
         self._robot_was_busy = {1: False, 2: False, 3: False}
         self._tasks_completed = {1: 0, 2: 0, 3: 0}
         self._tasks_failed = {1: 0, 2: 0, 3: 0}
+        self._action_start_time = {1: None, 2: None, 3: None, 'global': None}
 
         try:
             self.tf_buffer.clear()
@@ -272,6 +274,8 @@ class MultiRobotController(Node):
             else:
                 self._publish_result(False, f"Unknown robot identifier: {robot_str}")
                 return
+
+            self._action_start_time[r_id] = time.monotonic()
 
             if r_id != 'global':
                 setattr(self, f'gemini_action{r_id}', action)
@@ -332,8 +336,25 @@ class MultiRobotController(Node):
             self._publish_result(False, f"Action parsing failed: {e}")
 
     def _publish_result(self, success, message, robot_id="global"):
+        r_key = robot_id
+        if isinstance(robot_id, str):
+            if "1" in robot_id: r_key = 1
+            elif "2" in robot_id: r_key = 2
+            elif "3" in robot_id: r_key = 3
+            else: r_key = "global"
+
+        start_t = self._action_start_time.get(r_key)
+        elapsed_sec = round(time.monotonic() - start_t, 4) if start_t is not None else 0.0
+
         msg = String()
-        msg.data = json.dumps({"success": success, "message": message, "robot_id": str(robot_id)})
+        payload = {
+            "success": bool(success),
+            "message": str(message),
+            "robot_id": str(robot_id),
+            "elapsed_sec": elapsed_sec,
+            "wall_timestamp": time.time()
+        }
+        msg.data = json.dumps(payload)
         self.result_pub.publish(msg)
 
     def _resolve_block_name(self, label):

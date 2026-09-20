@@ -180,6 +180,11 @@ function App() {
       <div style={{ height: 48, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, background: C.bgChat, flexShrink: 0 }}>
         <div style={{ width: 30, height: 30, borderRadius: 8, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Bot size={16} color="#fff" /></div>
         <span style={{ fontWeight: 700, color: C.white, fontSize: 15 }}>Gemini Robotics ER</span>
+        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
+        <a href="https://blog.google/technology/google-deepmind/antigravity-ai-coding/" target="_blank" rel="noreferrer" title="Powered by Google Antigravity" style={{ display: 'flex', alignItems: 'center', gap: 5, textDecoration: 'none', opacity: 0.75, transition: 'opacity 0.2s' }} onMouseEnter={e => (e.currentTarget.style.opacity = '1')} onMouseLeave={e => (e.currentTarget.style.opacity = '0.75')}>
+          <img src="/antigravity.svg" alt="Antigravity" style={{ width: 22, height: 22 }} />
+          <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.3 }}>Antigravity</span>
+        </a>
 
         <div style={{ flex: 1 }} />
 
@@ -305,6 +310,11 @@ function App() {
             <div style={{ maxWidth: 720, margin: '8px auto 0', fontSize: 11, color: C.textMuted, textAlign: 'center', lineHeight: 1.4 }}>
               Gemini Robotics ER controls 3 Franka FR3 arms via Isaac Sim.<br/>
               Made by <a href="https://mincasurong.ai.studio/" target="_blank" rel="noreferrer" style={{ color: C.blue, textDecoration: 'none' }}>m9g</a>
+              {' · '}
+              <a href="https://blog.google/technology/google-deepmind/antigravity-ai-coding/" target="_blank" rel="noreferrer" style={{ color: C.textMuted, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
+                <img src="/antigravity.svg" alt="" style={{ width: 13, height: 13, verticalAlign: 'middle' }} />
+                Powered by Antigravity
+              </a>
             </div>
           </div>
         </div>

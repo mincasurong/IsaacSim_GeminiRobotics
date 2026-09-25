@@ -380,9 +380,12 @@ class ConveyorDualController(Node):
             # Block yaw in base frame
             block_yaw = np.arctan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
             
-            # If it's a LongBar, we add a lateral offset so the robots grab the ends
-            if name == 'LongBar':
-                offset_dist = -0.3 if robot_id == 1 else 0.3
+            # If it's a LongBar or HeavyEnginePart, use dynamic ATAMP offsets
+            is_dual_arm_target = getattr(self, f'gemini_action{robot_id}') == 'dual_arm_pick'
+            
+            if is_dual_arm_target:
+                # Retrieve dynamically reasoned offset from the VLA tool call
+                offset_dist = getattr(self, f'grasp_offset{robot_id}', -0.3 if robot_id == 1 else 0.3)
                 p.x += offset_dist * np.cos(block_yaw)
                 p.y += offset_dist * np.sin(block_yaw)
 
@@ -391,7 +394,7 @@ class ConveyorDualController(Node):
             # Optimal symmetry-aware downward quaternion
             target_quat = kinematics.compute_symmetric_grasp_quat(block_yaw, arm_yaw)
             
-            if name == 'LongBar':
+            if is_dual_arm_target:
                 target_quat = kinematics.compute_symmetric_grasp_quat(block_yaw + np.pi/2, arm_yaw)
                 
             return np.array([p.x, p.y, p.z]), target_quat

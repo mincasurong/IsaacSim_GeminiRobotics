@@ -112,14 +112,31 @@ def get_robot_tools():
             ),
             types.FunctionDeclaration(
                 name="dual_arm_pick",
-                description="Command BOTH robot arms (FR3_1 and FR3_2) to simultaneously approach and grasp a large object (e.g., 'LongBar').",
+                description="Command BOTH robot arms (FR3_1 and FR3_2) to simultaneously approach and grasp a large object using spatially-aware affordance offsets (ATAMP).",
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={
                         "object_label": types.Schema(
                             type="STRING",
-                            description="Label of the long object to pick, e.g. 'Blue LongBar'"
+                            description="Label of the oversized object to pick."
                         ),
+                        "offset_1": types.Schema(
+                            type="NUMBER",
+                            description="Grasp offset for FR3_1 along the object's local X-axis (meters). E.g., -0.3 for left edge."
+                        ),
+                        "offset_2": types.Schema(
+                            type="NUMBER",
+                            description="Grasp offset for FR3_2 along the object's local X-axis (meters). E.g., 0.3 for right edge."
+                        ),
+                        "speed": types.Schema(
+                            type="STRING",
+                            enum=["fast", "normal", "slow"],
+                            description="Movement speed."
+                        ),
+                    },
+                    required=["object_label", "offset_1", "offset_2"],
+                ),
+            ),
                         "speed": types.Schema(
                             type="STRING",
                             enum=["fast", "normal", "slow"],

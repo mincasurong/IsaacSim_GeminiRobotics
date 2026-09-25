@@ -165,6 +165,20 @@ bar.CreateDisplayColorAttr().Set([Gf.Vec3f(0.1, 0.1, 0.9)]) # Blue
 UsdPhysics.RigidBodyAPI.Apply(bar.GetPrim())
 UsdPhysics.CollisionAPI.Apply(bar.GetPrim())
 
+# Heavy Engine Part (Asymmetric, requires offset grasping)
+engine_path = "/HeavyEnginePart"
+engine = UsdGeom.Cube.Define(stage, engine_path)
+engine.GetSizeAttr().Set(1.0)
+engine_xform = UsdGeom.Xformable(engine.GetPrim())
+engine_xform.ClearXformOpOrder()
+engine_xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.85, 0.55))
+engine_xform.AddScaleOp().Set(Gf.Vec3f(1.0, 0.15, 0.1)) # 100cm long, bulkier
+engine.CreateDisplayColorAttr().Set([Gf.Vec3f(0.4, 0.4, 0.4)]) # Grey
+
+UsdPhysics.RigidBodyAPI.Apply(engine.GetPrim())
+UsdPhysics.CollisionAPI.Apply(engine.GetPrim())
+
+
 simulation_app.update()
 
 # 6. Setup ROS 2 Bridge Action Graph
@@ -244,7 +258,7 @@ try:
                     usdrt.Sdf.Path("/FR3_1"),
                     usdrt.Sdf.Path("/FR3_2"),
                     usdrt.Sdf.Path("/Block1"), usdrt.Sdf.Path("/Block2"),
-                    usdrt.Sdf.Path("/LongBar"),
+                    usdrt.Sdf.Path("/LongBar"), usdrt.Sdf.Path("/HeavyEnginePart"),
                 ]),
                 
                 # Robot 1 config

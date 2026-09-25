@@ -79,15 +79,17 @@ echo   2) Run Industrial Mobile Manipulator Demo
 echo   3) Launch Isaac Sim GUI (Empty Scene)
 echo   4) Setup WSL2 Firewall Rules (Requires Administrator)
 echo   5) Run Dual FR3 Conveyor Manufacturing Demo
+echo   6) Run Long-Horizon Assembly (ATAMP Skill Library)
 echo   0) Exit
 echo =========================================================================
-set /p choice="Enter your choice (0-5): "
+set /p choice="Enter your choice (0-6): "
 
 if "%choice%"=="1" goto run_three_robots
 if "%choice%"=="2" goto run_mobile_manip
 if "%choice%"=="3" goto run_isaac_gui
 if "%choice%"=="4" goto setup_firewall
 if "%choice%"=="5" goto run_conveyor_dual
+if "%choice%"=="6" goto run_assembly
 if "%choice%"=="0" exit /b 0
 
 echo Invalid choice. Try again.
@@ -180,5 +182,24 @@ if %errorlevel% equ 0 (
     netsh advfirewall firewall add rule name="WSL2 ROS2 Discovery" dir=in action=allow protocol=ANY profile=any
 )
 echo [SUCCESS] Windows Defender Firewall configured for WSL2 FastDDS Discovery.
+pause
+goto menu
+
+:run_assembly
+echo.
+echo [1/2] Configuring Environment and FastDDS...
+cd /d "%ISAAC_SIM_RELEASE_PATH%"
+call setup_ros_env.bat
+if exist "%~dp0setup_fastdds_wsl.py" ( call python.bat "%~dp0setup_fastdds_wsl.py" )
+set "FASTDDS_DEFAULT_PROFILES_FILE=%USERPROFILE%\fastdds_profile.xml"
+set "RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+
+echo [2/2] Launching Long-Horizon Assembly Simulation...
+set "SIM_SCRIPT=%~dp0..\isaacsim_scripts\assembly_dual_robot.py"
+call python.bat "!SIM_SCRIPT!" %*
+echo.
+echo =========================================================================
+echo   Simulation is running!
+echo =========================================================================
 pause
 goto menu

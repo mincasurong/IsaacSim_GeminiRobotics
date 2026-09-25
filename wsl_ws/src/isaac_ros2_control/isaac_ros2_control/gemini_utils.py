@@ -115,3 +115,23 @@ def gemini_points_to_3d(detections, depth_image, camera_intrinsics, camera_extri
                 'normalized': [y_norm, x_norm]
             })
     return results
+
+def get_object_type(label: str) -> str:
+    """Classify target object into affordance taxonomy: 'dish', 'cup', 'long_bar', or 'block'."""
+    label_lower = label.lower()
+    if 'dish' in label_lower or 'plate' in label_lower:
+        return 'dish'
+    if 'cup' in label_lower or 'mug' in label_lower:
+        return 'cup'
+    if 'bar' in label_lower or 'tray' in label_lower:
+        return 'long_bar'
+    return 'block'
+
+def is_dual_arm_object(label: str) -> bool:
+    """Check if the object requires dual-arm collaborative manipulation."""
+    return get_object_type(label) == 'long_bar'
+
+def is_kitchenware(label: str) -> bool:
+    """Check if the object is kitchenware (dish, cup, or long bar)."""
+    return get_object_type(label) in ['dish', 'cup', 'long_bar']
+

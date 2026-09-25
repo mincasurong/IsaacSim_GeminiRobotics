@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from isaac_ros2_control.conveyor_dual_controller import main
+
+if __name__ == '__main__':
+    main()

@@ -140,9 +140,10 @@ echo -e "  ${BOLD}3)${NC} [Debug]   Start Controller Node Only"
 echo -e "  ${BOLD}4)${NC} [Shell]   Enter ROS 2 Interactive Shell ${YELLOW}(Default)${NC}"
 echo -e "  ${BOLD}5)${NC} [Topic]   Echo a ROS 2 Topic"
 echo -e "  ${BOLD}6)${NC} [Service] Trigger /gemini/plan_task"
+echo -e "  ${BOLD}7)${NC} [Gemini]  Start Dual FR3 Conveyor Controller"
 echo -e "${CYAN}=================================================================${NC}"
 echo ""
-echo -en "${GREEN}Enter your choice [1-6, default: 4] > ${NC}"
+echo -en "${GREEN}Enter your choice [1-7, default: 4] > ${NC}"
 read OPTION
 
 case "$OPTION" in
@@ -168,6 +169,11 @@ case "$OPTION" in
     6)
         echo -e "\n${GREEN}[TRIGGER] Calling /gemini/plan_task service...${NC}"
         ros2 service call /gemini/plan_task std_srvs/srv/Trigger
+        ;;
+    7)
+        echo -e "\n${GREEN}[LAUNCH] Starting Dual FR3 Conveyor controller...${NC}"
+        ros2 launch rosbridge_server rosbridge_websocket_launch.xml &
+        ros2 launch isaac_ros2_control conveyor_dual_controller.launch.py
         ;;
     *)
         echo -e "\n${GREEN}[SHELL] Environment loaded. You can now run any ROS 2 commands.${NC}"

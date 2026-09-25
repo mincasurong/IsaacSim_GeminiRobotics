@@ -111,6 +111,42 @@ def get_robot_tools():
                 ),
             ),
             types.FunctionDeclaration(
+                name="dual_arm_pick",
+                description="Command BOTH robot arms (FR3_1 and FR3_2) to simultaneously approach and grasp a large object (e.g., 'LongBar').",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "object_label": types.Schema(
+                            type="STRING",
+                            description="Label of the long object to pick, e.g. 'Blue LongBar'"
+                        ),
+                        "speed": types.Schema(
+                            type="STRING",
+                            enum=["fast", "normal", "slow"],
+                            description="Movement speed. Default is 'fast'."
+                        ),
+                    },
+                    required=["object_label"],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="dual_arm_place",
+                description="Command BOTH robot arms to simultaneously place the currently held large object at the specified absolute world X, Y coordinates.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "x": types.Schema(type="NUMBER", description="Target X coordinate in world frame."),
+                        "y": types.Schema(type="NUMBER", description="Target Y coordinate in world frame."),
+                        "speed": types.Schema(
+                            type="STRING",
+                            enum=["fast", "normal", "slow"],
+                            description="Movement speed. Default is 'fast'."
+                        ),
+                    },
+                    required=["x", "y"],
+                ),
+            ),
+            types.FunctionDeclaration(
                 name="verify_tower",
                 description="Take a new overhead photo and verify the current workspace state. Returns assessment of the shapes/towers and any issues.",
                 parameters=types.Schema(

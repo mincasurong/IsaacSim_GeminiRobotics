@@ -78,14 +78,16 @@ echo   1) Run Three FR3 Robot Tower Demo (Gemini / Rule-Based)
 echo   2) Run Industrial Mobile Manipulator Demo
 echo   3) Launch Isaac Sim GUI (Empty Scene)
 echo   4) Setup WSL2 Firewall Rules (Requires Administrator)
+echo   5) Run Dual FR3 Conveyor Manufacturing Demo
 echo   0) Exit
 echo =========================================================================
-set /p choice="Enter your choice (0-4): "
+set /p choice="Enter your choice (0-5): "
 
 if "%choice%"=="1" goto run_three_robots
 if "%choice%"=="2" goto run_mobile_manip
 if "%choice%"=="3" goto run_isaac_gui
 if "%choice%"=="4" goto setup_firewall
+if "%choice%"=="5" goto run_conveyor_dual
 if "%choice%"=="0" exit /b 0
 
 echo Invalid choice. Try again.
@@ -141,6 +143,26 @@ echo.
 echo Launching Isaac Sim GUI...
 cd /d "%ISAAC_SIM_RELEASE_PATH%"
 call isaac-sim.bat
+pause
+goto menu
+
+
+:run_conveyor_dual
+echo.
+echo [1/2] Configuring Environment and FastDDS...
+cd /d "%ISAAC_SIM_RELEASE_PATH%"
+call setup_ros_env.bat
+if exist "%~dp0setup_fastdds_wsl.py" ( call python.bat "%~dp0setup_fastdds_wsl.py" )
+set "FASTDDS_DEFAULT_PROFILES_FILE=%USERPROFILE%\fastdds_profile.xml"
+set "RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+
+echo [2/2] Launching Dual FR3 Conveyor Simulation...
+set "SIM_SCRIPT=%~dp0..\isaacsim_scripts\conveyor_dual_robot.py"
+call python.bat "!SIM_SCRIPT!" %*
+echo.
+echo =========================================================================
+echo   Simulation is running!
+echo =========================================================================
 pause
 goto menu
 

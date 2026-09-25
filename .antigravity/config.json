@@ -1,0 +1,28 @@
+{
+  "agent": {
+    "executionMode": "autonomous",
+    "permissions": {
+      "autoApprove": {
+        "fileEdits": true,
+        "terminalCommands": true,
+        "browserActions": true
+      },
+      "commandAllowlist": [
+        "npm *",
+        "pnpm *",
+        "python *",
+        "pip *",
+        "git status",
+        "git diff",
+        "git add *",
+        "pytest *",
+        "uvicorn *"
+      ],
+      "denyList": [
+        "rm -rf /",
+        "git reset --hard",
+        "git push --force"
+      ]
+    }
+  }
+}

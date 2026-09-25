@@ -875,7 +875,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             block_name = f"Block{i}"
             try:
                 trans = self.tf_buffer.lookup_transform(
-                    'world', block_name, rclpy.time.Time(), timeout=Duration(seconds=0.1))
+                    'world', block_name, rclpy.time.Time())
                 x = trans.transform.translation.x
                 y = trans.transform.translation.y
                 positions[block_name] = (x, y)

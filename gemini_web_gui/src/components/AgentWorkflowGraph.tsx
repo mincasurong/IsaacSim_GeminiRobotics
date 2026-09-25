@@ -480,6 +480,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
         type: 'goalNode',
         position: { x: 370, y: 20 },
         data: { goal: userGoal },
+        width: 260,
+        height: 120,
       },
 
       // Level 1: Three-Agent Brainstorm Pipeline
@@ -495,6 +497,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           isActive: isVlaSpeaking,
           lastSnippet: latestVla?.text ? latestVla.text.slice(0, 100) + '...' : 'Coordinates task schedule and execution.',
         },
+        width: 250,
+        height: 130,
       },
       {
         id: 'architect',
@@ -508,6 +512,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           isActive: isArchitectSpeaking,
           lastSnippet: latestArchitect?.text ? latestArchitect.text.slice(0, 100) + '...' : 'Generates ASCII relative spatial layouts.',
         },
+        width: 250,
+        height: 130,
       },
       {
         id: 'optimizer',
@@ -521,6 +527,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           isActive: isOptimizerSpeaking,
           lastSnippet: latestOptimizer?.text ? latestOptimizer.text.slice(0, 100) + '...' : 'Enforces speed=fast and max concurrency.',
         },
+        width: 250,
+        height: 130,
       },
 
       // Level 2: Three Robot Arms
@@ -538,6 +546,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           color: '#ef4444',
           isBusy: isR1Active,
         },
+        width: 240,
+        height: 140,
       },
       {
         id: 'robot2',
@@ -553,6 +563,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           color: '#10b981',
           isBusy: isR2Active,
         },
+        width: 240,
+        height: 140,
       },
       {
         id: 'robot3',
@@ -568,6 +580,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           color: '#3b82f6',
           isBusy: isR3Active,
         },
+        width: 240,
+        height: 140,
       },
 
       // Level 3: Center Mutex Arbiter
@@ -578,6 +592,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
         data: {
           occupiedBy: metrics?.center_occupied_by || null,
         },
+        width: 230,
+        height: 100,
       },
 
       // Level 4: Physical Construction
@@ -589,6 +605,8 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           towerHeight: metrics?.tower_height || 0,
           placedCount: actions.length,
         },
+        width: 250,
+        height: 120,
       },
     ],
     [

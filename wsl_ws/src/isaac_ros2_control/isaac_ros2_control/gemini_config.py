@@ -8,14 +8,20 @@ def load_env(env_path=None):
     if env_path is None:
         current_file = Path(__file__).resolve()
         candidates = [
-            current_file.parents[4] / "private" / ".env",  # If run from src/
-            current_file.parents[7] / "private" / ".env",  # If run from install/ (wsl_ws/install/pkg/lib/python3.X/site-packages/pkg/)
             Path.home() / ".gemini_robotics" / ".env",
             Path("/mnt/d/git/IsaacSim_GeminiRobotics/private/.env"),
             Path("/mnt/d/git/IsaacSim_Gemini/private/.env"),
         ]
+        
+        # Traverse upwards to find private/.env
+        for parent in current_file.parents:
+            env_candidate = parent / "private" / ".env"
+            if env_candidate.exists():
+                candidates.insert(0, env_candidate)
+                break
+                
         for c in candidates:
-            if c.exists():
+            if c and c.exists():
                 env_path = c
                 break
 
@@ -35,7 +41,7 @@ def load_env(env_path=None):
 def get_api_key(env_path=None):
     """Retrieve the Gemini API key from .env file or environment."""
     config = load_env(env_path)
-    return config.get('LLM_API_KEY', os.environ.get('GEMINI_API_KEY', ''))
+    return config.get('GEMINI_API_KEY') or config.get('LLM_API_KEY', os.environ.get('GEMINI_API_KEY', ''))
 
 
 def get_model_name(env_path=None):

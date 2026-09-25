@@ -1,4 +1,4 @@
-﻿import numpy as np
+import numpy as np
 from rclpy.duration import Duration
 import rclpy
 
@@ -27,7 +27,7 @@ class WorkspaceState:
         
         for block_name in self.block_status:
             try:
-                trans = tf_buffer.lookup_transform('world', block_name, rclpy.time.Time(), timeout=Duration(seconds=0.05))
+                trans = tf_buffer.lookup_transform('world', block_name, rclpy.time.Time())
                 x = trans.transform.translation.x
                 y = trans.transform.translation.y
                 z = trans.transform.translation.z

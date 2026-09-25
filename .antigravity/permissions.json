@@ -1,0 +1,28 @@
+{
+  "mode": "autonomous",
+  "security": {
+    "executionLevel": "unrestricted",
+    "promptOnAction": false
+  },
+  "autoApprove": {
+    "terminal": {
+      "all": true,
+      "allowBackground": true
+    },
+    "fileSystem": {
+      "create": true,
+      "edit": true,
+      "delete": true
+    },
+    "network": {
+      "outbound": true
+    }
+  },
+  "guardrails": {
+    "blockCriticalCommands": [
+      "rm -rf /",
+      "git push --force",
+      "git reset --hard"
+    ]
+  }
+}

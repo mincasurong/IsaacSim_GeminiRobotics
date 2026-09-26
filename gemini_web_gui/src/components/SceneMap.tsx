@@ -1,7 +1,7 @@
-import { useMemo, useEffect } from 'react';
-import { ReactFlow, Background, Controls, Node, Position, useNodesState } from '@xyflow/react';
+import { useEffect } from 'react';
+import { ReactFlow, Background, Controls, useNodesState, type Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { C, monoFont, type RobotAction, type MetricsData, parseAction, parseResult } from './theme';
+import { C, monoFont, type RobotAction, type MetricsData, parseAction } from './theme';
 
 interface SceneMapProps {
   actions: RobotAction[];
@@ -68,8 +68,8 @@ const nodeTypes = {
   object: ObjectNode
 };
 
-export default function SceneMap({ actions, results, metrics, fontSize }: SceneMapProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+export default function SceneMap({ actions, metrics }: SceneMapProps) {
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
 
   // Dynamically compute graph topology based on Isaac Sim capabilities (number of robots)
   useEffect(() => {
@@ -110,7 +110,7 @@ export default function SceneMap({ actions, results, metrics, fontSize }: SceneM
       });
 
       let ox = 120;
-      Array.from(activeObjects).forEach((obj, idx) => {
+      Array.from(activeObjects).forEach((obj) => {
         const isChassis = obj.toLowerCase().includes('chassis') || obj.toLowerCase().includes('bar');
         newNodes.push({
           id: `obj_${obj}`, type: 'object', position: { x: ox, y: 175 },
@@ -141,7 +141,7 @@ export default function SceneMap({ actions, results, metrics, fontSize }: SceneM
         if (pa.target) activeObjects.add(pa.target);
       });
       let ox = 210, oy = 210;
-      Array.from(activeObjects).forEach((obj, idx) => {
+      Array.from(activeObjects).forEach((obj) => {
         newNodes.push({
           id: `obj_${obj}`, type: 'object', position: { x: ox, y: oy },
           data: { label: obj.substring(0, 4), width: 25, height: 25, color: C.blue, shape: 'rect' }
@@ -155,7 +155,7 @@ export default function SceneMap({ actions, results, metrics, fontSize }: SceneM
   }, [metrics, actions, setNodes]);
 
   return (
-    <div style={{ width: '100%', height: '100%', background: C.bgLight }}>
+    <div style={{ width: '100%', height: '100%', background: C.bg }}>
       <ReactFlow
         nodes={nodes}
         nodeTypes={nodeTypes}

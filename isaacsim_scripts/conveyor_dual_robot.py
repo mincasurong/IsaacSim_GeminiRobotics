@@ -94,7 +94,15 @@ UsdPhysics.CollisionAPI.Apply(conveyor_table.GetPrim())
 rb_conv = conveyor_table.GetPrim().GetAttribute("physics:rigidBodyEnabled")
 if rb_conv.IsValid(): rb_conv.Set(False)
 kin_conv = conveyor_table.GetPrim().GetAttribute("physics:kinematicEnabled")
-if kin_conv.IsValid(): kin_conv.Set(False)
+if kin_conv.IsValid(): kin_conv.Set(True)
+
+try:
+    from pxr import PhysxSchema
+    surf_vel_api = PhysxSchema.PhysxSurfaceVelocityAPI.Apply(conveyor_table.GetPrim())
+    surf_vel_api.CreateSurfaceVelocityEnabledAttr().Set(True)
+    surf_vel_api.CreateLocalVelocityAttr().Set(Gf.Vec3f(0.15, 0.0, 0.0)) # 15 cm/s along +X
+except Exception as e:
+    print(f"Failed to apply SurfaceVelocityAPI: {e}")
 
 # 4. Add 2 Robots (FR3_1 and FR3_2) side-by-side facing the conveyor
 FR3_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaFR3/fr3.usd"

@@ -73,7 +73,14 @@ export default function SceneMap({ actions, metrics }: SceneMapProps) {
 
   // Dynamically compute graph topology based on Isaac Sim capabilities (number of robots)
   useEffect(() => {
-    if (!metrics || !metrics.robots) return;
+    if (!metrics || !metrics.robots || Object.keys(metrics.robots).length === 0) {
+      setNodes([{
+        id: 'waiting', type: 'workspace', position: { x: 50, y: 120 },
+        data: { label: '⏳ Waiting for Isaac Sim ROS 2 Telemetry...', width: 350, height: 60 },
+        draggable: false, selectable: false
+      }]);
+      return;
+    }
 
     const robotKeys = Object.keys(metrics.robots);
     const newNodes: Node[] = [];

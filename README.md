@@ -276,7 +276,7 @@ cp .env.example private/.env
 Edit `private/.env` and paste your key:
 ```env
 GEMINI_API_KEY=your_actual_api_key_here
-ROBOTICS_MODEL=gemini-2.5-flash
+ROBOTICS_MODEL=gemini-3.8-flash
 ```
 
 ### Step 4: Build the Web Dashboard

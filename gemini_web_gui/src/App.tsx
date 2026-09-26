@@ -262,7 +262,7 @@ function App() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ── Chat Area (center) ──────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'linear-gradient(180deg, #fafafa 0%, #ffffff 100%)' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: C.bgChat }}>
 
           {/* Messages */}
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
@@ -281,7 +281,7 @@ function App() {
                   <div key={m.id} style={{
                     padding: '14px 16px',
                     borderRadius: 12,
-                    background: 'rgba(255,255,255,0.65)',
+                    background: C.glassBg,
                     backdropFilter: 'blur(8px)',
                     border: `1px solid ${C.border}`,
                     borderLeft: `3px solid ${borderColor}`,
@@ -376,7 +376,7 @@ function App() {
 
           {/* Input Bar */}
           <div style={{ borderTop: `1px solid ${C.border}`, background: C.glassBg, backdropFilter: 'blur(16px)', padding: '12px 24px' }}>
-            <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center', background: '#ffffff', borderRadius: 12, padding: '4px 6px 4px 16px', border: `1px solid ${C.borderHi}`, boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
+            <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center', background: C.bgInput, borderRadius: 12, padding: '4px 6px 4px 16px', border: `1px solid ${C.borderHi}`, boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
               <button onClick={toggleMic} style={{
                 width: 32, height: 32, borderRadius: '50%', border: 'none', cursor: 'pointer', flexShrink: 0,
                 background: isRecording ? C.red : 'transparent', color: isRecording ? '#fff' : C.textMuted,
@@ -391,7 +391,7 @@ function App() {
 
               <button onClick={sendGoal} disabled={!text.trim()} style={{
                 width: 34, height: 34, borderRadius: 8, border: 'none', cursor: text.trim() ? 'pointer' : 'default', flexShrink: 0,
-                background: text.trim() ? '#000' : 'transparent', color: text.trim() ? '#fff' : '#aaa',
+                background: text.trim() ? C.text : 'transparent', color: text.trim() ? C.bg : C.textMuted,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: 'none',
                 transition: 'all 0.15s',

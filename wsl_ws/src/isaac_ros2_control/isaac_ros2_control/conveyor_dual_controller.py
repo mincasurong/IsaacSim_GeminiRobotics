@@ -28,7 +28,7 @@ except ImportError:
 
 
 class ConveyorDualController(Node):
-    """Unified Controller and Motion Planner for FR3_1 and FR3_2."""
+    """Unified Controller and Motion Planner for FR3_1, FR3_2, and FR3_3."""
 
     def __init__(self):
         super().__init__('conveyor_dual_controller')
@@ -55,6 +55,7 @@ class ConveyorDualController(Node):
         # Publishers
         self.cmd_pub1 = self.create_publisher(JointState, '/fr3_1/joint_commands', 10)
         self.cmd_pub2 = self.create_publisher(JointState, '/fr3_2/joint_commands', 10)
+        self.cmd_pub3 = self.create_publisher(JointState, '/fr3_3/joint_commands', 10)
         self.status_pub = self.create_publisher(String, '/multi_robot/status', 10)
         self.result_pub = self.create_publisher(String, '/gemini/action_result', 10)
         self.metrics_pub = self.create_publisher(String, '/multi_robot/robot_metrics', 10)
@@ -62,6 +63,7 @@ class ConveyorDualController(Node):
         # Subscribers
         self.state_sub1 = self.create_subscription(JointState, '/fr3_1/joint_states', self._state_cb1, 10)
         self.state_sub2 = self.create_subscription(JointState, '/fr3_2/joint_states', self._state_cb2, 10)
+        self.state_sub3 = self.create_subscription(JointState, '/fr3_3/joint_states', self._state_cb3, 10)
         self.reset_sub = self.create_subscription(Empty, '/reset_simulation', self._reset_cb, 10)
         self.action_sub = self.create_subscription(String, '/gemini/action', self._action_cb, 10)
 
@@ -91,63 +93,76 @@ class ConveyorDualController(Node):
         # Controller & Motion Planner State
         self.current_joints1 = None
         self.current_joints2 = None
+        self.current_joints3 = None
         
         self.current_gripper1 = 0.0
         self.current_gripper2 = 0.0
+        self.current_gripper3 = 0.0
 
         self.q_current1 = list(self.q_home_fr3)
         self.q_current2 = list(self.q_home_fr3)
+        self.q_current3 = list(self.q_home_fr3)
         
         self.rotation_dir1 = 'shortest'
         self.rotation_dir2 = 'shortest'
+        self.rotation_dir3 = 'shortest'
 
         self.state1 = 'INIT'
         self.state2 = 'INIT'
+        self.state3 = 'INIT'
 
         self.block_index1 = 0
         self.block_index2 = 0
+        self.block_index3 = 0
 
         self.step_counter1 = 0
         self.step_counter2 = 0
+        self.step_counter3 = 0
 
         self.start_pos1 = None; self.end_pos1 = None
         self.start_pos2 = None; self.end_pos2 = None
+        self.start_pos3 = None; self.end_pos3 = None
 
         self.start_quat1 = [0.0, 1.0, 0.0, 0.0]; self.end_quat1 = [0.0, 1.0, 0.0, 0.0]
         self.start_quat2 = [0.0, 1.0, 0.0, 0.0]; self.end_quat2 = [0.0, 1.0, 0.0, 0.0]
+        self.start_quat3 = [0.0, 1.0, 0.0, 0.0]; self.end_quat3 = [0.0, 1.0, 0.0, 0.0]
 
         self.start_q1 = list(self.q_home_fr3); self.end_q1 = list(self.q_home_fr3)
         self.start_q2 = list(self.q_home_fr3); self.end_q2 = list(self.q_home_fr3)
+        self.start_q3 = list(self.q_home_fr3); self.end_q3 = list(self.q_home_fr3)
 
         self.start_gripper1 = self.gripper_open; self.end_gripper1 = self.gripper_open
         self.start_gripper2 = self.gripper_open; self.end_gripper2 = self.gripper_open
+        self.start_gripper3 = self.gripper_open; self.end_gripper3 = self.gripper_open
 
         self.tower_height = 0
         self.active_robot_id = 1
         
         self.active_target1 = None
         self.active_target2 = None
+        self.active_target3 = None
         
         self.gemini_action1 = None
         self.gemini_action2 = None
+        self.gemini_action3 = None
         self.center_occupied_by = None
 
         # Metrics & Utilization Tracking
         self._metrics_start_time = time.monotonic()
-        self._robot_busy_time = {1: 0.0, 2: 0.0}
-        self._robot_idle_time = {1: 0.0, 2: 0.0}
-        self._robot_last_transition = {1: time.monotonic(), 2: time.monotonic()}
-        self._robot_was_busy = {1: False, 2: False}
-        self._tasks_completed = {1: 0, 2: 0}
-        self._tasks_failed = {1: 0, 2: 0}
-        self._action_start_time = {1: None, 2: None, 'global': None}
+        self._robot_busy_time = {1: 0.0, 2: 0.0, 3: 0.0}
+        self._robot_idle_time = {1: 0.0, 2: 0.0, 3: 0.0}
+        self._robot_last_transition = {1: time.monotonic(), 2: time.monotonic(), 3: time.monotonic()}
+        self._robot_was_busy = {1: False, 2: False, 3: False}
+        self._tasks_completed = {1: 0, 2: 0, 3: 0}
+        self._tasks_failed = {1: 0, 2: 0, 3: 0}
+        self._action_start_time = {1: None, 2: None, 3: None, 'global': None}
 
         # 50 Hz Control Loop Timer
         self.timer = self.create_timer(0.02, self._timer_callback)
         self.metrics_timer = self.create_timer(0.5, self._publish_metrics)
 
         self.get_logger().info(
-            f"ConveyorDualController initialized. Mode: [{self.mode.upper()}]. "
+            f"MultiRobotController initialized. Mode: [{self.mode.upper()}]. "
             "Waiting for joint states and TF frames..."
         )
 
@@ -171,6 +186,15 @@ class ConveyorDualController(Node):
         if "fr3_finger_joint1" in msg.name:
             self.current_gripper2 = msg.position[msg.name.index("fr3_finger_joint1")]
 
+    def _state_cb3(self, msg):
+        self.current_joints3 = msg.position
+        for i in range(7):
+            name = f"fr3_joint{i+1}"
+            if name in msg.name:
+                self.q_current3[i] = msg.position[msg.name.index(name)]
+        if "fr3_finger_joint1" in msg.name:
+            self.current_gripper3 = msg.position[msg.name.index("fr3_finger_joint1")]
+
     def _reset_cb(self, msg):
         self._execute_reset()
 
@@ -191,31 +215,37 @@ class ConveyorDualController(Node):
         self.get_logger().info("[RESET] Resetting multi-robot controller and sequencer...")
         self.state1 = 'INIT'
         self.state2 = 'INIT'
+        self.state3 = 'INIT'
         self.block_index1 = 0
         self.block_index2 = 0
+        self.block_index3 = 0
         self.step_counter1 = 0
         self.step_counter2 = 0
+        self.step_counter3 = 0
         self.q_current1 = list(self.q_home_fr3)
         self.q_current2 = list(self.q_home_fr3)
+        self.q_current3 = list(self.q_home_fr3)
         self.tower_height = 0
         self.active_robot_id = 1
         
         self.active_target1 = None
         self.active_target2 = None
+        self.active_target3 = None
         
         self.gemini_action1 = None
         self.gemini_action2 = None
+        self.gemini_action3 = None
         
         self.center_occupied_by = None
         
         self._metrics_start_time = time.monotonic()
-        self._robot_busy_time = {1: 0.0, 2: 0.0}
-        self._robot_idle_time = {1: 0.0, 2: 0.0}
-        self._robot_last_transition = {1: time.monotonic(), 2: time.monotonic()}
-        self._robot_was_busy = {1: False, 2: False}
-        self._tasks_completed = {1: 0, 2: 0}
-        self._tasks_failed = {1: 0, 2: 0}
-        self._action_start_time = {1: None, 2: None, 'global': None}
+        self._robot_busy_time = {1: 0.0, 2: 0.0, 3: 0.0}
+        self._robot_idle_time = {1: 0.0, 2: 0.0, 3: 0.0}
+        self._robot_last_transition = {1: time.monotonic(), 2: time.monotonic(), 3: time.monotonic()}
+        self._robot_was_busy = {1: False, 2: False, 3: False}
+        self._tasks_completed = {1: 0, 2: 0, 3: 0}
+        self._tasks_failed = {1: 0, 2: 0, 3: 0}
+        self._action_start_time = {1: None, 2: None, 3: None, 'global': None}
 
         try:
             self.tf_buffer.clear()
@@ -242,7 +272,6 @@ class ConveyorDualController(Node):
                 # Special global action
                 r_id = 'global'
             else:
-                pass
                 self._publish_result(False, f"Unknown robot identifier: {robot_str}")
                 return
 
@@ -283,7 +312,6 @@ class ConveyorDualController(Node):
                 if curr_state == 'WAITING_FOR_PLACE_CMD':
                     self._set_state(r_id, 'WAIT_FOR_CENTER')
                 else:
-                    pass
                     self._publish_result(False, f"Robot {r_id} is in state {curr_state}, not ready to place.", f"FR3_{r_id}")
 
             elif action == 'go_home':
@@ -302,7 +330,6 @@ class ConveyorDualController(Node):
                 self._publish_result(True, "Robots moved out of the way.", "global")
 
             else:
-                pass
                 self._publish_result(False, f"Unknown action: {action}", f"FR3_{r_id}" if r_id != 'global' else "global")
 
         except Exception as e:
@@ -354,7 +381,6 @@ class ConveyorDualController(Node):
         if self.mode == 'gemini':
             return getattr(self, f'active_target{robot_id}')
         else:
-            pass
             # Rule-based sequence (3 blocks per robot):
             # Robot 1: Block1 (Red Cube), Block2 (Green Cyl), Block3 (Blue Cube)
             # Robot 2: Block4 (Yellow Cyl), Block5 (Magenta Cube), Block6 (Cyan Cyl)
@@ -364,7 +390,7 @@ class ConveyorDualController(Node):
             elif robot_id == 2:
                 return f"Block{self.block_index2 + 4}"
             else:
-                pass
+                return f"Block{self.block_index3 + 7}"
 
     def get_block_local_pose(self, robot_id):
         """Retrieve block position and optimal grasp quaternion in robot base frame."""
@@ -381,7 +407,7 @@ class ConveyorDualController(Node):
             block_yaw = np.arctan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
             
             # If it's a LongBar or HeavyEnginePart, use dynamic ATAMP offsets
-            is_dual_arm_target = getattr(self, f'gemini_action{robot_id}') == 'dual_arm_pick'
+            is_dual_arm_target = getattr(self, f'gemini_action{robot_id}', None) == 'dual_arm_pick'
             
             if is_dual_arm_target:
                 # Retrieve dynamically reasoned offset from the VLA tool call
@@ -397,22 +423,6 @@ class ConveyorDualController(Node):
             if is_dual_arm_target:
                 target_quat = kinematics.compute_symmetric_grasp_quat(block_yaw + np.pi/2, arm_yaw)
                 
-            return np.array([p.x, p.y, p.z]), target_quat
-        except Exception as e:
-            self.get_logger().error(f"TF lookup failed for {name} to {frame}: {e}", throttle_duration_sec=1.0)
-            return None, None
-        frame = self.get_robot_base_frame(robot_id)
-        try:
-            trans = self.tf_buffer.lookup_transform(frame, name, rclpy.time.Time())
-            p = trans.transform.translation
-            q = trans.transform.rotation
-            
-            # Block yaw in base frame
-            block_yaw = np.arctan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-            arm_yaw = np.arctan2(p.y, p.x)
-            
-            # Optimal symmetry-aware downward quaternion
-            target_quat = kinematics.compute_symmetric_grasp_quat(block_yaw, arm_yaw)
             return np.array([p.x, p.y, p.z]), target_quat
         except Exception as e:
             self.get_logger().error(f"TF lookup failed for {name} to {frame}: {e}", throttle_duration_sec=1.0)
@@ -453,7 +463,6 @@ class ConveyorDualController(Node):
             if tf_blocks_on_tower > 0 and max_block_z is not None:
                 target_z_world = max_block_z + self.block_height + 0.005
             else:
-                pass
                 target_z_world = 0.335  # Base table height + block center + clearance
             
             p_world = np.array([target_x, target_y, target_z_world])
@@ -526,7 +535,16 @@ class ConveyorDualController(Node):
             self.end_q2 = np.array(q_sol)
             self.step_counter2 = 0
         else:
-            pass
+            self.start_pos3 = kinematics.forward_kinematics(self.q_current3)[:3, 3]
+            self.end_pos3 = np.array(end_pos, dtype=float)
+            self.start_quat3 = list(self.end_quat3)
+            self.end_quat3 = list(target_quat)
+            self.start_gripper3 = self.end_gripper3
+            self.end_gripper3 = end_gripper
+            self.start_q3 = np.array(self.q_current3)
+            q_sol, _ = kinematics.inverse_kinematics(self.end_pos3, self.end_quat3, self.start_q3)
+            self.end_q3 = np.array(q_sol)
+            self.step_counter3 = 0
 
     def _send_home_cmd(self, robot_id):
         """Command a robot to hold its retracted home configuration."""
@@ -540,3 +558,301 @@ class ConveyorDualController(Node):
             cmd.name = self.joint_names_fr3
             cmd.position = self.q_home_fr3 + [self.gripper_open, self.gripper_open]
             self.cmd_pub2.publish(cmd)
+        elif robot_id == 3:
+            cmd.name = self.joint_names_fr3
+            cmd.position = self.q_home_fr3 + [self.gripper_open, self.gripper_open]
+            self.cmd_pub3.publish(cmd)
+
+    def _set_state(self, robot_id, state):
+        setattr(self, f'state{robot_id}', state)
+
+    # 50 Hz Control Loop & State Machine
+
+    def _publish_metrics(self):
+        """Publish structured robot metrics at 2 Hz for the GUI dashboard."""
+        now = time.monotonic()
+        robots_data = {}
+        for r_id in [1, 2, 3]:
+            state = getattr(self, f'state{r_id}')
+            is_busy = state not in ('INIT', 'FINISHED', 'WAITING_FOR_PLACE_CMD', 'WAIT_FOR_CENTER')
+            
+            # Accumulate time since last transition
+            dt = now - self._robot_last_transition[r_id]
+            if self._robot_was_busy[r_id]:
+                self._robot_busy_time[r_id] += dt
+            else:
+                self._robot_idle_time[r_id] += dt
+            self._robot_last_transition[r_id] = now
+            self._robot_was_busy[r_id] = is_busy
+            
+            total = self._robot_busy_time[r_id] + self._robot_idle_time[r_id]
+            busy_pct = (self._robot_busy_time[r_id] / total * 100.0) if total > 0 else 0.0
+            idle_pct = 100.0 - busy_pct
+            
+            # Determine simplified state category for the GUI
+            if state in ('ROTATE_TO_PICK', 'HOVER_PICK', 'DESCEND_PICK', 'GRASP', 'LIFT'):
+                gui_phase = 'PICKING'
+            elif state in ('TUCK_AFTER_PICK', 'ROTATE_TO_PLACE', 'HOVER_PLACE', 'DESCEND_PLACE', 'RELEASE', 'RETRACT', 'TUCK_AFTER_PLACE'):
+                gui_phase = 'PLACING'
+            elif state == 'RETURN_HOME':
+                gui_phase = 'HOMING'
+            elif state in ('WAITING_FOR_PLACE_CMD', 'WAIT_FOR_CENTER'):
+                gui_phase = 'QUEUED'
+            elif state == 'FINISHED':
+                gui_phase = 'IDLE'
+            else:
+                gui_phase = 'INIT'
+            
+            action = getattr(self, f'gemini_action{r_id}', None) or ''
+            target = getattr(self, f'active_target{r_id}', None) or ''
+            
+            robots_data[f'FR3_{r_id}'] = {
+                'state': state,
+                'phase': gui_phase,
+                'action': action,
+                'target': target,
+                'busy_pct': round(busy_pct, 1),
+                'idle_pct': round(idle_pct, 1),
+                'tasks_completed': self._tasks_completed[r_id],
+                'tasks_failed': self._tasks_failed[r_id],
+            }
+        
+        msg = String()
+        msg.data = json.dumps({
+            'timestamp': now - self._metrics_start_time,
+            'robots': robots_data,
+            'tower_height': self.tower_height,
+            'center_occupied_by': f'FR3_{self.center_occupied_by}' if self.center_occupied_by else None,
+        })
+        self.metrics_pub.publish(msg)
+
+    def _timer_callback(self):
+        for r_id in [1, 2, 3]:
+            self._process_robot(r_id)
+
+    def _process_robot(self, robot_id):
+        # Verify joint states are being received
+        if robot_id == 1 and self.current_joints1 is None: return
+        if robot_id == 2 and self.current_joints2 is None: return
+        if robot_id == 3 and self.current_joints3 is None: return
+
+        state = getattr(self, f'state{robot_id}')
+        step_counter = getattr(self, f'step_counter{robot_id}')
+        q_current = getattr(self, f'q_current{robot_id}')
+        start_pos = getattr(self, f'start_pos{robot_id}')
+        end_pos = getattr(self, f'end_pos{robot_id}')
+        start_quat = getattr(self, f'start_quat{robot_id}')
+        end_quat = getattr(self, f'end_quat{robot_id}')
+        start_gripper = getattr(self, f'start_gripper{robot_id}')
+        end_gripper = getattr(self, f'end_gripper{robot_id}')
+
+        cmd_pub = self.cmd_pub1 if robot_id == 1 else (self.cmd_pub2 if robot_id == 2 else self.cmd_pub3)
+
+        # State Machine
+        if state == 'INIT':
+            block_pos, block_quat = self.get_block_local_pose(robot_id)
+            if block_pos is None:
+                return
+            j1_angle = self._compute_j1_for_target(robot_id, block_pos)
+            end_q = self._make_tuck_config(j1_angle)
+            self._initialize_joint_phase(robot_id, end_q, self.gripper_open)
+            self._set_state(robot_id, 'ROTATE_TO_PICK')
+
+        elif state == 'WAIT_FOR_CENTER':
+            if self.center_occupied_by is None or self.center_occupied_by == robot_id:
+                self.center_occupied_by = robot_id
+                q_current = getattr(self, f'q_current{robot_id}')
+                end_q = self._make_tuck_config(q_current[0])
+                self._initialize_joint_phase(robot_id, end_q, self.gripper_close)
+                self._set_state(robot_id, 'TUCK_AFTER_PICK')
+
+        elif state in ['ROTATE_TO_PICK', 'HOVER_PICK', 'DESCEND_PICK', 'GRASP', 'LIFT',
+                       'TUCK_AFTER_PICK', 'ROTATE_TO_PLACE', 'HOVER_PLACE', 'DESCEND_PLACE', 
+                       'RELEASE', 'RETRACT', 'TUCK_AFTER_PLACE', 'RETURN_HOME']:
+            step_counter += 1
+            setattr(self, f'step_counter{robot_id}', step_counter)
+
+            # Determine duration for this phase
+            robot_steps = getattr(self, f'steps_per_phase{robot_id}', self.steps_per_phase)
+            total_steps = self.dwell_steps if state in ['GRASP', 'RELEASE'] else robot_steps
+            t = min(float(step_counter) / float(total_steps), 1.0)
+            
+            # Minimum Jerk Quintic Polynomial (MoveIt 2 standard trajectory profile)
+            t_smooth = 10 * (t ** 3) - 15 * (t ** 4) + 6 * (t ** 5)
+
+            if state in ['ROTATE_TO_PICK', 'HOVER_PICK', 'TUCK_AFTER_PICK', 'ROTATE_TO_PLACE', 
+                         'HOVER_PLACE', 'TUCK_AFTER_PLACE', 'RETURN_HOME']:
+                # JOINT SPACE INTERPOLATION
+                start_q = getattr(self, f'start_q{robot_id}')
+                end_q = getattr(self, f'end_q{robot_id}')
+                q_sol = start_q + t_smooth * (end_q - start_q)
+                for i in range(7):
+                    q_sol[i] = np.clip(q_sol[i], kinematics.FR3_JOINT_LIMITS[i][0], kinematics.FR3_JOINT_LIMITS[i][1])
+            elif state in ['GRASP', 'RELEASE']:
+                q_sol = np.array(q_current)
+            else:
+                # CARTESIAN SPACE INTERPOLATION
+                # DYNAMIC TRACKING: If picking, continuously update target position
+                if state in ['HOVER_PICK', 'DESCEND_PICK']:
+                    block_pos, _ = self.get_block_local_pose(robot_id)
+                    if block_pos is not None:
+                        # Forward prediction: velocity ~ 0.15 m/s in base X frame, add ~0.15 sec lookahead
+                        block_pos[0] += (0.15 * 0.15)
+                        if state == 'HOVER_PICK':
+                            end_pos = np.array([block_pos[0], block_pos[1], block_pos[2] + self.hover_height])
+                        else:
+                            end_pos = np.array([block_pos[0], block_pos[1], block_pos[2] - 0.02])
+                        setattr(self, f'end_pos{robot_id}', end_pos)
+
+                if start_pos is not None and end_pos is not None:
+                    target_pos = start_pos + t_smooth * (end_pos - start_pos)
+                else:
+                    target_pos = end_pos
+
+                target_quat = kinematics.interpolate_quat(start_quat, end_quat, t_smooth)
+                q_sol, success = kinematics.inverse_kinematics(target_pos, target_quat, q_current)
+
+            grip_target = start_gripper + t_smooth * (end_gripper - start_gripper)
+
+            # Publish joint commands
+            cmd = JointState()
+            cmd.header.stamp = self.get_clock().now().to_msg()
+            cmd.name = self.joint_names_fr3
+            cmd.position = list(q_sol) + [grip_target, grip_target]
+            cmd_pub.publish(cmd)
+
+            # Update warm-start joint cache
+            if robot_id == 1:
+                for i in range(7): self.q_current1[i] = q_sol[i]
+            elif robot_id == 2:
+                for i in range(7): self.q_current2[i] = q_sol[i]
+            else:
+                for i in range(7): self.q_current3[i] = q_sol[i]
+
+            # Transition when phase completes
+            if step_counter >= total_steps:
+                if state == 'ROTATE_TO_PICK':
+                    block_pos, block_quat = self.get_block_local_pose(robot_id)
+                    if block_pos is None: return
+                    hover_pos = np.array([block_pos[0], block_pos[1], block_pos[2] + self.hover_height])
+                    self._initialize_phase(robot_id, hover_pos, self.gripper_open, block_quat)
+                    self._set_state(robot_id, 'HOVER_PICK')
+
+                elif state == 'HOVER_PICK':
+                    block_pos, block_quat = self.get_block_local_pose(robot_id)
+                    if block_pos is None: return
+                    self._initialize_phase(robot_id, block_pos, self.gripper_open, block_quat)
+                    self._set_state(robot_id, 'DESCEND_PICK')
+
+                elif state == 'DESCEND_PICK':
+                    # Grasp block: close gripper while holding position
+                    self._initialize_phase(robot_id, end_pos, self.gripper_close, end_quat)
+                    self._set_state(robot_id, 'GRASP')
+
+                elif state == 'GRASP':
+                    # Lift block vertically
+                    lift_pos = np.array([end_pos[0], end_pos[1], end_pos[2] + self.hover_height])
+                    self._initialize_phase(robot_id, lift_pos, self.gripper_close, end_quat)
+                    self._set_state(robot_id, 'LIFT')
+
+                elif state == 'LIFT':
+                    gripper_pos = getattr(self, f'current_gripper{robot_id}')
+                    pick_success = gripper_pos > 0.01  # > 1cm width means we grasped something
+
+                    if self.mode == 'gemini' and getattr(self, f'gemini_action{robot_id}') == 'pick':
+                        if pick_success:
+                            self._set_state(robot_id, 'WAITING_FOR_PLACE_CMD')
+                            self._publish_result(True, f"Pick completed by robot {robot_id}. Grasped object successfully.", f"FR3_{robot_id}")
+                        else:
+                            # It missed!
+                            self._set_state(robot_id, 'FINISHED')
+                            self._publish_result(False, f"Pick failed by robot {robot_id}. Gripper closed on empty space.", f"FR3_{robot_id}")
+                            self._tasks_failed[robot_id] += 1
+                    else:
+                        if pick_success:
+                            self._set_state(robot_id, 'WAITING_FOR_CENTER')
+                        else:
+                            self.get_logger().warn(f"Robot {robot_id} failed to grasp! Retrying...")
+                            self._set_state(robot_id, 'INIT')
+
+                elif state == 'TUCK_AFTER_PICK':
+                    place_pos, _ = self.get_place_local_pose(robot_id)
+                    if place_pos is None: return
+                    j1_angle = self._compute_j1_for_target(robot_id, place_pos)
+                    end_q = self._make_tuck_config(j1_angle)
+                    self._initialize_joint_phase(robot_id, end_q, self.gripper_close)
+                    self._set_state(robot_id, 'ROTATE_TO_PLACE')
+
+                elif state == 'ROTATE_TO_PLACE':
+                    place_pos, place_quat = self.get_place_local_pose(robot_id)
+                    if place_pos is None: return
+                    hover_h = getattr(self, f'hover_height{robot_id}', self.hover_height)
+                    hover_place_pos = np.array([place_pos[0], place_pos[1], place_pos[2] + hover_h])
+                    self._initialize_phase(robot_id, hover_place_pos, self.gripper_close, place_quat)
+                    self._set_state(robot_id, 'HOVER_PLACE')
+
+                elif state == 'HOVER_PLACE':
+                    place_pos, place_quat = self.get_place_local_pose(robot_id)
+                    if place_pos is None: return
+                    self._initialize_phase(robot_id, place_pos, self.gripper_close, place_quat)
+                    self._set_state(robot_id, 'DESCEND_PLACE')
+
+                elif state == 'DESCEND_PLACE':
+                    # Release block: open gripper
+                    self._initialize_phase(robot_id, end_pos, self.gripper_open, end_quat)
+                    self._set_state(robot_id, 'RELEASE')
+
+                elif state == 'RELEASE':
+                    # Retract vertically
+                    retract_pos = np.array([end_pos[0], end_pos[1], end_pos[2] + self.hover_height])
+                    self._initialize_phase(robot_id, retract_pos, self.gripper_open, end_quat)
+                    self._set_state(robot_id, 'RETRACT')
+
+                elif state == 'RETRACT':
+                    self.tower_height += 1
+                    self.get_logger().info(f"Tower height incremented to: {self.tower_height}")
+                    q_current = getattr(self, f'q_current{robot_id}')
+                    end_q = self._make_tuck_config(q_current[0])
+                    self._initialize_joint_phase(robot_id, end_q, self.gripper_open)
+                    self._set_state(robot_id, 'TUCK_AFTER_PLACE')
+
+                elif state == 'TUCK_AFTER_PLACE':
+                    self._initialize_joint_phase(robot_id, self.q_home_fr3, self.gripper_open)
+                    self._set_state(robot_id, 'RETURN_HOME')
+
+                elif state == 'RETURN_HOME':
+                    if self.center_occupied_by == robot_id:
+                        self.center_occupied_by = None
+
+                    if self.mode == 'gemini' and getattr(self, f'gemini_action{robot_id}') == 'place':
+                        self._set_state(robot_id, 'FINISHED')
+                        self._publish_result(True, f"Place completed by robot {robot_id}. Tower height is now {self.tower_height}.", f"FR3_{robot_id}")
+                        self._tasks_completed[robot_id] += 1
+                    else:
+                        # Advance block index for current robot
+                        max_blocks_per_robot = 3
+                        curr_idx = getattr(self, f'block_index{robot_id}')
+                        if curr_idx < max_blocks_per_robot - 1:
+                            setattr(self, f'block_index{robot_id}', curr_idx + 1)
+                            self._set_state(robot_id, 'INIT')
+                        else:
+                            self._set_state(robot_id, 'FINISHED')
+                            self.get_logger().info(f"[SEQUENCER] Robot {robot_id} finished all its tasks.")
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ConveyorDualController()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+

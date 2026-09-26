@@ -24,6 +24,9 @@ Three Franka FR3 robotic arms cooperatively manipulate objects and construct com
 - **🤖 Multi-Robot Cooperative Manipulation (ATAMP)**:
   - **3-Arm Tower Construction**: 3 Franka FR3 robotic arms operate in a synchronized physical workspace, picking, transferring, and assembling structures with collision-free coordination.
   - **Dual-Arm Assembly Line**: Dynamically switches to an industrial conveyor setup where two FR3 robots perform Language-Driven Asymmetric Dual-Arm Grasping (LD-ADAG) on heavy chassis and long bars.
+- **⚡ Dynamic Visual Servoing & Object Pooling**:
+  - **Real-Time Conveyor Tracking**: ROS 2 continuous Cartesian tracking predicts and intercepts dynamically moving objects on a PhysX surface velocity conveyor.
+  - **Zero-Overhead Memory Pools**: Infinite item stream simulation via background cyclic respawners without degrading RTF.
 - **🧠 4-Turn Multi-Agent Brainstorming Architecture**:
   - **Spatial Architect (📐)**: Translates natural language missions into 2D ASCII Grid Chain-of-Thought (CoT) layouts and relative coordinate matrices.
   - **Agility & Performance Optimizer (⚡)**: Maximizes execution throughput and concurrency (`speed='fast'`), safely grounded in low-level ROS 2 hardware mutexes.

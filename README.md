@@ -21,7 +21,9 @@ Three Franka FR3 robotic arms cooperatively manipulate objects and construct com
 
 ## ✨ Key Highlights
 
-- **🦾 Multi-Robot Cooperative Manipulation**: 3 Franka FR3 robotic arms operate in a synchronized physical workspace, picking, transferring, and assembling structures with collision-free coordination.
+- **🤖 Multi-Robot Cooperative Manipulation (ATAMP)**:
+  - **3-Arm Tower Construction**: 3 Franka FR3 robotic arms operate in a synchronized physical workspace, picking, transferring, and assembling structures with collision-free coordination.
+  - **Dual-Arm Assembly Line**: Dynamically switches to an industrial conveyor setup where two FR3 robots perform Language-Driven Asymmetric Dual-Arm Grasping (LD-ADAG) on heavy chassis and long bars.
 - **🧠 4-Turn Multi-Agent Brainstorming Architecture**:
   - **Spatial Architect (📐)**: Translates natural language missions into 2D ASCII Grid Chain-of-Thought (CoT) layouts and relative coordinate matrices.
   - **Agility & Performance Optimizer (⚡)**: Maximizes execution throughput and concurrency (`speed='fast'`), safely grounded in low-level ROS 2 hardware mutexes.
@@ -32,11 +34,11 @@ Three Franka FR3 robotic arms cooperatively manipulate objects and construct com
   - **35+ Metrics** across task success (TSR, GCR), multi-robot coordination (Gini workload balance, mutex contention), physical accuracy, and VLA throughput.
   - **Automated Experiment Runner** (`experiment_runner.py`) & **LaTeX/Vector Plot Generator** (`analyze_experiments.py`) compiling ready-to-publish tables with 95% Wilson Score confidence intervals.
 - **⚡ High-Speed Agile Motion Controller**: 50 Hz closed-loop control with Damped Least Squares (DLS) IK, Joint 1 Null-Space singularity avoidance, and tuned 20-step execution phases (0.4 s per motion segment).
-- **🎨 Glassmorphic Digital Twin Dashboard**: Modern lab aesthetic (`backdrop-filter: blur(12px)`) with tabbed navigation:
-  - `[🔀 Workflow Graph]` (Interactive React Flow canvas)
-  - `[🗺️ 2D Workspace]` (SVG digital twin tracking blocks and arms)
+- **📊 Claude Codex Switch (CCS) Digital Twin Dashboard**: Elegant dark-warm aesthetic (`#262624` background, `Crail` accents) with tabbed navigation:
+  - `[🤖 Workflow Graph]` (Interactive React Flow canvas)
+  - `[🗺️ 2D Workspace]` (Designtific auto-adapting XYFlow top-down map tracking dynamic objects)
   - `[⏱️ Gantt]` (Parallel execution and mutex contention timeline)
-  - `[📊 KPIs & Trace]` (Resource utilization bars and discrete event table with CSV export)
+  - `[📈 KPIs & Trace]` (Resource utilization bars and discrete event table)
 - **🚀 Dual Control Modes**: Switch seamlessly between the Gemini VLA reasoning engine and a standalone rule-based sequencer (no API required).
 - **🌐 Cross-OS Bridge**: Automated FastDDS Unicast bridging between Windows 11 (Isaac Sim) and WSL2 Ubuntu 24.04 (ROS 2 Jazzy).
 

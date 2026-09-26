@@ -137,15 +137,6 @@ def get_robot_tools():
                     required=["object_label", "offset_1", "offset_2"],
                 ),
             ),
-                        "speed": types.Schema(
-                            type="STRING",
-                            enum=["fast", "normal", "slow"],
-                            description="Movement speed. Default is 'fast'."
-                        ),
-                    },
-                    required=["object_label"],
-                ),
-            ),
             types.FunctionDeclaration(
                 name="dual_arm_place",
                 description="Command BOTH robot arms to simultaneously place the currently held large object at the specified absolute world X, Y coordinates.",

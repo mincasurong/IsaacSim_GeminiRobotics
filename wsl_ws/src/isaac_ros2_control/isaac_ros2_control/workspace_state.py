@@ -13,6 +13,7 @@ except ImportError:
 class WorkspaceState:
     def __init__(self):
         self.block_status = {f'Block{i}': {'location': 'unknown', 'pos': None} for i in range(1, 10)}
+        self.block_status.update({f'ConvItem{i}': {'location': 'unknown', 'pos': None} for i in range(10)})
         self.robot_status = {r: 'idle' for r in WORKSPACE['robots']}
         self.tower_height = 0
         self.blocks_on_tower = []

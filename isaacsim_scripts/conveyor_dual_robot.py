@@ -140,25 +140,44 @@ def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True)
 configure_robot_tf_names("/FR3_1", "FR3_1", use_prefix_for_links=False)
 configure_robot_tf_names("/FR3_2", "FR3_2", use_prefix_for_links=True)
 
-# 5. Add Objects (Standard blocks and one Long Bar)
-# Z = 0.50m (conveyor top) + 0.03m (half height) = 0.53m
-nominal_poses = [
-    [-0.3, 0.5, 0.53], # Block 1
-    [ 0.3, 0.5, 0.53], # Block 2
-]
-
-for i, pos in enumerate(nominal_poses):
-    block_path = f"/Block{i+1}"
-    block = UsdGeom.Cube.Define(stage, block_path)
-    block.GetSizeAttr().Set(1.0)
+# 5. Add Object Pool for Conveyor Spawning
+print("Creating Conveyor Item Pool...")
+import random
+num_conv_items = 10
+conv_shapes = ["Cube", "Cylinder", "Sphere"]
+for i in range(num_conv_items):
+    shape_type = conv_shapes[i % 3]
+    block_path = f"/ConvItem{i}"
+    
+    if shape_type == "Cube":
+        block = UsdGeom.Cube.Define(stage, block_path)
+        scale = Gf.Vec3f(0.06, 0.06, 0.06)
+    elif shape_type == "Cylinder":
+        block = UsdGeom.Cylinder.Define(stage, block_path)
+        block.GetRadiusAttr().Set(0.03)
+        block.GetHeightAttr().Set(0.06)
+        scale = Gf.Vec3f(1.0, 1.0, 1.0)
+    else:
+        block = UsdGeom.Sphere.Define(stage, block_path)
+        block.GetRadiusAttr().Set(0.03)
+        scale = Gf.Vec3f(1.0, 1.0, 1.0)
+        
+    block.GetSizeAttr().Set(1.0) if shape_type == "Cube" else None
+    
     xform = UsdGeom.Xformable(block.GetPrim())
     xform.ClearXformOpOrder()
-    xform.AddTranslateOp().Set(Gf.Vec3d(*pos))
-    xform.AddScaleOp().Set(Gf.Vec3f(0.06, 0.06, 0.06))
-    block.CreateDisplayColorAttr().Set([Gf.Vec3f(0.9, 0.1, 0.1) if i==0 else Gf.Vec3f(0.1, 0.9, 0.1)])
+    # Hide them initially by placing them far below the floor
+    xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, -2.0))
+    xform.AddScaleOp().Set(scale)
+    
+    # Assign distinct colors
+    color = Gf.Vec3f(random.uniform(0.1, 1.0), random.uniform(0.1, 1.0), random.uniform(0.1, 1.0))
+    block.CreateDisplayColorAttr().Set([color])
     
     UsdPhysics.RigidBodyAPI.Apply(block.GetPrim())
     UsdPhysics.CollisionAPI.Apply(block.GetPrim())
+    
+# We will still keep a static LongBar and HeavyEnginePart for dual-arm tasks if needed.
 
 # Long Bar (Requires dual arm)
 bar_path = "/LongBar"
@@ -265,7 +284,10 @@ try:
                 ("PublishTF.inputs:targetPrims", [
                     usdrt.Sdf.Path("/FR3_1"),
                     usdrt.Sdf.Path("/FR3_2"),
-                    usdrt.Sdf.Path("/Block1"), usdrt.Sdf.Path("/Block2"),
+                    usdrt.Sdf.Path("/ConvItem0"), usdrt.Sdf.Path("/ConvItem1"), usdrt.Sdf.Path("/ConvItem2"),
+                    usdrt.Sdf.Path("/ConvItem3"), usdrt.Sdf.Path("/ConvItem4"), usdrt.Sdf.Path("/ConvItem5"),
+                    usdrt.Sdf.Path("/ConvItem6"), usdrt.Sdf.Path("/ConvItem7"), usdrt.Sdf.Path("/ConvItem8"),
+                    usdrt.Sdf.Path("/ConvItem9"),
                     usdrt.Sdf.Path("/LongBar"), usdrt.Sdf.Path("/HeavyEnginePart"),
                 ]),
                 
@@ -318,8 +340,34 @@ if args.test:
     simulation_app.close()
     sys.exit(0)
 
-# Simulation loop
+import time
+spawn_interval = 3.0 # seconds
+last_spawn_time = time.time()
+next_item_idx = 0
+from isaacsim.core.prims import RigidPrim
+conv_rigid_prims = []
+for i in range(num_conv_items):
+    rp = RigidPrim(f"/ConvItem{i}")
+    rp.initialize()
+    conv_rigid_prims.append(rp)
+
+print("\n--- STARTING SIMULATION AND CONVEYOR SPAWNER ---")
 while simulation_app.is_running():
+    now = time.time()
+    if now - last_spawn_time > spawn_interval:
+        # Spawn next item at start of conveyor (X = -1.4, Y = 0.5 to 0.7, Z = 0.55)
+        rp = conv_rigid_prims[next_item_idx]
+        y_pos = random.uniform(0.5, 0.7)
+        rp.set_world_pose(
+            position=np.array([-1.4, y_pos, 0.55]),
+            orientation=np.array([1.0, 0.0, 0.0, 0.0])
+        )
+        rp.set_linear_velocity(np.array([0.0, 0.0, 0.0]))
+        rp.set_angular_velocity(np.array([0.0, 0.0, 0.0]))
+        
+        last_spawn_time = now
+        next_item_idx = (next_item_idx + 1) % num_conv_items
+        
     simulation_app.update()
 
 simulation_app.close()

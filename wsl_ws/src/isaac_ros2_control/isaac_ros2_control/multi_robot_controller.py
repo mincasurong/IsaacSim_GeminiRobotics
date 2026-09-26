@@ -678,6 +678,18 @@ class MultiRobotController(Node):
                 q_sol = np.array(q_current)
             else:
                 # CARTESIAN SPACE INTERPOLATION
+                # DYNAMIC TRACKING: If picking, continuously update target position
+                if state in ['HOVER_PICK', 'DESCEND_PICK']:
+                    block_pos, _ = self.get_block_local_pose(robot_id)
+                    if block_pos is not None:
+                        # Forward prediction: velocity ~ 0.15 m/s in base X frame, add ~0.15 sec lookahead
+                        block_pos[0] += (0.15 * 0.15)
+                        if state == 'HOVER_PICK':
+                            end_pos = np.array([block_pos[0], block_pos[1], block_pos[2] + self.hover_height])
+                        else:
+                            end_pos = np.array([block_pos[0], block_pos[1], block_pos[2] - 0.02])
+                        setattr(self, f'end_pos{robot_id}', end_pos)
+
                 if start_pos is not None and end_pos is not None:
                     target_pos = start_pos + t_smooth * (end_pos - start_pos)
                 else:

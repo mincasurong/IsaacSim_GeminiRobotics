@@ -180,8 +180,8 @@ function App() {
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: C.text, fontSize }}>
 
       {/* ════ Top Bar ════ */}
-      <div style={{ height: 50, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, background: 'rgba(13, 17, 26, 0.85)', backdropFilter: 'blur(16px)', flexShrink: 0 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #d46a43, #d46a43)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 15px rgba(56, 189, 248, 0.3)' }}><Bot size={17} color="#fff" /></div>
+      <div style={{ height: 50, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, background: C.glassBg, backdropFilter: 'blur(16px)', flexShrink: 0 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 8, background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}><Bot size={17} color="#fff" /></div>
         <div>
           <span style={{ fontWeight: 800, color: C.white, fontSize: 14, letterSpacing: '-0.02em' }}>Gemini Robotics ER</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -2 }}>
@@ -218,7 +218,7 @@ function App() {
           <option value={7}>Mode 7 (Dual FR3)</option>
         </select>
         {!bringupRunning
-          ? <button onClick={startBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #d46a43, #b35532)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(14, 165, 233, 0.35)' }}><Play size={13} /> Start</button>
+          ? <button onClick={startBringup} style={{ ...btnCtrl, background: '#000', color: '#fff', border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}><Play size={13} /> Start</button>
           : <button onClick={stopBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(239, 68, 68, 0.35)' }}><Square size={13} /> Stop</button>
         }
         <button onClick={resetSim} style={{ ...btnCtrl, color: C.yellow, background: 'rgba(250, 204, 21, 0.08)', borderColor: 'rgba(250, 204, 21, 0.2)' }}><RotateCcw size={13} /> Reset</button>
@@ -248,7 +248,7 @@ function App() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ── Chat Area (center) ──────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'linear-gradient(180deg, #212120 0%, #2a2a28 100%)' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'linear-gradient(180deg, #fafafa 0%, #ffffff 100%)' }}>
 
           {/* Messages */}
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
@@ -267,7 +267,7 @@ function App() {
                   <div key={m.id} style={{
                     padding: '14px 16px',
                     borderRadius: 12,
-                    background: 'rgba(15, 23, 42, 0.65)',
+                    background: 'rgba(255,255,255,0.65)',
                     backdropFilter: 'blur(8px)',
                     border: `1px solid ${C.border}`,
                     borderLeft: `3px solid ${borderColor}`,
@@ -361,8 +361,8 @@ function App() {
           </div>
 
           {/* Input Bar */}
-          <div style={{ borderTop: `1px solid ${C.border}`, background: 'rgba(13, 17, 26, 0.85)', backdropFilter: 'blur(16px)', padding: '12px 24px' }}>
-            <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(22, 28, 43, 0.95)', borderRadius: 12, padding: '4px 6px 4px 16px', border: `1px solid ${C.borderHi}`, boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
+          <div style={{ borderTop: `1px solid ${C.border}`, background: C.glassBg, backdropFilter: 'blur(16px)', padding: '12px 24px' }}>
+            <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center', background: '#ffffff', borderRadius: 12, padding: '4px 6px 4px 16px', border: `1px solid ${C.borderHi}`, boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
               <button onClick={toggleMic} style={{
                 width: 32, height: 32, borderRadius: '50%', border: 'none', cursor: 'pointer', flexShrink: 0,
                 background: isRecording ? C.red : 'transparent', color: isRecording ? '#fff' : C.textMuted,
@@ -377,9 +377,9 @@ function App() {
 
               <button onClick={sendGoal} disabled={!text.trim()} style={{
                 width: 34, height: 34, borderRadius: 8, border: 'none', cursor: text.trim() ? 'pointer' : 'default', flexShrink: 0,
-                background: text.trim() ? 'linear-gradient(135deg, #d46a43, #b35532)' : 'transparent', color: text.trim() ? '#fff' : C.textMuted,
+                background: text.trim() ? '#000' : 'transparent', color: text.trim() ? '#fff' : '#aaa',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: text.trim() ? '0 0 10px rgba(14, 165, 233, 0.4)' : 'none',
+                boxShadow: 'none',
                 transition: 'all 0.15s',
               }}><Send size={14} /></button>
             </div>
@@ -419,7 +419,7 @@ function App() {
         {sideOpen && (
           <div style={{ width: `${rightPanelWidth}%`, background: C.bgSide, display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'relative' }}>
             {/* Header with high-tech tab switcher */}
-            <div style={{ padding: '8px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(15, 20, 32, 0.85)', backdropFilter: 'blur(10px)' }}>
+            <div style={{ padding: '8px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.glassBg, backdropFilter: 'blur(10px)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <button
                   onClick={() => setActiveRightTab('graph')}

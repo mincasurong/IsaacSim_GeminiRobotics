@@ -1,49 +1,60 @@
 /* ── Shared Theme, Types & Helpers ────────────────────────── */
 
 export const C = {
-  // CCS Brand Colors (Dark Theme)
-  bg:       '#262624', // Background RGB(38, 38, 36)
-  bgChat:   '#2a2a28', // Slightly lighter for chat area
-  bgSide:   '#212120', // Slightly darker for sidebars
-  bgInput:  '#30302e', // Input fields (muted)
-  bgHover:  '#3a3a38', // Hover state
-  border:   '#454441', // CCS --border
-  borderHi: '#555451',
+  // E-Commerce Minimalist Light Theme (Default)
+  bg:       '#fafafa', 
+  bgChat:   '#ffffff', 
+  bgSide:   '#f4f4f4', 
+  bgInput:  '#ffffff', 
+  bgHover:  '#e5e5e5', 
+  border:   '#e0e0e0', 
+  borderHi: '#cccccc',
   
-  // Status Colors (Softened to match CCS vibe)
-  green:    '#4ade80',
-  greenDim: '#22c55e',
-  greenGlow:'rgba(74, 222, 128, 0.25)',
-  yellow:   '#facc15',
+  // Status Colors (muted for light mode)
+  green:    '#10b981',
+  greenDim: '#059669',
+  greenGlow:'rgba(16, 185, 129, 0.15)',
+  yellow:   '#f59e0b',
   
-  // Text Colors
+  // Text Colors (High contrast)
   white:    '#ffffff',
-  text:     '#f4f3f1', // Pampas (CCS foreground)
-  textDim:  '#a09e9c',
-  textMuted:'#757471',
+  text:     '#111111', 
+  textDim:  '#555555',
+  textMuted:'#888888',
   
   // Danger / Destructive
   red:      '#ef4444',
-  redGlow:  'rgba(239, 68, 68, 0.25)',
+  redGlow:  'rgba(239, 68, 68, 0.15)',
   
-  // Brand Accent (Crail / Rust Orange)
-  blue:     '#d46a43', // Repurposing 'blue' base to the CCS Accent so existing uses get the brand color
-  blueGlow: 'rgba(212, 106, 67, 0.25)',
-  accent:   '#d46a43', // Crail
-  accentDim:'#b35532',
-  accentGlow:'rgba(212, 106, 67, 0.3)',
+  // Brand Accent (Black / Dark Gray for E-Commerce Minimalist)
+  blue:     '#111111', 
+  blueGlow: 'rgba(17, 17, 17, 0.1)',
+  accent:   '#000000', 
+  accentDim:'#333333',
+  accentGlow:'rgba(0, 0, 0, 0.15)',
   
-  // Other accents (warmed up)
+  // Other accents
   orange:   '#f97316',
-  purple:   '#a78bfa',
-  purpleGlow:'rgba(167, 139, 250, 0.25)',
+  purple:   '#8b5cf6',
+  purpleGlow:'rgba(139, 92, 246, 0.15)',
   cyan:     '#06b6d4',
-  magenta:  '#f472b6',
-  lime:     '#a3e635',
+  magenta:  '#ec4899',
+  lime:     '#84cc16',
   
   // Surfaces
-  glassBg:  'rgba(38, 38, 36, 0.75)',
-  cardBg:   'linear-gradient(135deg, rgba(48, 48, 46, 0.9), rgba(38, 38, 36, 0.7))',
+  glassBg:  'rgba(255, 255, 255, 0.85)',
+  cardBg:   'linear-gradient(135deg, #ffffff, #f4f4f4)',
+};
+
+export const C_dark = {
+  // Previous Dark Theme backup
+  bg: '#262624', bgChat: '#2a2a28', bgSide: '#212120', bgInput: '#30302e', bgHover: '#3a3a38',
+  border: '#454441', borderHi: '#555451', green: '#4ade80', greenDim: '#22c55e', greenGlow: 'rgba(74,222,128,0.25)',
+  yellow: '#facc15', white: '#ffffff', text: '#f4f3f1', textDim: '#a09e9c', textMuted: '#757471',
+  red: '#ef4444', redGlow: 'rgba(239,68,68,0.25)', blue: '#d46a43', blueGlow: 'rgba(212,106,67,0.25)',
+  accent: '#d46a43', accentDim: '#b35532', accentGlow: 'rgba(212,106,67,0.3)', orange: '#f97316',
+  purple: '#a78bfa', purpleGlow: 'rgba(167,139,250,0.25)', cyan: '#06b6d4', magenta: '#f472b6', lime: '#a3e635',
+  glassBg: 'rgba(38,38,36,0.75)', cardBg: 'linear-gradient(135deg, rgba(48,48,46,0.9), rgba(38,38,36,0.7))'
 };
 
 export interface ChatMessage { 

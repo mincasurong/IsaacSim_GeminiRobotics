@@ -97,10 +97,13 @@ kin_conv = conveyor_table.GetPrim().GetAttribute("physics:kinematicEnabled")
 if kin_conv.IsValid(): kin_conv.Set(True)
 
 try:
-    from pxr import PhysxSchema
+    from pxr import PhysxSchema, Sdf
     surf_vel_api = PhysxSchema.PhysxSurfaceVelocityAPI.Apply(conveyor_table.GetPrim())
     surf_vel_api.CreateSurfaceVelocityEnabledAttr().Set(True)
-    surf_vel_api.CreateLocalVelocityAttr().Set(Gf.Vec3f(0.15, 0.0, 0.0)) # 15 cm/s along +X
+    try:
+        surf_vel_api.CreateSurfaceVelocityLocalAttr().Set(Gf.Vec3f(0.15, 0.0, 0.0)) # 15 cm/s along +X
+    except AttributeError:
+        surf_vel_api.GetPrim().CreateAttribute("physxSurfaceVelocity:surfaceVelocityLocal", Sdf.ValueTypeNames.Float3).Set(Gf.Vec3f(0.15, 0.0, 0.0))
 except Exception as e:
     print(f"Failed to apply SurfaceVelocityAPI: {e}")
 
@@ -215,8 +218,8 @@ try:
         {"graph_path": "/ActionGraph", "evaluator_name": "execution"},
         {
             keys.CREATE_NODES: [
-                ("OnPlaybackTick", "isaacsim.core.nodes.OgnOnPlaybackTick"),
-                ("ReadSimTime", "isaacsim.core.nodes.OgnIsaacReadSimulationTime"),
+                ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
                 ("Context", "isaacsim.ros2.bridge.ROS2Context"),
                 ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
                 ("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
@@ -358,12 +361,12 @@ while simulation_app.is_running():
         # Spawn next item at start of conveyor (X = -1.4, Y = 0.5 to 0.7, Z = 0.55)
         rp = conv_rigid_prims[next_item_idx]
         y_pos = random.uniform(0.5, 0.7)
-        rp.set_world_pose(
-            position=np.array([-1.4, y_pos, 0.55]),
-            orientation=np.array([1.0, 0.0, 0.0, 0.0])
+        rp.set_world_poses(
+            positions=np.array([[-1.4, y_pos, 0.55]]),
+            orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
         )
-        rp.set_linear_velocity(np.array([0.0, 0.0, 0.0]))
-        rp.set_angular_velocity(np.array([0.0, 0.0, 0.0]))
+        rp.set_linear_velocities(np.array([[0.0, 0.0, 0.0]]))
+        rp.set_angular_velocities(np.array([[0.0, 0.0, 0.0]]))
         
         last_spawn_time = now
         next_item_idx = (next_item_idx + 1) % num_conv_items

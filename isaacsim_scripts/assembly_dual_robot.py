@@ -97,10 +97,13 @@ kin_conv = conveyor_table.GetPrim().GetAttribute("physics:kinematicEnabled")
 if kin_conv.IsValid(): kin_conv.Set(True)
 
 try:
-    from pxr import PhysxSchema
+    from pxr import PhysxSchema, Sdf
     surf_vel_api = PhysxSchema.PhysxSurfaceVelocityAPI.Apply(conveyor_table.GetPrim())
     surf_vel_api.CreateSurfaceVelocityEnabledAttr().Set(True)
-    surf_vel_api.CreateLocalVelocityAttr().Set(Gf.Vec3f(0.15, 0.0, 0.0)) # 15 cm/s along +X
+    try:
+        surf_vel_api.CreateSurfaceVelocityLocalAttr().Set(Gf.Vec3f(0.15, 0.0, 0.0)) # 15 cm/s along +X
+    except AttributeError:
+        surf_vel_api.GetPrim().CreateAttribute("physxSurfaceVelocity:surfaceVelocityLocal", Sdf.ValueTypeNames.Float3).Set(Gf.Vec3f(0.15, 0.0, 0.0))
 except Exception as e:
     print(f"Failed to apply SurfaceVelocityAPI: {e}")
 
@@ -196,8 +199,8 @@ try:
         {"graph_path": "/ActionGraph", "evaluator_name": "execution"},
         {
             keys.CREATE_NODES: [
-                ("OnPlaybackTick", "isaacsim.core.nodes.OgnOnPlaybackTick"),
-                ("ReadSimTime", "isaacsim.core.nodes.OgnIsaacReadSimulationTime"),
+                ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
                 ("Context", "isaacsim.ros2.bridge.ROS2Context"),
                 ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
                 ("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),

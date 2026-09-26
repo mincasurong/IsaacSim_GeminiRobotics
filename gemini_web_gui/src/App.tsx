@@ -4,9 +4,9 @@ import {
   Terminal, ChevronDown, ChevronUp,
   Play, Square, RotateCcw, Plus, Minus, Wrench,
   PanelRightOpen, PanelRightClose, User,
-  BarChart3, Network, Map, Clock, Sparkles,
+  BarChart3, Network, Map, Clock, Sparkles, Moon, Sun,
 } from 'lucide-react';
-import { C, btnSmall, btnCtrl, monoFont, stripAnsi, fmt, LOG_COLORS, LOG_LABELS,
+import { C, C_light, C_dark, btnSmall, btnCtrl, monoFont, stripAnsi, fmt, LOG_COLORS, LOG_LABELS,
   type ChatMessage, type LogEntry, type RobotAction, type MetricsData } from './components/theme';
 import KpiDashboard from './components/KpiDashboard';
 import GanttChart from './components/GanttChart';
@@ -21,6 +21,15 @@ const API = 'http://localhost:3001';
 
 /* ── Main App ───────────────────────────────────────────── */
 function App() {
+  // Theme state
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    const t = isDark ? C_dark : C_light;
+    for (const [k, v] of Object.entries(t)) {
+      document.documentElement.style.setProperty(`--${k}`, v as string);
+    }
+  }, [isDark]);
+
   const [connected, setConnected] = useState(false);
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -202,8 +211,13 @@ function App() {
 
         <div style={{ flex: 1 }} />
 
+        {/* Theme Toggle */}
+        <button onClick={() => setIsDark(!isDark)} style={{ ...btnSmall, border: `1px solid ${C.border}`, width: 28, height: 28 }}>
+          {isDark ? <Sun size={14} color={C.yellow} /> : <Moon size={14} color={C.textDim} />}
+        </button>
+
         {/* Font size */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: 6, border: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'transparent', padding: '2px 4px', borderRadius: 6, border: `1px solid ${C.border}` }}>
           <button onClick={() => setFontSize(s => Math.max(10, s-1))} style={btnSmall}><Minus size={11} /></button>
           <span style={{ fontSize: 10, color: C.textMuted, width: 20, textAlign: 'center', fontFamily: monoFont }}>{fontSize}</span>
           <button onClick={() => setFontSize(s => Math.min(20, s+1))} style={btnSmall}><Plus size={11} /></button>

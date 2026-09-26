@@ -1,6 +1,8 @@
 /* ── Shared Theme, Types & Helpers ────────────────────────── */
 
-export const C = {
+/* ── Shared Theme, Types & Helpers ────────────────────────── */
+
+export const C_light = {
   // E-Commerce Minimalist Light Theme (Default)
   bg:       '#fafafa', 
   bgChat:   '#ffffff', 
@@ -10,30 +12,27 @@ export const C = {
   border:   '#e0e0e0', 
   borderHi: '#cccccc',
   
-  // Status Colors (muted for light mode)
+  // Status Colors
   green:    '#10b981',
   greenDim: '#059669',
   greenGlow:'rgba(16, 185, 129, 0.15)',
   yellow:   '#f59e0b',
   
-  // Text Colors (High contrast)
-  white:    '#ffffff',
+  // Text Colors
+  white:    '#111111', // Changed to dark for contrast in light mode
   text:     '#111111', 
   textDim:  '#555555',
   textMuted:'#888888',
   
-  // Danger / Destructive
   red:      '#ef4444',
   redGlow:  'rgba(239, 68, 68, 0.15)',
   
-  // Brand Accent (Black / Dark Gray for E-Commerce Minimalist)
   blue:     '#111111', 
   blueGlow: 'rgba(17, 17, 17, 0.1)',
   accent:   '#000000', 
   accentDim:'#333333',
   accentGlow:'rgba(0, 0, 0, 0.15)',
   
-  // Other accents
   orange:   '#f97316',
   purple:   '#8b5cf6',
   purpleGlow:'rgba(139, 92, 246, 0.15)',
@@ -41,7 +40,6 @@ export const C = {
   magenta:  '#ec4899',
   lime:     '#84cc16',
   
-  // Surfaces
   glassBg:  'rgba(255, 255, 255, 0.85)',
   cardBg:   'linear-gradient(135deg, #ffffff, #f4f4f4)',
 };
@@ -56,6 +54,12 @@ export const C_dark = {
   purple: '#a78bfa', purpleGlow: 'rgba(167,139,250,0.25)', cyan: '#06b6d4', magenta: '#f472b6', lime: '#a3e635',
   glassBg: 'rgba(38,38,36,0.75)', cardBg: 'linear-gradient(135deg, rgba(48,48,46,0.9), rgba(38,38,36,0.7))'
 };
+
+// Map CSS variables to C so existing inline styles work unmodified!
+export const C = Object.keys(C_light).reduce((acc, key) => {
+  acc[key as keyof typeof C_light] = `var(--${key})`;
+  return acc;
+}, {} as typeof C_light);
 
 export interface ChatMessage { 
   id: number | string; 

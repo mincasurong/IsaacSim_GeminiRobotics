@@ -20,11 +20,11 @@ const RobotNode = ({ data }: any) => {
       border: `3px solid ${data.color}`,
       boxShadow: isActive ? `0 0 15px ${data.color}80` : 'none',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      color: '#fff', fontFamily: monoFont, fontSize: 10, fontWeight: 'bold'
+      color: C.white, fontFamily: monoFont, fontSize: 10, fontWeight: 'bold'
     }}>
       <div>{data.label}</div>
       {data.phase && <div style={{ fontSize: 8, color: isActive ? data.color : C.textMuted, marginTop: 4 }}>{data.phase}</div>}
-      {data.target && <div style={{ fontSize: 7, color: '#fff' }}>[{data.target}]</div>}
+      {data.target && <div style={{ fontSize: 7, color: C.white }}>[{data.target}]</div>}
     </div>
   );
 };

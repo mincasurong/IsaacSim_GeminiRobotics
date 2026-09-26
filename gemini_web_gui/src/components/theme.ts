@@ -1,36 +1,49 @@
 /* ── Shared Theme, Types & Helpers ────────────────────────── */
 
 export const C = {
-  bg:       '#080a0f',
-  bgChat:   '#0d111a',
-  bgSide:   '#0f1420',
-  bgInput:  '#161c2b',
-  bgHover:  '#1e2538',
-  border:   'rgba(255, 255, 255, 0.08)',
-  borderHi: 'rgba(255, 255, 255, 0.16)',
-  green:    '#22c55e',
-  greenDim: '#16a34a',
-  greenGlow:'rgba(34, 197, 94, 0.25)',
+  // CCS Brand Colors (Dark Theme)
+  bg:       '#262624', // Background RGB(38, 38, 36)
+  bgChat:   '#2a2a28', // Slightly lighter for chat area
+  bgSide:   '#212120', // Slightly darker for sidebars
+  bgInput:  '#30302e', // Input fields (muted)
+  bgHover:  '#3a3a38', // Hover state
+  border:   '#454441', // CCS --border
+  borderHi: '#555451',
+  
+  // Status Colors (Softened to match CCS vibe)
+  green:    '#4ade80',
+  greenDim: '#22c55e',
+  greenGlow:'rgba(74, 222, 128, 0.25)',
   yellow:   '#facc15',
-  white:    '#f8fafc',
-  text:     '#e2e8f0',
-  textDim:  '#94a3b8',
-  textMuted:'#64748b',
+  
+  // Text Colors
+  white:    '#ffffff',
+  text:     '#f4f3f1', // Pampas (CCS foreground)
+  textDim:  '#a09e9c',
+  textMuted:'#757471',
+  
+  // Danger / Destructive
   red:      '#ef4444',
   redGlow:  'rgba(239, 68, 68, 0.25)',
-  blue:     '#38bdf8',
-  blueGlow: 'rgba(56, 189, 248, 0.25)',
-  accent:   '#0ea5e9',
-  accentDim:'#0284c7',
-  accentGlow:'rgba(14, 165, 233, 0.3)',
+  
+  // Brand Accent (Crail / Rust Orange)
+  blue:     '#d46a43', // Repurposing 'blue' base to the CCS Accent so existing uses get the brand color
+  blueGlow: 'rgba(212, 106, 67, 0.25)',
+  accent:   '#d46a43', // Crail
+  accentDim:'#b35532',
+  accentGlow:'rgba(212, 106, 67, 0.3)',
+  
+  // Other accents (warmed up)
   orange:   '#f97316',
   purple:   '#a78bfa',
   purpleGlow:'rgba(167, 139, 250, 0.25)',
   cyan:     '#06b6d4',
   magenta:  '#f472b6',
   lime:     '#a3e635',
-  glassBg:  'rgba(15, 23, 42, 0.75)',
-  cardBg:   'linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.7))',
+  
+  // Surfaces
+  glassBg:  'rgba(38, 38, 36, 0.75)',
+  cardBg:   'linear-gradient(135deg, rgba(48, 48, 46, 0.9), rgba(38, 38, 36, 0.7))',
 };
 
 export interface ChatMessage { 

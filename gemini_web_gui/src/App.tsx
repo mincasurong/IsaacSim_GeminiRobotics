@@ -181,11 +181,11 @@ function App() {
 
       {/* ════ Top Bar ════ */}
       <div style={{ height: 50, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, background: 'rgba(13, 17, 26, 0.85)', backdropFilter: 'blur(16px)', flexShrink: 0 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #0ea5e9, #38bdf8)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 15px rgba(56, 189, 248, 0.3)' }}><Bot size={17} color="#fff" /></div>
+        <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #d46a43, #d46a43)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 15px rgba(56, 189, 248, 0.3)' }}><Bot size={17} color="#fff" /></div>
         <div>
           <span style={{ fontWeight: 800, color: C.white, fontSize: 14, letterSpacing: '-0.02em' }}>Gemini Robotics ER</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -2 }}>
-            <span style={{ fontSize: 9.5, color: '#38bdf8', fontWeight: 600, fontFamily: monoFont }}>VLA × FRANKA MULTI-ARM</span>
+            <span style={{ fontSize: 9.5, color: '#d46a43', fontWeight: 600, fontFamily: monoFont }}>VLA × FRANKA MULTI-ARM</span>
           </div>
         </div>
         <div style={{ width: 1, height: 22, background: C.border, margin: '0 4px' }} />
@@ -218,7 +218,7 @@ function App() {
           <option value={7}>Mode 7 (Dual FR3)</option>
         </select>
         {!bringupRunning
-          ? <button onClick={startBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(14, 165, 233, 0.35)' }}><Play size={13} /> Start</button>
+          ? <button onClick={startBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #d46a43, #b35532)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(14, 165, 233, 0.35)' }}><Play size={13} /> Start</button>
           : <button onClick={stopBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(239, 68, 68, 0.35)' }}><Square size={13} /> Stop</button>
         }
         <button onClick={resetSim} style={{ ...btnCtrl, color: C.yellow, background: 'rgba(250, 204, 21, 0.08)', borderColor: 'rgba(250, 204, 21, 0.2)' }}><RotateCcw size={13} /> Reset</button>
@@ -227,7 +227,7 @@ function App() {
 
         {/* Tower height badge */}
         {metrics && metrics.tower_height > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.3)', fontSize: 11, color: '#38bdf8', fontWeight: 700 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.3)', fontSize: 11, color: '#d46a43', fontWeight: 700 }}>
             🏗️ {metrics.tower_height}/9
           </div>
         )}
@@ -248,7 +248,7 @@ function App() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ── Chat Area (center) ──────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'linear-gradient(180deg, #090c14 0%, #0d111a 100%)' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'linear-gradient(180deg, #212120 0%, #2a2a28 100%)' }}>
 
           {/* Messages */}
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
@@ -259,9 +259,9 @@ function App() {
                 const isOpt = m.role === 'architect' && (m.senderName?.includes('Performance') || m.emoji === '⚡');
                 const isUser = m.role === 'user';
                 
-                const borderColor = isOrch ? '#38bdf8' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? 'rgba(148, 163, 184, 0.3)' : 'rgba(34, 197, 94, 0.3)')));
+                const borderColor = isOrch ? '#d46a43' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? 'rgba(148, 163, 184, 0.3)' : 'rgba(34, 197, 94, 0.3)')));
                 const badgeBg = isOrch ? 'rgba(56, 189, 248, 0.15)' : (isArch ? 'rgba(167, 139, 250, 0.15)' : (isOpt ? 'rgba(251, 191, 36, 0.15)' : (isUser ? 'rgba(255,255,255,0.06)' : 'rgba(34, 197, 94, 0.15)')));
-                const badgeColor = isOrch ? '#38bdf8' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? '#94a3b8' : '#22c55e')));
+                const badgeColor = isOrch ? '#d46a43' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? '#94a3b8' : '#22c55e')));
 
                 return (
                   <div key={m.id} style={{
@@ -280,7 +280,7 @@ function App() {
                       border: `1px solid ${borderColor}55`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      {m.role === 'user' ? <User size={15} color="#94a3b8" /> : (m.emoji ? <span style={{ fontSize: 16, lineHeight: 1 }}>{m.emoji}</span> : <Bot size={15} color="#38bdf8" />)}
+                      {m.role === 'user' ? <User size={15} color="#94a3b8" /> : (m.emoji ? <span style={{ fontSize: 16, lineHeight: 1 }}>{m.emoji}</span> : <Bot size={15} color="#d46a43" />)}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -345,7 +345,7 @@ function App() {
                   transition: 'all 0.15s',
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.color = '#38bdf8';
+                  e.currentTarget.style.color = '#d46a43';
                   e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
                   e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)';
                 }}
@@ -377,7 +377,7 @@ function App() {
 
               <button onClick={sendGoal} disabled={!text.trim()} style={{
                 width: 34, height: 34, borderRadius: 8, border: 'none', cursor: text.trim() ? 'pointer' : 'default', flexShrink: 0,
-                background: text.trim() ? 'linear-gradient(135deg, #0ea5e9, #0284c7)' : 'transparent', color: text.trim() ? '#fff' : C.textMuted,
+                background: text.trim() ? 'linear-gradient(135deg, #d46a43, #b35532)' : 'transparent', color: text.trim() ? '#fff' : C.textMuted,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: text.trim() ? '0 0 10px rgba(14, 165, 233, 0.4)' : 'none',
                 transition: 'all 0.15s',
@@ -427,7 +427,7 @@ function App() {
                     display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
                     fontSize: 11, fontWeight: 700, cursor: 'pointer',
                     background: activeRightTab === 'graph' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                    color: activeRightTab === 'graph' ? '#38bdf8' : C.textDim,
+                    color: activeRightTab === 'graph' ? '#d46a43' : C.textDim,
                     border: activeRightTab === 'graph' ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
                   }}
                 >

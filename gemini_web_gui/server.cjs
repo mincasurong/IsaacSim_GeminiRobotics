@@ -57,17 +57,19 @@ app.post('/api/build', (_req, res) => {
 });
 
 /* ── Start bringup ────────────────────────────────────────── */
-app.post('/api/start', (_req, res) => {
+app.post('/api/start', (req, res) => {
   if (bringupProc && !bringupProc.killed) {
     return res.json({ ok: false, msg: 'Already running' });
   }
 
+  const mode = req.body.mode || 1;
+
   logBuffer = [];
   appendLog('[GUI] Cleaning up old processes before start...');
-  const pkill = require('child_process').spawnSync('wsl', ['-d', 'Ubuntu-24.04', 'bash', '-c', 'pkill -f gemini_controller; pkill -f rosbridge; pkill -f multi_robot; pkill -f bringup.bash']);
-  appendLog('[GUI] Starting bringup.bash (Gemini mode)...');
+  const pkill = require('child_process').spawnSync('wsl', ['-d', 'Ubuntu-24.04', 'bash', '-c', 'pkill -f gemini_controller; pkill -f rosbridge; pkill -f multi_robot; pkill -f conveyor; pkill -f bringup.bash']);
+  appendLog(`[GUI] Starting bringup.bash (Mode ${mode})...`);
 
-  const cmd = `echo 1 | bash /home/isaac/catkin_ws/bringup.bash`;
+  const cmd = `echo ${mode} | bash /home/isaac/catkin_ws/bringup.bash`;
 
   bringupProc = spawn('wsl', ['-d', 'Ubuntu-24.04', 'bash', '-c', cmd], {
     stdio: ['ignore', 'pipe', 'pipe'],

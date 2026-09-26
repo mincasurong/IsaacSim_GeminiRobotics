@@ -165,7 +165,8 @@ function App() {
     addMsg('system', '✅ Goal sent to Gemini agent.');
     setText('');
   };
-  const startBringup = async () => { try { await fetch(`${API}/api/start`, { method: 'POST' }); setBringupRunning(true); } catch { addMsg('system', '❌ Backend unreachable.'); } };
+  const [bringupMode, setBringupMode] = useState(1);
+  const startBringup = async () => { try { await fetch(`${API}/api/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: bringupMode }) }); setBringupRunning(true); } catch { addMsg('system', '❌ Backend unreachable.'); } };
   const stopBringup = async () => { try { await fetch(`${API}/api/stop`, { method: 'POST' }); setBringupRunning(false); } catch {} };
   const triggerBuild = async () => { try { await fetch(`${API}/api/build`, { method: 'POST' }); addMsg('system', '🔧 Build triggered. Check WSL terminal.'); } catch { addMsg('system', '❌ Backend unreachable.'); } };
   const resetSim = () => { if (!connected || !resetTopic.current) { addMsg('system', '⚠️ Not connected.'); return; } resetTopic.current.publish(new ROSLIB.Message({})); addMsg('system', '🔄 Simulation reset sent.'); };
@@ -212,6 +213,10 @@ function App() {
 
         {/* Controls */}
         <button onClick={triggerBuild} style={{ ...btnCtrl, color: C.blue, background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.2)' }}><Wrench size={13} /> Build</button>
+        <select value={bringupMode} onChange={(e) => setBringupMode(parseInt(e.target.value))} style={{ ...btnCtrl, background: 'transparent', color: C.text, width: 90 }}>
+          <option value={1}>Mode 1</option>
+          <option value={7}>Mode 7 (Dual FR3)</option>
+        </select>
         {!bringupRunning
           ? <button onClick={startBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(14, 165, 233, 0.35)' }}><Play size={13} /> Start</button>
           : <button onClick={stopBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(239, 68, 68, 0.35)' }}><Square size={13} /> Stop</button>

@@ -291,9 +291,11 @@ try:
     
     robot1_art = Articulation("/FR3_1")
     robot1_art.initialize()
+    robot1_art.set_world_poses(positions=np.array([[-0.4, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
     robot2_art = Articulation("/FR3_2")
     robot2_art.initialize()
+    robot2_art.set_world_poses(positions=np.array([[0.4, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
     q_home_fr3 = np.array([0.0, -0.785398, 0.0, -2.35619, 0.0, 1.57079, 0.785398, 0.04, 0.04])
     robot1_art.set_joint_positions(q_home_fr3)

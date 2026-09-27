@@ -308,9 +308,17 @@ try:
     robot2_art.initialize()
     robot2_art.set_world_poses(positions=np.array([[0.4, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
-    q_home_fr3 = np.array([0.0, -0.785398, 0.0, -2.35619, 0.0, 1.57079, 0.785398, 0.04, 0.04])
-    robot1_art.set_joint_positions(q_home_fr3)
-    robot2_art.set_joint_positions(q_home_fr3)
+    # FR3 has 7 arm DOFs; gripper fingers are separate joints
+    q_home_arm = np.array([0.0, -0.785398, 0.0, -2.35619, 0.0, 1.57079, 0.785398])
+    q_home_gripper = np.array([0.04, 0.04])
+    
+    robot1_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
+    robot2_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
+    try:
+        robot1_art.set_joint_positions(q_home_gripper, joint_indices=np.array([7, 8]))
+        robot2_art.set_joint_positions(q_home_gripper, joint_indices=np.array([7, 8]))
+    except Exception:
+        pass
 
 except Exception as e:
     print(f"Error setting up initial joint positions or reset interfaces: {e}")

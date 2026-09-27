@@ -119,7 +119,7 @@ print("Loading Robot 1 (FR3_1)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_1")
 robot1_prim = get_prim_at_path("/FR3_1")
 xform_api1 = UsdGeom.XformCommonAPI(robot1_prim)
-xform_api1.SetTranslate(Gf.Vec3d(-0.7, 0.0, 0.20))
+xform_api1.SetTranslate(Gf.Vec3d(-0.7, -0.2, 0.20))
 xform_api1.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 # Robot 2 (Right Arm)
@@ -127,7 +127,7 @@ print("Loading Robot 2 (FR3_2)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_2")
 robot2_prim = get_prim_at_path("/FR3_2")
 xform_api2 = UsdGeom.XformCommonAPI(robot2_prim)
-xform_api2.SetTranslate(Gf.Vec3d(0.7, 0.0, 0.20))
+xform_api2.SetTranslate(Gf.Vec3d(0.7, -0.2, 0.20))
 xform_api2.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True):
@@ -393,11 +393,11 @@ try:
     
     robot1_art = Articulation("/FR3_1")
     robot1_art.initialize()
-    robot1_art.set_world_poses(positions=np.array([[-0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+    robot1_art.set_world_poses(positions=np.array([[-0.7, -0.2, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
     robot2_art = Articulation("/FR3_2")
     robot2_art.initialize()
-    robot2_art.set_world_poses(positions=np.array([[0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+    robot2_art.set_world_poses(positions=np.array([[0.7, -0.2, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
     # FR3 has 7 arm DOFs; gripper fingers are separate joints
     q_home_arm = np.array([0.0, -0.785398, 0.0, -2.35619, 0.0, 1.57079, 0.785398])
@@ -451,11 +451,11 @@ def reset_simulation():
         # Reset Robot Arms
         robot1_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
         robot1_art.set_joint_velocities(np.zeros(robot1_art.num_dof))
-        robot1_art.set_world_poses(positions=np.array([[-0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+        robot1_art.set_world_poses(positions=np.array([[-0.7, -0.2, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
         
         robot2_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
         robot2_art.set_joint_velocities(np.zeros(robot2_art.num_dof))
-        robot2_art.set_world_poses(positions=np.array([[0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+        robot2_art.set_world_poses(positions=np.array([[0.7, -0.2, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
         
         # Put conveyor objects back under the floor
         for rp in conv_rigid_prims:

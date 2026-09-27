@@ -700,7 +700,7 @@ class ConveyorDualController(Node):
                 for i in range(7):
                     q_sol[i] = np.clip(q_sol[i], kinematics.FR3_JOINT_LIMITS[i][0], kinematics.FR3_JOINT_LIMITS[i][1])
             elif state in ['GRASP', 'RELEASE']:
-                q_sol = np.array(q_current)
+                q_sol = getattr(self, f'end_q{robot_id}')
             else:
                 # CARTESIAN SPACE INTERPOLATION
                 # DYNAMIC TRACKING: If picking, continuously update target position

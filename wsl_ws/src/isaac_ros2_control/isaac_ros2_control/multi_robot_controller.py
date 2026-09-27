@@ -317,16 +317,18 @@ class MultiRobotController(Node):
             elif action == 'go_home':
                 if self.center_occupied_by == r_id:
                     self.center_occupied_by = None
-                self._send_home_cmd(r_id)
-                self._set_state(r_id, 'FINISHED')
-                self._publish_result(True, f"Robot {r_id} sent home.", f"FR3_{r_id}")
+                curr_grip = getattr(self, f'end_gripper{r_id}', self.gripper_open)
+                self._initialize_joint_phase(r_id, self.q_home_fr3, curr_grip)
+                self._set_state(r_id, 'RETURN_HOME')
+                self._publish_result(True, f"Robot {r_id} returning home.", f"FR3_{r_id}")
 
             elif action == 'verify_tower':
-                # Send all robots home for clear view
+                # Send all robots home for clear view, interpolating safely without dropping blocks
                 self.center_occupied_by = None
                 for i in [1, 2, 3]:
-                    self._send_home_cmd(i)
-                    self._set_state(i, 'FINISHED')
+                    curr_grip = getattr(self, f'end_gripper{i}', self.gripper_open)
+                    self._initialize_joint_phase(i, self.q_home_fr3, curr_grip)
+                    self._set_state(i, 'RETURN_HOME')
                 self._publish_result(True, "Robots moved out of the way.", "global")
 
             else:

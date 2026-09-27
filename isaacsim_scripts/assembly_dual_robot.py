@@ -31,6 +31,10 @@ from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.storage.native import get_assets_root_path
 from pxr import Gf, UsdGeom, UsdPhysics, Usd, Sdf
 import omni.usd
+import omni.replicator.core as rep
+import omni.syntheticdata._syntheticdata as sd
+from isaacsim.sensors.camera import Camera
+import isaacsim.core.experimental.utils.transform as transform_utils
 
 # Enable ROS 2 Bridge extension
 app_utils.enable_extension("isaacsim.ros2.bridge")
@@ -191,6 +195,54 @@ UsdPhysics.CollisionAPI.Apply(engine.GetPrim())
 
 
 simulation_app.update()
+
+# 5.5 Overhead Camera for Gemini Robotics VLM
+print("Adding overhead camera for Gemini Robotics integration...")
+overhead_camera = Camera(
+    prim_path="/OverheadCamera",
+    position=np.array([0.0, 0.4, 2.0]), # Adjusted to see both robots and workspace
+    frequency=10,
+    resolution=(640, 480),
+    orientation=transform_utils.euler_angles_to_quaternion(
+        np.array([0, 90, 0]), degrees=True
+    ).numpy()
+)
+
+def publish_overhead_rgb(camera, freq=10):
+    render_product = camera._render_product_path
+    step_size = int(60 / freq)
+    rv = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.Rgb.name)
+    writer = rep.writers.get(rv + "ROS2PublishImage")
+    writer.initialize(frameId="overhead_camera", topicName="/overhead_camera/rgb")
+    writer.attach([render_product])
+    gate_path = omni.syntheticdata.SyntheticData._get_node_path(rv + "IsaacSimulationGate", render_product)
+    og.Controller.attribute(gate_path + ".inputs:step").set(step_size)
+
+def publish_overhead_depth(camera, freq=10):
+    render_product = camera._render_product_path
+    step_size = int(60 / freq)
+    rv = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.DistanceToImagePlane.name)
+    writer = rep.writers.get(rv + "ROS2PublishImage")
+    writer.initialize(frameId="overhead_camera", topicName="/overhead_camera/depth")
+    writer.attach([render_product])
+    gate_path = omni.syntheticdata.SyntheticData._get_node_path(rv + "IsaacSimulationGate", render_product)
+    og.Controller.attribute(gate_path + ".inputs:step").set(step_size)
+
+def publish_camera_info(camera, freq=10):
+    render_product = camera._render_product_path
+    step_size = int(60 / freq)
+    writer = rep.writers.get("ROS2PublishCameraInfo")
+    writer.initialize(frameId="overhead_camera", topicName="/overhead_camera/camera_info")
+    writer.attach([render_product])
+
+try:
+    overhead_camera.initialize()
+    publish_overhead_rgb(overhead_camera, freq=10)
+    publish_overhead_depth(overhead_camera, freq=10)
+    publish_camera_info(overhead_camera, freq=10)
+    print("Overhead camera initialized and publishing to ROS 2.")
+except Exception as e:
+    print(f"Failed to initialize overhead camera: {e}")
 
 # 6. Setup ROS 2 Bridge Action Graph
 try:

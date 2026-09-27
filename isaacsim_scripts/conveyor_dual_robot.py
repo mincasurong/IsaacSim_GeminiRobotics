@@ -442,6 +442,49 @@ engine_rp = RigidPrim("/HeavyEnginePart")
 engine_rp.initialize()
 conv_rigid_prims.append(engine_rp)
 
+# UI Reset Button setup
+import omni.appwindow
+import carb.input
+import omni.ui as ui
+
+def reset_simulation():
+    print("[RESET] Resetting robot arms and clearing conveyor...")
+    try:
+        # Reset Robot Arms
+        robot1_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
+        robot1_art.set_joint_velocities(np.zeros(robot1_art.num_dof))
+        robot1_art.set_world_poses(positions=np.array([[-0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+        
+        robot2_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
+        robot2_art.set_joint_velocities(np.zeros(robot2_art.num_dof))
+        robot2_art.set_world_poses(positions=np.array([[0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+        
+        # Put all objects back under the floor
+        for rp in conv_rigid_prims:
+            rp.set_world_poses(positions=np.array([[0.0, 0.0, -2.0]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
+            rp.set_linear_velocities(np.zeros((1, 3)))
+            rp.set_angular_velocities(np.zeros((1, 3)))
+            
+    except Exception as e:
+        print(f"Failed to reset simulation: {e}")
+
+def on_keyboard_event(event, *args, **kwargs):
+    if event.type == carb.input.KeyboardEventType.KEY_PRESS:
+        if event.input.name in ["R", "I"]:
+            reset_simulation()
+    return True
+
+appwindow = omni.appwindow.get_default_app_window()
+input_interface = carb.input.acquire_input_interface()
+keyboard = appwindow.get_keyboard()
+sub_keyboard = input_interface.subscribe_to_keyboard_events(keyboard, on_keyboard_event)
+
+controls_window = ui.Window("Conveyor Controls", width=400, height=100)
+with controls_window.frame:
+    with ui.VStack(spacing=10):
+        ui.Label("Controls:", height=20)
+        ui.Button("Initialize Poses / Clear Conveyor (R key)", clicked_fn=lambda: reset_simulation(), height=30)
+
 print("\n--- STARTING SIMULATION AND CONVEYOR SPAWNER ---")
 while simulation_app.is_running():
     now = time.time()

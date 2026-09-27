@@ -377,7 +377,7 @@ try:
                     ui.Spacer(height=2)
                     ui.Label("Mobile Manipulator Factory Simulation", alignment=ui.Alignment.CENTER)
                     ui.Label("Press 'R' / 'I' keys to trigger reset", alignment=ui.Alignment.CENTER)
-                    init_btn = ui.Button("Reset Robot & Scene", height=35)
+                    init_btn = ui.Button("Initialize Poses / Reset Scene (R key)", height=35)
                     init_btn.set_clicked_fn(lambda: reset_simulation(publish_to_ros=True))
                     ui.Spacer(height=2)
             print("[UI] Simulation panel created successfully.")

@@ -313,7 +313,7 @@ function App() {
                         style={{
                           fontSize: fontSize,
                           lineHeight: 1.6,
-                          color: '#e2e8f0',
+                          color: C.text,
                           wordBreak: 'break-word',
                           whiteSpace: 'pre-wrap',
                           fontFamily: (m.role === 'architect' && m.text.includes('[')) ? monoFont : 'inherit',
@@ -352,22 +352,22 @@ function App() {
                   borderRadius: 20,
                   fontSize: 10.5,
                   fontWeight: 600,
-                  color: '#94a3b8',
-                  background: 'rgba(255, 255, 255, 0.04)',
+                  color: C.textDim,
+                  background: C.bgInput,
                   border: `1px solid ${C.border}`,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   transition: 'all 0.15s',
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.color = '#d46a43';
-                  e.currentTarget.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-                  e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)';
+                  e.currentTarget.style.color = C.text;
+                  e.currentTarget.style.borderColor = C.borderHi;
+                  e.currentTarget.style.background = C.bgHover;
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.color = '#94a3b8';
+                  e.currentTarget.style.color = C.textDim;
                   e.currentTarget.style.borderColor = C.border;
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                  e.currentTarget.style.background = C.bgInput;
                 }}
               >
                 {qp.label}

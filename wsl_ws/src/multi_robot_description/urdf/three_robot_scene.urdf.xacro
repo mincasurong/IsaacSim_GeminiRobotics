@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="three_robot_scene">
+
+  <!-- Include Franka macro from franka_description -->
+  <xacro:include filename="$(find franka_description)/robots/common/franka_robot.xacro"/>
+
+  <!-- World Frame -->
+  <link name="world"/>
+
+  <!-- Main Robot Table -->
+  <link name="main_table_link">
+    <visual>
+      <geometry>
+        <box size="1.2 1.5 0.2"/>
+      </geometry>
+      <material name="white">
+        <color rgba="1 1 1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1.2 1.5 0.2"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="world_to_main_table" type="fixed">
+    <parent link="world"/>
+    <child link="main_table_link"/>
+    <origin xyz="0 0 0.10" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Central Target Table -->
+  <link name="target_table_link">
+    <visual>
+      <geometry>
+        <box size="0.3 0.3 0.3"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0 0 1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.3 0.3 0.3"/>
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="world_to_target_table" type="fixed">
+    <parent link="world"/>
+    <child link="target_table_link"/>
+    <origin xyz="0 0 0.15" rpy="0 0 0"/>
+  </joint>
+
+  <!-- FR3 1 (Left) -->
+  <xacro:franka_robot robot_type="fr3" arm_prefix="fr3_1_" parent="world" xyz="-0.7 0.0 0.20" rpy="0 0 0.0" hand="true" />
+
+  <!-- FR3 2 (Right) -->
+  <xacro:franka_robot robot_type="fr3" arm_prefix="fr3_2_" parent="world" xyz="0.7 0.0 0.20" rpy="0 0 0.0" hand="true" />
+
+  <!-- FR3 3 (Back) -->
+  <xacro:franka_robot robot_type="fr3" arm_prefix="fr3_3_" parent="world" xyz="0.0 0.7 0.20" rpy="0 0 -1.57079632679" hand="true" />
+
+</robot>

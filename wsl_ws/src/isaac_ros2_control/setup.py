@@ -38,6 +38,7 @@ setup(
             'conveyor_gemini_node = isaac_ros2_control.conveyor_gemini_node:main',
             'experiment_runner = isaac_ros2_control.experiment_runner:main',
             'analyze_experiments = isaac_ros2_control.analyze_experiments:main',
+            'trajectory_adapter = isaac_ros2_control.trajectory_adapter:main',
         ],
     },
 )

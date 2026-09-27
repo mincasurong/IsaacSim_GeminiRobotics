@@ -119,7 +119,7 @@ print("Loading Robot 1 (FR3_1)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_1")
 robot1_prim = get_prim_at_path("/FR3_1")
 xform_api1 = UsdGeom.XformCommonAPI(robot1_prim)
-xform_api1.SetTranslate(Gf.Vec3d(-0.4, 0.0, 0.20))
+xform_api1.SetTranslate(Gf.Vec3d(-0.7, 0.0, 0.20))
 xform_api1.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 # Robot 2 (Right Arm)
@@ -127,7 +127,7 @@ print("Loading Robot 2 (FR3_2)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_2")
 robot2_prim = get_prim_at_path("/FR3_2")
 xform_api2 = UsdGeom.XformCommonAPI(robot2_prim)
-xform_api2.SetTranslate(Gf.Vec3d(0.4, 0.0, 0.20))
+xform_api2.SetTranslate(Gf.Vec3d(0.7, 0.0, 0.20))
 xform_api2.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True):

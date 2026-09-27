@@ -268,7 +268,8 @@ try:
                 ("PublishTF.inputs:targetPrims", [
                     usdrt.Sdf.Path("/FR3_1"),
                     usdrt.Sdf.Path("/FR3_2"),
-                    usdrt.Sdf.Path("/HeavyChassis"), usdrt.Sdf.Path("/Gear1"), usdrt.Sdf.Path("/Gear2"), usdrt.Sdf.Path("/DebrisObstacle"),
+                    usdrt.Sdf.Path("/Block1"), usdrt.Sdf.Path("/Block2"), 
+                    usdrt.Sdf.Path("/LongBar"), usdrt.Sdf.Path("/HeavyEnginePart"),
                 ]),
                 
                 # Robot 1 config

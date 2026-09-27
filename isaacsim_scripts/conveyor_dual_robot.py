@@ -207,7 +207,7 @@ bar = UsdGeom.Cube.Define(stage, bar_path)
 bar.GetSizeAttr().Set(1.0)
 xform = UsdGeom.Xformable(bar.GetPrim())
 xform.ClearXformOpOrder()
-xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.7, 0.53))
+xform.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.3, 0.25))
 xform.AddScaleOp().Set(Gf.Vec3f(0.8, 0.06, 0.06)) # 80cm long
 bar.CreateDisplayColorAttr().Set([Gf.Vec3f(0.1, 0.1, 0.9)]) # Blue
 
@@ -220,7 +220,7 @@ engine = UsdGeom.Cube.Define(stage, engine_path)
 engine.GetSizeAttr().Set(1.0)
 engine_xform = UsdGeom.Xformable(engine.GetPrim())
 engine_xform.ClearXformOpOrder()
-engine_xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.85, 0.55))
+engine_xform.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.6, 0.25))
 engine_xform.AddScaleOp().Set(Gf.Vec3f(1.0, 0.15, 0.1)) # 100cm long, bulkier
 engine.CreateDisplayColorAttr().Set([Gf.Vec3f(0.4, 0.4, 0.4)]) # Grey
 
@@ -433,14 +433,12 @@ for i in range(num_conv_items):
     rp.initialize()
     conv_rigid_prims.append(rp)
 
-# Also add special items to the moving list
+# Initialize special static items (do not add to conv_rigid_prims)
 bar_rp = RigidPrim("/LongBar")
 bar_rp.initialize()
-conv_rigid_prims.append(bar_rp)
 
 engine_rp = RigidPrim("/HeavyEnginePart")
 engine_rp.initialize()
-conv_rigid_prims.append(engine_rp)
 
 # UI Reset Button setup
 import omni.appwindow
@@ -459,11 +457,20 @@ def reset_simulation():
         robot2_art.set_joint_velocities(np.zeros(robot2_art.num_dof))
         robot2_art.set_world_poses(positions=np.array([[0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
         
-        # Put all objects back under the floor
+        # Put conveyor objects back under the floor
         for rp in conv_rigid_prims:
             rp.set_world_poses(positions=np.array([[0.0, 0.0, -2.0]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
             rp.set_linear_velocities(np.zeros((1, 3)))
             rp.set_angular_velocities(np.zeros((1, 3)))
+            
+        # Reset static dual-arm objects to their original positions on the main table
+        bar_rp.set_world_poses(positions=np.array([[0.0, -0.3, 0.25]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
+        bar_rp.set_linear_velocities(np.zeros((1, 3)))
+        bar_rp.set_angular_velocities(np.zeros((1, 3)))
+        
+        engine_rp.set_world_poses(positions=np.array([[0.0, -0.6, 0.25]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
+        engine_rp.set_linear_velocities(np.zeros((1, 3)))
+        engine_rp.set_angular_velocities(np.zeros((1, 3)))
             
     except Exception as e:
         print(f"Failed to reset simulation: {e}")

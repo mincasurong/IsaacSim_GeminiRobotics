@@ -798,6 +798,10 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     result["error_context"] = f"Pick failed. Current workspace status: {json.dumps(status)}. Suggest calling replan or try an alternative."
             elif name == "place":
                 result = self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "fast"), args.get("approach_height", 0.1))
+            elif name == "dual_arm_pick":
+                result = self._fn_dual_arm_pick(args.get("object_label"), args.get("offset_1", -0.3), args.get("offset_2", 0.3), args.get("speed", "fast"))
+            elif name == "dual_arm_place":
+                result = self._fn_dual_arm_place(args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "fast"))
             elif name == "place_relative":
                 result = self._fn_place_relative(args.get("robot"), args.get("anchor_block"), args.get("relation"), args.get("speed", "fast"), args.get("approach_height", 0.1))
             elif name == "verify_tower":
@@ -907,6 +911,38 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         })
         self.action_pub.publish(msg)
         return self._wait_for_action_complete(robot, timeout=25.0)
+
+    def _fn_dual_arm_pick(self, object_label: str, offset_1: float, offset_2: float, speed: str = 'fast') -> dict:
+        msg = String()
+        msg.data = json.dumps({
+            "action": "dual_arm_pick",
+            "target": object_label,
+            "offset_1": offset_1,
+            "offset_2": offset_2,
+            "speed": speed
+        })
+        self.action_pub.publish(msg)
+        # Wait for both robots to complete
+        import time
+        start_time = time.time()
+        res1 = self._wait_for_action_complete("FR3_1", timeout=30.0)
+        res2 = self._wait_for_action_complete("FR3_2", timeout=30.0)
+        return {"success": res1.get("success", False) and res2.get("success", False), "FR3_1": res1, "FR3_2": res2}
+
+    def _fn_dual_arm_place(self, x: float, y: float, speed: str = 'fast') -> dict:
+        msg = String()
+        msg.data = json.dumps({
+            "action": "dual_arm_place",
+            "x": x,
+            "y": y,
+            "speed": speed
+        })
+        self.action_pub.publish(msg)
+        import time
+        start_time = time.time()
+        res1 = self._wait_for_action_complete("FR3_1", timeout=30.0)
+        res2 = self._wait_for_action_complete("FR3_2", timeout=30.0)
+        return {"success": res1.get("success", False) and res2.get("success", False), "FR3_1": res1, "FR3_2": res2}
 
     def _fn_place_relative(self, robot: str, anchor_block: str, relation: str, speed: str = 'fast', approach_height: float = 0.1) -> dict:
         """Resolve a relative placement request into absolute coordinates via TF."""

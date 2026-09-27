@@ -393,11 +393,11 @@ try:
     
     robot1_art = Articulation("/FR3_1")
     robot1_art.initialize()
-    robot1_art.set_world_poses(positions=np.array([[-0.4, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+    robot1_art.set_world_poses(positions=np.array([[-0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
     robot2_art = Articulation("/FR3_2")
     robot2_art.initialize()
-    robot2_art.set_world_poses(positions=np.array([[0.4, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+    robot2_art.set_world_poses(positions=np.array([[0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
     # FR3 has 7 arm DOFs; gripper fingers are separate joints
     q_home_arm = np.array([0.0, -0.785398, 0.0, -2.35619, 0.0, 1.57079, 0.785398])
@@ -433,22 +433,49 @@ for i in range(num_conv_items):
     rp.initialize()
     conv_rigid_prims.append(rp)
 
+# Also add special items to the moving list
+bar_rp = RigidPrim("/LongBar")
+bar_rp.initialize()
+conv_rigid_prims.append(bar_rp)
+
+engine_rp = RigidPrim("/HeavyEnginePart")
+engine_rp.initialize()
+conv_rigid_prims.append(engine_rp)
+
 print("\n--- STARTING SIMULATION AND CONVEYOR SPAWNER ---")
 while simulation_app.is_running():
     now = time.time()
     if now - last_spawn_time > spawn_interval:
         # Spawn next item at start of conveyor (X = -1.4, Y = 0.5 to 0.7, Z = 0.55)
-        rp = conv_rigid_prims[next_item_idx]
-        y_pos = random.uniform(0.5, 0.7)
-        rp.set_world_poses(
-            positions=np.array([[-1.4, y_pos, 0.55]]),
-            orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
-        )
-        rp.set_linear_velocities(np.array([[0.0, 0.0, 0.0]]))
-        rp.set_angular_velocities(np.array([[0.0, 0.0, 0.0]]))
-        
-        last_spawn_time = now
-        next_item_idx = (next_item_idx + 1) % num_conv_items
+        # Note: num_conv_items is 10, so we only spawn the first 10 items (ConvItem0...9)
+        if next_item_idx < num_conv_items:
+            rp = conv_rigid_prims[next_item_idx]
+            y_pos = np.random.uniform(0.5, 0.7)
+            rp.set_world_poses(
+                positions=np.array([[-1.4, y_pos, 0.55]]),
+                orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
+            )
+            rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
+            rp.set_angular_velocities(np.array([[0.0, 0.0, 0.0]]))
+            
+            last_spawn_time = now
+            next_item_idx = (next_item_idx + 1) % num_conv_items
+            
+    # Manual Conveyor Enforcer
+    # The PhysxSurfaceVelocityAPI can be finicky. This reliably moves objects
+    # that are resting on the conveyor belt (Z between 0.49 and 0.58).
+    for rp in conv_rigid_prims:
+        pos, rot = rp.get_world_poses()
+        if pos is not None and len(pos) > 0:
+            p = pos[0]
+            # If on the conveyor belt
+            if -1.6 < p[0] < 1.6 and 0.3 < p[1] < 0.9 and 0.49 < p[2] < 0.58:
+                vel = rp.get_linear_velocities()
+                if vel is not None and len(vel) > 0:
+                    v = vel[0]
+                    # Gently enforce X velocity to match conveyor speed
+                    if v[0] < 0.15:
+                        rp.set_linear_velocities(np.array([[0.15, v[1], v[2]]]))
         
     simulation_app.update()
 

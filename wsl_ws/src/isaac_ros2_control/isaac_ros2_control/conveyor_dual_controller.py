@@ -268,7 +268,7 @@ class ConveyorDualController(Node):
                 r_id = 2
             elif 'FR3_3' in robot_str or 'ROBOT3' in robot_str or '3' in robot_str:
                 r_id = 3
-            elif action == 'verify_tower':
+            elif action == 'verify_tower' or action == 'dual_arm_pick' or action == 'dual_arm_place':
                 # Special global action
                 r_id = 'global'
             else:
@@ -320,6 +320,38 @@ class ConveyorDualController(Node):
                 self._send_home_cmd(r_id)
                 self._set_state(r_id, 'FINISHED')
                 self._publish_result(True, f"Robot {r_id} sent home.", f"FR3_{r_id}")
+
+            elif action == 'dual_arm_pick':
+                target_label = cmd.get('target', '')
+                block_name = self._resolve_block_name(target_label)
+                if not block_name:
+                    self._publish_result(False, f"Could not map target '{target_label}' to a block prim.", "global")
+                    return
+                # Setup both robots
+                speed = cmd.get('speed', 'fast')
+                steps = 20 if speed == 'fast' else (70 if speed == 'slow' else 40)
+                for rid, offset_key in [(1, 'offset_1'), (2, 'offset_2')]:
+                    setattr(self, f'gemini_action{rid}', 'dual_arm_pick')
+                    setattr(self, f'active_target{rid}', block_name)
+                    setattr(self, f'grasp_offset{rid}', float(cmd.get(offset_key, 0.0)))
+                    setattr(self, f'steps_per_phase{rid}', steps)
+                    setattr(self, f'hover_height{rid}', 0.1)
+                    self._set_state(rid, 'INIT')
+
+            elif action == 'dual_arm_place':
+                speed = cmd.get('speed', 'fast')
+                steps = 20 if speed == 'fast' else (70 if speed == 'slow' else 40)
+                for rid in [1, 2]:
+                    setattr(self, f'gemini_action{rid}', 'dual_arm_place')
+                    setattr(self, f'target_x{rid}', cmd.get('x', 0.0))
+                    setattr(self, f'target_y{rid}', cmd.get('y', 0.0))
+                    setattr(self, f'steps_per_phase{rid}', steps)
+                    setattr(self, f'hover_height{rid}', 0.1)
+                    curr_state = getattr(self, f'state{rid}')
+                    if curr_state == 'WAITING_FOR_PLACE_CMD':
+                        self._set_state(rid, 'WAIT_FOR_CENTER')
+                    else:
+                        self._publish_result(False, f"Robot {rid} is not ready to place (in {curr_state}).", f"FR3_{rid}")
 
             elif action == 'verify_tower':
                 # Send all robots home for clear view

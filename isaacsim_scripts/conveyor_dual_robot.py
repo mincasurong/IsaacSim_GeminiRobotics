@@ -16,8 +16,8 @@ parser.add_argument("--test", default=False, action="store_true", help="Run in t
 parser.add_argument("--headless", default=False, action="store_true", help="Run in headless mode")
 args, _ = parser.parse_known_args()
 
-# Setup config
-CONFIG = {"renderer": "RealTimePathTracing", "headless": args.headless}
+# Setup config — RayTracedLighting avoids VkResult:ERROR_DEVICE_LOST on heavy physics scenes
+CONFIG = {"renderer": "RayTracedLighting", "headless": args.headless}
 simulation_app = SimulationApp(CONFIG)
 
 import carb
@@ -142,6 +142,21 @@ def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True)
 
 configure_robot_tf_names("/FR3_1", "FR3_1", use_prefix_for_links=False)
 configure_robot_tf_names("/FR3_2", "FR3_2", use_prefix_for_links=True)
+
+# Fix invalid inertia warnings: disable RigidBodyAPI on pure sensor/tool frames
+_TCP_FRAMES = ["fr3_hand_tcp", "fr3_link8"]
+for robot_path in ["/FR3_1", "/FR3_2"]:
+    root_prim = stage.GetPrimAtPath(robot_path)
+    if root_prim.IsValid():
+        for prim in Usd.PrimRange(root_prim):
+            if prim.GetName() in _TCP_FRAMES:
+                rb_attr = prim.GetAttribute("physics:rigidBodyEnabled")
+                if rb_attr.IsValid():
+                    rb_attr.Set(False)
+                # Also clear kinematic flag if present
+                kin_attr = prim.GetAttribute("physics:kinematicEnabled")
+                if kin_attr.IsValid():
+                    kin_attr.Set(False)
 
 # 5. Add Object Pool for Conveyor Spawning
 print("Creating Conveyor Item Pool...")
@@ -315,7 +330,8 @@ except Exception as e:
 simulation_app.update()
 
 # Setup simulation manager and play
-SimulationManager.setup_simulation(dt=1.0 / 120.0, device="cpu")
+# 60 Hz physics — half the GPU load vs 120 Hz, stable for dual-robot conveyor scenes
+SimulationManager.setup_simulation(dt=1.0 / 60.0, device="cpu")
 app_utils.play()
 simulation_app.update()
 

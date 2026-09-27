@@ -225,7 +225,7 @@ def get_jacobian(q):
     return J
 
 
-def inverse_kinematics(target_pos, target_quat, q_init, max_iter=60, tol=1e-4):
+def inverse_kinematics(target_pos, target_quat, q_init, max_iter=150, tol=1e-4):
     """Solve Franka FR3 inverse kinematics using Damped Least Squares (DLS)."""
     q = np.array(q_init, dtype=float)
     if np.any(np.isnan(target_pos)):
@@ -233,7 +233,7 @@ def inverse_kinematics(target_pos, target_quat, q_init, max_iter=60, tol=1e-4):
         
     R_target = quat_to_rot_matrix(target_quat)
     
-    for _ in range(max_iter):
+    for iteration in range(max_iter):
         T_ee = forward_kinematics(q)
         p_ee = T_ee[:3, 3]
         R_ee = T_ee[:3, :3]
@@ -260,8 +260,10 @@ def inverse_kinematics(target_pos, target_quat, q_init, max_iter=60, tol=1e-4):
             
         J = get_jacobian(q)
         
-        # Damped Least Squares
-        damping = 0.02
+        # Adaptive damping based on error magnitude
+        err_norm = np.linalg.norm(error)
+        damping = 0.01 if err_norm < 0.05 else 0.04
+        
         inv_J = J.T @ np.linalg.inv(J @ J.T + damping**2 * np.eye(6))
         
         # Null-space posture regularization towards home config
@@ -271,8 +273,8 @@ def inverse_kinematics(target_pos, target_quat, q_init, max_iter=60, tol=1e-4):
         
         dq = inv_J @ error + null_space_term
         
-        # Step limiter
-        step_limit = 0.15
+        # Adaptive step limiter to prevent overshoot while allowing fast moves
+        step_limit = 0.4 if err_norm > 0.1 else 0.15
         dq_norm = np.linalg.norm(dq)
         if dq_norm > step_limit:
             dq = dq * (step_limit / dq_norm)

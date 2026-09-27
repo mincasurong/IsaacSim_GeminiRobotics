@@ -227,9 +227,10 @@ function App() {
 
         {/* Controls */}
         <button onClick={triggerBuild} style={{ ...btnCtrl, color: C.blue, background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.2)' }}><Wrench size={13} /> Build</button>
-        <select value={bringupMode} onChange={(e) => setBringupMode(parseInt(e.target.value))} style={{ ...btnCtrl, background: 'transparent', color: C.text, width: 90 }}>
-          <option value={1}>Mode 1</option>
-          <option value={7}>Mode 7 (Dual FR3)</option>
+        <select value={bringupMode} onChange={(e) => setBringupMode(parseInt(e.target.value))} style={{ ...btnCtrl, background: 'transparent', color: C.text, width: 160 }}>
+          <option value={1}>Mode 1: 3-Robot Tower</option>
+          <option value={5}>Mode 5: Conveyor Dual</option>
+          <option value={6}>Mode 6: Assembly</option>
         </select>
         {!bringupRunning
           ? <button onClick={startBringup} style={{ ...btnCtrl, background: '#000', color: '#fff', border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}><Play size={13} /> Start</button>

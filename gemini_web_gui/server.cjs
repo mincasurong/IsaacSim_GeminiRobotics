@@ -67,9 +67,17 @@ app.post('/api/start', (req, res) => {
   logBuffer = [];
   appendLog('[GUI] Cleaning up old processes before start...');
   const pkill = require('child_process').spawnSync('wsl', ['-d', 'Ubuntu-24.04', 'bash', '-c', 'pkill -f gemini_controller; pkill -f rosbridge; pkill -f multi_robot; pkill -f conveyor; pkill -f bringup.bash']);
-  appendLog(`[GUI] Starting bringup.bash (Mode ${mode})...`);
 
-  const cmd = `echo ${mode} | bash /home/isaac/catkin_ws/bringup.bash`;
+  // Map launcher.bat modes to bringup.bash menu options
+  // launcher.bat Mode 1 (3-Robot Tower)   → bringup.bash option 1
+  // launcher.bat Mode 5 (Conveyor Dual)   → bringup.bash option 7
+  // launcher.bat Mode 6 (Assembly ATAMP)  → bringup.bash option 8
+  const BRINGUP_MAP = { 1: 1, 5: 7, 6: 8 };
+  const bringupOption = BRINGUP_MAP[mode] || mode;
+
+  appendLog(`[GUI] Starting bringup.bash (Mode ${mode} → bringup option ${bringupOption})...`);
+
+  const cmd = `echo ${bringupOption} | bash /home/isaac/catkin_ws/bringup.bash`;
 
   bringupProc = spawn('wsl', ['-d', 'Ubuntu-24.04', 'bash', '-c', cmd], {
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -101,7 +109,7 @@ app.post('/api/stop', (_req, res) => {
 
   appendLog('[GUI] Stopping bringup processes...');
   spawn('wsl', ['-d', 'Ubuntu-24.04', 'bash', '-c',
-    'pkill -f gemini_controller.launch.py; pkill -f rosbridge_websocket; pkill -f multi_robot_controller',
+    'pkill -f gemini_controller.launch.py; pkill -f rosbridge_websocket; pkill -f multi_robot_controller; pkill -f conveyor_dual_controller; pkill -f conveyor_gemini_node',
   ]);
 
   bringupProc.kill('SIGINT');

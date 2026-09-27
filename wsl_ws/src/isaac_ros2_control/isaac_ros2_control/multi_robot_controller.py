@@ -682,8 +682,6 @@ class MultiRobotController(Node):
                 if state in ['HOVER_PICK', 'DESCEND_PICK']:
                     block_pos, _ = self.get_block_local_pose(robot_id)
                     if block_pos is not None:
-                        # Forward prediction: velocity ~ 0.15 m/s in base X frame, add ~0.15 sec lookahead
-                        block_pos[0] += (0.15 * 0.15)
                         if state == 'HOVER_PICK':
                             end_pos = np.array([block_pos[0], block_pos[1], block_pos[2] + self.hover_height])
                         else:

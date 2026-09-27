@@ -390,17 +390,8 @@ class ConveyorDualController(Node):
         self.result_pub.publish(msg)
 
     def _resolve_block_name(self, label):
-        l = label.lower()
-        if 'red' in l or 'block1' in l: return 'Block1'
-        elif 'green' in l or 'block2' in l: return 'Block2'
-        elif 'blue' in l or 'block3' in l: return 'Block3'
-        elif 'yellow' in l or 'block4' in l: return 'Block4'
-        elif 'magenta' in l or 'block5' in l: return 'Block5'
-        elif 'cyan' in l or 'block6' in l: return 'Block6'
-        elif 'orange' in l or 'block7' in l: return 'Block7'
-        elif 'purple' in l or 'block8' in l: return 'Block8'
-        elif 'lime' in l or 'block9' in l: return 'Block9'
-        return None
+        """Return the label directly since the agent now passes exact TF block names."""
+        return label
 
     # Coordinate Transforms & Poses
 
@@ -410,19 +401,7 @@ class ConveyorDualController(Node):
         else: return 'FR3_3_fr3_link0'
 
     def get_target_block_name(self, robot_id):
-        if self.mode == 'gemini':
-            return getattr(self, f'active_target{robot_id}')
-        else:
-            # Rule-based sequence (3 blocks per robot):
-            # Robot 1: Block1 (Red Cube), Block2 (Green Cyl), Block3 (Blue Cube)
-            # Robot 2: Block4 (Yellow Cyl), Block5 (Magenta Cube), Block6 (Cyan Cyl)
-            # Robot 3: Block7 (Orange Cube), Block8 (Purple Cyl), Block9 (Lime Cube)
-            if robot_id == 1:
-                return f"Block{self.block_index1 + 1}"
-            elif robot_id == 2:
-                return f"Block{self.block_index2 + 4}"
-            else:
-                return f"Block{self.block_index3 + 7}"
+        return getattr(self, f'active_target{robot_id}')
 
     def get_block_local_pose(self, robot_id):
         """Retrieve block position and optimal grasp quaternion in robot base frame."""
@@ -604,7 +583,7 @@ class ConveyorDualController(Node):
         """Publish structured robot metrics at 2 Hz for the GUI dashboard."""
         now = time.monotonic()
         robots_data = {}
-        for r_id in [1, 2, 3]:
+        for r_id in [1, 2]:
             state = getattr(self, f'state{r_id}')
             is_busy = state not in ('INIT', 'FINISHED', 'WAITING_FOR_PLACE_CMD', 'WAIT_FOR_CENTER')
             
@@ -659,7 +638,7 @@ class ConveyorDualController(Node):
         self.metrics_pub.publish(msg)
 
     def _timer_callback(self):
-        for r_id in [1, 2, 3]:
+        for r_id in [1, 2]:
             self._process_robot(r_id)
 
     def _process_robot(self, robot_id):

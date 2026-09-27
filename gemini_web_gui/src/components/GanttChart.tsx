@@ -16,7 +16,7 @@ export default function GanttChart({ actions, results, metrics, fontSize }: Gant
   const [zoomIdx, setZoomIdx] = useState(1); // default 15s window
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t); }, []);
 
-  const robots = ['FR3_1', 'FR3_2', 'FR3_3'];
+  const robots = metrics?.robots ? Object.keys(metrics.robots).sort() : ['FR3_1', 'FR3_2', 'FR3_3'];
   const windowMs = ZOOM_LEVELS[zoomIdx];
 
   // Build task segments from action/result pairs

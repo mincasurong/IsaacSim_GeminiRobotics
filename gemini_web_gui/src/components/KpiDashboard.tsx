@@ -6,7 +6,7 @@ interface KpiDashboardProps {
 }
 
 export default function KpiDashboard({ metrics, fontSize }: KpiDashboardProps) {
-  const robots = ['FR3_1', 'FR3_2', 'FR3_3'];
+  const robots = metrics?.robots ? Object.keys(metrics.robots).sort() : ['FR3_1', 'FR3_2', 'FR3_3'];
 
   if (!metrics) {
     return (

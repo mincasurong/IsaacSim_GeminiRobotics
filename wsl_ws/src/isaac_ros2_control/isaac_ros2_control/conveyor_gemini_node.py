@@ -873,10 +873,10 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         return detections
 
     def _query_block_positions(self) -> dict:
-        """Query TF for world-frame XY positions of all 9 blocks."""
+        """Query TF for world-frame XY positions of all conveyor blocks."""
         positions = {}
-        for i in range(1, 10):
-            block_name = f"Block{i}"
+        target_names = [f"ConvItem{i}" for i in range(10)] + ["LongBar", "HeavyEnginePart"]
+        for block_name in target_names:
             try:
                 trans = self.tf_buffer.lookup_transform(
                     'world', block_name, rclpy.time.Time())

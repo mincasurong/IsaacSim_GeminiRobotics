@@ -36,7 +36,7 @@ def get_robot_tools():
                         ),
                         "object_label": types.Schema(
                             type="STRING",
-                            description="Color and shape label of the object to pick, e.g. 'Red Cube', 'Blue Cylinder'"
+                            description="Exact TF block name of the object to pick, as provided in the proximity summary (e.g., 'ConvItem0', 'LongBar', 'HeavyEnginePart'). Do NOT use color labels."
                         ),
                         "speed": types.Schema(
                             type="STRING",
@@ -118,7 +118,7 @@ def get_robot_tools():
                     properties={
                         "object_label": types.Schema(
                             type="STRING",
-                            description="Label of the oversized object to pick."
+                            description="Exact TF block name of the oversized object to pick (e.g., 'LongBar')."
                         ),
                         "offset_1": types.Schema(
                             type="NUMBER",

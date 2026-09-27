@@ -566,7 +566,7 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
         width: 240,
         height: 140,
       },
-      {
+      ...(r3 || Object.keys(metrics?.robots || {}).length > 2 ? [{
         id: 'robot3',
         type: 'robotNode',
         position: { x: 690, y: 350 },
@@ -582,7 +582,7 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
         },
         width: 240,
         height: 140,
-      },
+      }] : []),
 
       // Level 3: Center Mutex Arbiter
       {
@@ -674,14 +674,14 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
         style: { stroke: isR2Active ? '#10b981' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR2Active ? 2 : 1 },
         markerEnd: { type: MarkerType.ArrowClosed, color: isR2Active ? '#10b981' : '#64748b' },
       },
-      {
+      ...(r3 || Object.keys(metrics?.robots || {}).length > 2 ? [{
         id: 'e-opt-r3',
         source: 'optimizer',
         target: 'robot3',
         animated: isR3Active,
         style: { stroke: isR3Active ? '#3b82f6' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR3Active ? 2 : 1 },
         markerEnd: { type: MarkerType.ArrowClosed, color: isR3Active ? '#3b82f6' : '#64748b' },
-      },
+      }] : []),
 
       // Robots through Mutex
       {
@@ -704,7 +704,7 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           strokeWidth: metrics?.center_occupied_by === 'FR3_2' ? 2.5 : 1,
         },
       },
-      {
+      ...(r3 || Object.keys(metrics?.robots || {}).length > 2 ? [{
         id: 'e-r3-mutex',
         source: 'robot3',
         target: 'mutex',
@@ -713,7 +713,7 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
           stroke: metrics?.center_occupied_by === 'FR3_3' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
           strokeWidth: metrics?.center_occupied_by === 'FR3_3' ? 2.5 : 1,
         },
-      },
+      }] : []),
 
       // Mutex to Construction Output
       {

@@ -164,6 +164,27 @@ function App() {
     return () => { ros.current?.close(); recognition.current?.stop(); };
   }, []);
 
+  const quickPromptsByMode: Record<number, Array<{ label: string; prompt: string }>> = {
+    1: [
+      { label: '⚡ Fast 9-Layer Tower', prompt: 'Build a 9-layer tower on the central target table using all blocks with maximum speed and concurrency.' },
+      { label: '📐 3x3 Coplanar Grid', prompt: 'Arrange all 9 blocks into a 3x3 coplanar grid on the central target table centered at (0, 0).' },
+      { label: '🔺 Triangle Pyramid', prompt: 'Arrange 6 blocks into a flat triangular formation on the central target table (3 in base, 2 in middle, 1 on top).' },
+      { label: '🔄 Table 1 to 3 Relay', prompt: 'Transfer 2 blocks from Table 1 to Table 3 using the Central Target Table as a staging relay.' },
+    ],
+    5: [
+      { label: '🌊 Dual-Arm Pick & Wave Circle', prompt: 'Pick the LongBar with both arms, lift it, and execute a synchronized circular wave in the XY plane.' },
+      { label: '🎯 Conveyor Dynamic Intercept', prompt: 'Track and pick moving items from the conveyor belt with the nearest arm and place them onto the workbench.' },
+      { label: '🔄 Dual-Arm Circle (YZ Plane)', prompt: 'Pick the LongBar and synchronously draw a vertical circle in the YZ plane with 2 complete cycles.' },
+      { label: '🤝 Asymmetric Engine Pick', prompt: 'Coordinate FR3_1 and FR3_2 to pick the HeavyEnginePart using asymmetric grasp offsets and place it on the workbench.' },
+    ],
+    6: [
+      { label: '🛠️ Sub-Assembly Sequence', prompt: 'Perform cooperative assembly: FR3_1 holds the LongBar while FR3_2 fastens the HeavyEnginePart at the central station.' },
+      { label: '📐 Precision Bar Insertion', prompt: 'Grasp the LongBar jointly and perform high-precision compliance insertion at the target jig coordinates.' },
+      { label: '🔄 Dual-Arm Handoff & Tool Swap', prompt: 'Pick the bar with FR3_1, transfer it to FR3_2 at the handoff station, then return FR3_1 to home.' },
+      { label: '⚡ Agile Bi-Manual Sort', prompt: 'Sort all components on the assembly table by assigning heavy parts to dual-arm grasp and standard blocks to single arms.' },
+    ],
+  };
+
   /* ── Handlers ─────────────────────────────────────────── */
   const toggleMic = () => { if (!recognition.current) { alert('Chrome/Edge only'); return; } if (isRecording) { recognition.current.stop(); setIsRecording(false); } else { setText(''); recognition.current.start(); setIsRecording(true); } };
   const sendGoal = () => {
@@ -338,14 +359,9 @@ function App() {
             </div>
           </div>
 
-          {/* Quick Prompts Bar */}
+          {/* Quick Prompts Bar (Dynamically adapts to Mode 1, 5, or 6) */}
           <div style={{ padding: '6px 24px 0', display: 'flex', gap: 8, overflowX: 'auto', maxWidth: 760, width: '100%', margin: '0 auto' }}>
-            {[
-              { label: '⚡ Fast 9-Layer Tower', prompt: 'Build a 9-layer tower on the central target table using all blocks with maximum speed and concurrency.' },
-              { label: '📐 3x3 Coplanar Grid', prompt: 'Arrange all 9 blocks into a 3x3 coplanar grid on the central target table centered at (0, 0).' },
-              { label: '🔺 Triangle Pyramid', prompt: 'Arrange 6 blocks into a flat triangular formation on the central target table (3 in base, 2 in middle, 1 on top).' },
-              { label: '🔄 Table 1 to 3 Relay', prompt: 'Transfer 2 blocks from Table 1 to Table 3 using the Central Target Table as a staging relay.' },
-            ].map((qp, idx) => (
+            {(quickPromptsByMode[bringupMode] || quickPromptsByMode[1]).map((qp, idx) => (
               <button
                 key={idx}
                 onClick={() => setText(qp.prompt)}
@@ -388,7 +404,7 @@ function App() {
               }}>{isRecording ? <MicOff size={15} /> : <Mic size={15} />}</button>
 
               <input type="text" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendGoal()}
-                placeholder={isRecording ? 'Listening...' : 'Send task directive to Gemini Robotics-ER-2 VLA...'}
+                placeholder={isRecording ? 'Listening...' : (bringupMode === 5 ? 'Send dual-arm conveyor or circular wave directive...' : (bringupMode === 6 ? 'Send cooperative assembly directive...' : 'Send task directive to Gemini Robotics-ER-2 VLA...'))}
                 style={{ flex: 1, height: 38, border: 'none', background: 'transparent', color: C.white, fontSize: fontSize, outline: 'none' }}
               />
 

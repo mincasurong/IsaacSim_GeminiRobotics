@@ -22,6 +22,7 @@ import {
   Bot,
   Layers,
   CheckCircle2,
+  Lock,
 } from 'lucide-react';
 import { type MetricsData, type ChatMessage, type RobotAction } from './theme';
 
@@ -670,6 +671,7 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
   metrics,
   chatMessages,
   actions,
+  results = [],
   userGoal,
   mode = 1,
 }) => {
@@ -915,7 +917,7 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
     });
 
     setEdges(currentEdges);
-  }, [metrics, chatMessages, actions.length, userGoal, mode, robotKeys, setNodes, setEdges]);
+  }, [metrics, chatMessages, actions.length, results, userGoal, mode, robotKeys, setNodes, setEdges]);
 
   return (
     <div

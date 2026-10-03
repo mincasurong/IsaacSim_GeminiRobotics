@@ -516,7 +516,9 @@ function App() {
                   metrics={metrics}
                   chatMessages={messages}
                   actions={actions}
-                  userGoal={messages.filter(m => m.role === 'user').slice(-1)[0]?.text || 'Build a 9-layer tower on the central target table'}
+                  results={actionResults}
+                  userGoal={messages.filter(m => m.role === 'user').slice(-1)[0]?.text || (bringupMode === 5 ? 'Pick items from conveyor' : (bringupMode === 6 ? 'Assemble components' : 'Build a 9-layer tower on the central target table'))}
+                  mode={bringupMode}
                 />
               )}
 

@@ -27,6 +27,13 @@ except ImportError:
         import kinematics
 
 
+# States where a robot's arm physically occupies or sweeps through the shared center workspace
+CENTER_WORKSPACE_STATES = {
+    'TUCK_AFTER_PICK', 'ROTATE_TO_PLACE', 'HOVER_PLACE', 
+    'DESCEND_PLACE', 'RELEASE', 'RETRACT', 'TUCK_AFTER_PLACE', 'RETURN_HOME'
+}
+
+
 class MultiRobotController(Node):
     """Unified Controller and Motion Planner for FR3_1, FR3_2, and FR3_3."""
 
@@ -38,9 +45,9 @@ class MultiRobotController(Node):
         self.declare_parameter('tower_x', 0.0)
         self.declare_parameter('tower_y', 0.0)
         self.declare_parameter('block_height', 0.06)
-        self.declare_parameter('hover_height', 0.10)
-        self.declare_parameter('steps_per_phase', 10)
-        self.declare_parameter('dwell_steps', 2)
+        self.declare_parameter('hover_height', 0.12)
+        self.declare_parameter('steps_per_phase', 35)
+        self.declare_parameter('dwell_steps', 15)
 
         self.mode = self.get_parameter('mode').get_parameter_value().string_value
         self.stack_pos_world = [
@@ -457,7 +464,7 @@ class MultiRobotController(Node):
                     by = b_trans.transform.translation.y
                     bz = b_trans.transform.translation.z
                     dist = np.hypot(bx - target_x, by - target_y)
-                    if dist < 0.045 and bz >= 0.28:  # 0.045m threshold detects vertically stacked blocks
+                    if dist < 0.060 and bz >= 0.28:  # 0.060m threshold detects stacked blocks robustly
                         tf_blocks_on_tower += 1
                         if max_block_z is None or bz > max_block_z:
                             max_block_z = bz
@@ -465,9 +472,9 @@ class MultiRobotController(Node):
                     pass
             
             if tf_blocks_on_tower > 0 and max_block_z is not None:
-                target_z_world = max_block_z + self.block_height + 0.005
+                target_z_world = max_block_z + self.block_height
             else:
-                target_z_world = 0.335  # Base table height + block center + clearance
+                target_z_world = 0.330  # Base target table top (0.30m) + half block (0.03m)
             
             p_world = np.array([target_x, target_y, target_z_world])
             
@@ -663,7 +670,11 @@ class MultiRobotController(Node):
             self._set_state(robot_id, 'ROTATE_TO_PICK')
 
         elif state == 'WAIT_FOR_CENTER':
-            if self.center_occupied_by is None or self.center_occupied_by == robot_id:
+            other_in_center = any(
+                getattr(self, f'state{o}') in CENTER_WORKSPACE_STATES
+                for o in [1, 2, 3] if o != robot_id
+            )
+            if (self.center_occupied_by is None or self.center_occupied_by == robot_id) and not other_in_center:
                 self.center_occupied_by = robot_id
                 q_current = getattr(self, f'q_current{robot_id}')
                 end_q = self._make_tuck_config(q_current[0])
@@ -693,7 +704,9 @@ class MultiRobotController(Node):
                 for i in range(7):
                     q_sol[i] = np.clip(q_sol[i], kinematics.FR3_JOINT_LIMITS[i][0], kinematics.FR3_JOINT_LIMITS[i][1])
             elif state in ['GRASP', 'RELEASE']:
-                q_sol = np.array(q_current)
+                # Rigidly hold target end_q during dwell to prevent arm drift while fingers actuate
+                end_q_val = getattr(self, f'end_q{robot_id}', None)
+                q_sol = np.array(end_q_val) if end_q_val is not None else np.array(q_current)
             else:
                 # CARTESIAN SPACE INTERPOLATION
                 if start_pos is not None and end_pos is not None:
@@ -749,7 +762,9 @@ class MultiRobotController(Node):
 
                 elif state == 'LIFT':
                     gripper_pos = getattr(self, f'current_gripper{robot_id}')
-                    pick_success = gripper_pos > 0.01  # > 1cm width means we grasped something
+                    # Physical grasp verification: finger stopped on 6cm block
+                    # Fully closed on empty space: <= 0.005m (5mm). Wide open: >= 0.038m (38mm).
+                    pick_success = 0.005 < gripper_pos < 0.038
 
                     if self.mode == 'gemini' and getattr(self, f'gemini_action{robot_id}') == 'pick':
                         if pick_success:
@@ -762,9 +777,9 @@ class MultiRobotController(Node):
                             self._tasks_failed[robot_id] += 1
                     else:
                         if pick_success:
-                            self._set_state(robot_id, 'WAITING_FOR_CENTER')
+                            self._set_state(robot_id, 'WAIT_FOR_CENTER')
                         else:
-                            self.get_logger().warn(f"Robot {robot_id} failed to grasp! Retrying...")
+                            self.get_logger().warn(f"Robot {robot_id} failed to grasp (finger gap={gripper_pos*1000:.1f}mm)! Retrying...")
                             self._set_state(robot_id, 'INIT')
 
                 elif state == 'TUCK_AFTER_PICK':

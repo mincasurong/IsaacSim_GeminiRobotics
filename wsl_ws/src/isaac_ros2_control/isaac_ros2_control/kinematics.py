@@ -264,9 +264,10 @@ def inverse_kinematics(target_pos, target_quat, q_init, max_iter=60, tol=1e-4):
         damping = 0.02
         inv_J = J.T @ np.linalg.inv(J @ J.T + damping**2 * np.eye(6))
         
-        # Null-space posture regularization towards home config
+        # Null-space posture regularization towards home config (leave Joint 1 free for azimuth tracking)
         k_null = 0.05
         grad_null = k_null * (FR3_HOME_CONFIG - q)
+        grad_null[0] = 0.0
         null_space_term = (np.eye(7) - inv_J @ J) @ grad_null
         
         dq = inv_J @ error + null_space_term

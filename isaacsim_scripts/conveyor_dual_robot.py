@@ -16,8 +16,20 @@ parser.add_argument("--test", default=False, action="store_true", help="Run in t
 parser.add_argument("--headless", default=False, action="store_true", help="Run in headless mode")
 args, _ = parser.parse_known_args()
 
-# Setup config — RayTracedLighting avoids VkResult:ERROR_DEVICE_LOST on heavy physics scenes
-CONFIG = {"renderer": "RayTracedLighting", "headless": args.headless}
+CONFIG = {
+    "renderer": "RayTracedLighting",
+    "headless": args.headless,
+    "physics_gpu": 0,
+    "multi_gpu": False,
+    "sync_loads": True,
+    "fast_shutdown": True,
+    "extra_args": [
+        "--/app/runLoops/main/rateLimitEnabled=false",
+        "--/app/useFabricSceneDelegate=true",
+        "--/rtx-transient/dlssg/enabled=false",
+        "--/omni/replicator/asyncRendering=false",
+    ],
+}
 simulation_app = SimulationApp(CONFIG)
 
 import carb
@@ -100,17 +112,7 @@ if rb_conv.IsValid(): rb_conv.Set(False)
 kin_conv = conveyor_table.GetPrim().GetAttribute("physics:kinematicEnabled")
 if kin_conv.IsValid(): kin_conv.Set(True)
 
-try:
-    from pxr import PhysxSchema, Sdf
-    surf_vel_api = PhysxSchema.PhysxSurfaceVelocityAPI.Apply(conveyor_table.GetPrim())
-    surf_vel_api.CreateSurfaceVelocityEnabledAttr().Set(True)
-    try:
-        surf_vel_api.CreateSurfaceVelocityLocalAttr().Set(Gf.Vec3f(0.15, 0.0, 0.0)) # 15 cm/s along +X
-    except AttributeError:
-        surf_vel_api.GetPrim().CreateAttribute("physxSurfaceVelocity:surfaceVelocityLocal", Sdf.ValueTypeNames.Float3).Set(Gf.Vec3f(0.15, 0.0, 0.0))
-except Exception as e:
-    print(f"Failed to apply SurfaceVelocityAPI: {e}")
-
+# (PhysxSurfaceVelocityAPI removed because it applied velocity to the robot arms upon contact, causing oscillation. Velocity is manually enforced below instead.)
 # 4. Add 2 Robots (FR3_1 and FR3_2) side-by-side facing the conveyor
 FR3_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaFR3/fr3.usd"
 
@@ -146,6 +148,28 @@ def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True)
 
 configure_robot_tf_names("/FR3_1", "FR3_1", use_prefix_for_links=False)
 configure_robot_tf_names("/FR3_2", "FR3_2", use_prefix_for_links=True)
+
+# The USD's internal joint drives are already correctly tuned by NVIDIA for the FR3.
+# Previously, applying 1e5 stiffness and 1e4 damping caused extreme numerical explosions.
+
+# Fix exploding robot physics: The Franka USD defaults fr3_link0 to kinematic.
+# We force fr3_link0 to be dynamic, and EXPLICITLY anchor it to the world using a new FixedJoint.
+for robot_path in ["/FR3_1", "/FR3_2"]:
+    base_prim = stage.GetPrimAtPath(robot_path + "/fr3_link0")
+    if base_prim.IsValid():
+        kin_attr = base_prim.GetAttribute("physics:kinematicEnabled")
+        if not kin_attr.IsValid():
+            kin_attr = base_prim.CreateAttribute("physics:kinematicEnabled", Sdf.ValueTypeNames.Bool)
+        kin_attr.Set(False)
+        
+        # Explicitly create a FixedJoint from the World to the base link to anchor it safely
+        from pxr import UsdPhysics
+        joint_path = robot_path + "/world_fixed_anchor"
+        if not stage.GetPrimAtPath(joint_path).IsValid():
+            fixed_joint = UsdPhysics.FixedJoint.Define(stage, joint_path)
+            # Leaving Body0 empty implicitly targets the World
+            fixed_joint.CreateBody1Rel().SetTargets([base_prim.GetPath()])
+
 
 # Fix invalid inertia warnings: disable RigidBodyAPI on pure sensor/tool frames
 _TCP_FRAMES = ["fr3_hand_tcp", "fr3_link8"]
@@ -381,9 +405,24 @@ except Exception as e:
 
 simulation_app.update()
 
-# Setup simulation manager and play
-# 60 Hz physics — half the GPU load vs 120 Hz, stable for dual-robot conveyor scenes
-SimulationManager.setup_simulation(dt=1.0 / 60.0, device="cpu")
+# Setup physics scene with GPU broadphase + TGS solver for stability
+stage = omni.usd.get_context().get_stage()
+physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
+physics_scene.CreateGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -1.0))
+physics_scene.CreateGravityMagnitudeAttr().Set(9.81)
+try:
+    from pxr import PhysxSchema
+    physx_scene_api = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
+    physx_scene_api.CreateEnableGPUDynamicsAttr().Set(True)
+    physx_scene_api.CreateBroadphaseTypeAttr().Set("GPU")
+    physx_scene_api.CreateSolverTypeAttr().Set("TGS")
+except Exception as e:
+    print(f"Warning: Failed to set PhysX TGS solver: {e}")
+
+# Setup simulation manager and play (240 Hz physics for smooth 100Hz ROS2 tracking)
+# Note: device="cpu" is used here to avoid PyTorch tensor crashes ('numpy.ndarray' object has no attribute 'to').
+# Physics broadphase and solving STILL run on the GPU via EnableGPUDynamicsAttr() above.
+SimulationManager.setup_simulation(dt=1.0 / 240.0, device="cpu")
 app_utils.play()
 simulation_app.update()
 
@@ -495,6 +534,23 @@ with controls_window.frame:
 print("\n--- STARTING SIMULATION AND CONVEYOR SPAWNER ---")
 while simulation_app.is_running():
     now = time.time()
+    
+    if 'log_file' not in locals():
+        log_file = open("fr3_1_angles.csv", "w")
+        log_file.write("time,j1,j2,j3,j4,j5,j6,j7\n")
+        log_start = now
+    
+    if now - log_start < 5.0:
+        pos = robot1_art.get_joint_positions()
+        print(f"Time: {now - log_start:.2f}, pos type: {type(pos)}, pos: {pos}")
+        if pos is not None and len(pos) >= 7:
+            log_file.write(f"{now - log_start},{','.join(map(str, pos[:7]))}\n")
+            log_file.flush()
+    elif now - log_start >= 5.0 and not log_file.closed:
+        print("[Log] Finished recording 5s of joint data.")
+        log_file.close()
+        if args.headless: break
+        
     if now - last_spawn_time > spawn_interval:
         # Spawn next item at start of conveyor (X = -1.4, Y = 0.5 to 0.7, Z = 0.55)
         # Note: num_conv_items is 10, so we only spawn the first 10 items (ConvItem0...9)

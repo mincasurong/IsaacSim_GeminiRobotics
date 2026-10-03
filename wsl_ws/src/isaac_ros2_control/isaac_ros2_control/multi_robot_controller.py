@@ -37,14 +37,17 @@ CENTER_WORKSPACE_STATES = {
 class MultiRobotController(Node):
     """Unified Controller and Motion Planner for FR3_1, FR3_2, and FR3_3."""
 
-    def __init__(self):
-        super().__init__('multi_robot_controller')
+    def __init__(self, node_name='multi_robot_controller'):
+        super().__init__(node_name)
+
+        # Active robots handled by this controller (FR3_1, FR3_2, FR3_3 by default)
+        self.active_robot_ids = [1, 2, 3]
 
         # Parameters
         self.declare_parameter('mode', 'rule_based')  # 'rule_based' or 'gemini'
         self.declare_parameter('tower_x', 0.0)
         self.declare_parameter('tower_y', 0.0)
-        self.declare_parameter('block_height', 0.06)
+        self.declare_parameter('block_height', 0.045)
         self.declare_parameter('hover_height', 0.12)
         self.declare_parameter('steps_per_phase', 35)
         self.declare_parameter('dwell_steps', 15)
@@ -95,7 +98,7 @@ class MultiRobotController(Node):
         self.q_tuck_body = [-0.5, 0.0, -2.0, 0.0, 1.5, 0.7854]
 
         self.gripper_open = 0.04
-        self.gripper_close = 0.015
+        self.gripper_close = 0.002
 
         # Controller & Motion Planner State
         self.current_joints1 = None
@@ -393,7 +396,7 @@ class MultiRobotController(Node):
         elif 'orange' in l or 'block7' in l: return 'Block7'
         elif 'purple' in l or 'block8' in l: return 'Block8'
         elif 'lime' in l or 'block9' in l: return 'Block9'
-        return None
+        return label  # fallback directly to label for non-color objects (e.g. LongBar)
 
     # Coordinate Transforms & Poses
 
@@ -510,7 +513,8 @@ class MultiRobotController(Node):
 
     def _compute_j1_for_target(self, robot_id, target_pos_local):
         # Using pure arctan2 to prevent Joint 1 limit violations ([-2.89, 2.89])
-        return np.arctan2(target_pos_local[1], target_pos_local[0])
+        j1 = np.arctan2(target_pos_local[1], target_pos_local[0])
+        return float(np.clip(j1, -2.85, 2.85))
 
     def _initialize_joint_phase(self, robot_id, end_q, end_gripper):
         q_current = getattr(self, f'q_current{robot_id}')
@@ -558,20 +562,17 @@ class MultiRobotController(Node):
             self.step_counter3 = 0
 
     def _send_home_cmd(self, robot_id):
-        """Command a robot to hold its retracted home configuration."""
+        """Command a robot to hold its retracted home configuration without dropping grasped items."""
         cmd = JointState()
         cmd.header.stamp = self.get_clock().now().to_msg()
+        cur_grip = getattr(self, f'end_gripper{robot_id}', self.gripper_open)
+        cmd.name = self.joint_names_fr3
+        cmd.position = self.q_home_fr3 + [cur_grip, cur_grip]
         if robot_id == 1:
-            cmd.name = self.joint_names_fr3
-            cmd.position = self.q_home_fr3 + [self.gripper_open, self.gripper_open]
             self.cmd_pub1.publish(cmd)
         elif robot_id == 2:
-            cmd.name = self.joint_names_fr3
-            cmd.position = self.q_home_fr3 + [self.gripper_open, self.gripper_open]
             self.cmd_pub2.publish(cmd)
         elif robot_id == 3:
-            cmd.name = self.joint_names_fr3
-            cmd.position = self.q_home_fr3 + [self.gripper_open, self.gripper_open]
             self.cmd_pub3.publish(cmd)
 
     def _set_state(self, robot_id, state):
@@ -583,7 +584,7 @@ class MultiRobotController(Node):
         """Publish structured robot metrics at 2 Hz for the GUI dashboard."""
         now = time.monotonic()
         robots_data = {}
-        for r_id in [1, 2, 3]:
+        for r_id in self.active_robot_ids:
             state = getattr(self, f'state{r_id}')
             is_busy = state not in ('INIT', 'FINISHED', 'WAITING_FOR_PLACE_CMD', 'WAIT_FOR_CENTER')
             
@@ -638,7 +639,7 @@ class MultiRobotController(Node):
         self.metrics_pub.publish(msg)
 
     def _timer_callback(self):
-        for r_id in [1, 2, 3]:
+        for r_id in self.active_robot_ids:
             self._process_robot(r_id)
 
     def _process_robot(self, robot_id):
@@ -672,7 +673,7 @@ class MultiRobotController(Node):
         elif state == 'WAIT_FOR_CENTER':
             other_in_center = any(
                 getattr(self, f'state{o}') in CENTER_WORKSPACE_STATES
-                for o in [1, 2, 3] if o != robot_id
+                for o in self.active_robot_ids if o != robot_id
             )
             if (self.center_occupied_by is None or self.center_occupied_by == robot_id) and not other_in_center:
                 self.center_occupied_by = robot_id
@@ -689,7 +690,12 @@ class MultiRobotController(Node):
 
             # Determine duration for this phase
             robot_steps = getattr(self, f'steps_per_phase{robot_id}', self.steps_per_phase)
-            total_steps = self.dwell_steps if state in ['GRASP', 'RELEASE'] else robot_steps
+            if state in ['ROTATE_TO_PICK', 'ROTATE_TO_PLACE', 'TUCK_AFTER_PLACE', 'RETURN_HOME']:
+                total_steps = max(robot_steps, 50)
+            elif state in ['GRASP', 'RELEASE']:
+                total_steps = self.dwell_steps
+            else:
+                total_steps = robot_steps
             t = min(float(step_counter) / float(total_steps), 1.0)
             
             # Minimum Jerk Quintic Polynomial (MoveIt 2 standard trajectory profile)
@@ -762,9 +768,9 @@ class MultiRobotController(Node):
 
                 elif state == 'LIFT':
                     gripper_pos = getattr(self, f'current_gripper{robot_id}')
-                    # Physical grasp verification: finger stopped on 6cm block
+                    # Physical grasp verification: finger stopped on 6cm block (contact at ~0.030m)
                     # Fully closed on empty space: <= 0.005m (5mm). Wide open: >= 0.038m (38mm).
-                    pick_success = 0.005 < gripper_pos < 0.038
+                    pick_success = 0.015 < gripper_pos < 0.038
 
                     if self.mode == 'gemini' and getattr(self, f'gemini_action{robot_id}') == 'pick':
                         if pick_success:

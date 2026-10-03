@@ -225,7 +225,7 @@ def get_jacobian(q):
     return J
 
 
-def inverse_kinematics(target_pos, target_quat, q_init, max_iter=60, tol=1e-4):
+def inverse_kinematics(target_pos, target_quat, q_init, max_iter=150, tol=1e-5):
     """Solve Franka FR3 inverse kinematics using Damped Least Squares (DLS)."""
     q = np.array(q_init, dtype=float)
     if np.any(np.isnan(target_pos)):

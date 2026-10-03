@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -10,9 +10,19 @@ import {
   type Edge,
   MarkerType,
   BackgroundVariant,
+  useNodesState,
+  useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Cpu, ShieldAlert, ShieldCheck, Box, Compass, Activity } from 'lucide-react';
+import {
+  ShieldAlert,
+  ShieldCheck,
+  Activity,
+  Sparkles,
+  Bot,
+  Layers,
+  CheckCircle2,
+} from 'lucide-react';
 import { type MetricsData, type ChatMessage, type RobotAction } from './theme';
 
 interface AgentWorkflowGraphProps {
@@ -22,414 +32,580 @@ interface AgentWorkflowGraphProps {
   userGoal: string;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Custom Node: Human / Goal Node
-───────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────
+// Design System: Organic Flow & Modern Frosted Glassmorphism
+// ─────────────────────────────────────────────────────────────
+const fontSans = '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif';
+const fontMono = '"JetBrains Mono", ui-monospace, SFMono-Regular, monospace';
+
+const baseFlowCardStyle = {
+  background: 'linear-gradient(145deg, rgba(24, 24, 30, 0.88) 0%, rgba(13, 13, 18, 0.94) 100%)',
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
+  border: '1px solid rgba(255, 255, 255, 0.08)',
+  boxShadow: '0 12px 32px -4px rgba(0, 0, 0, 0.6), 0 0 1px 1px rgba(255, 255, 255, 0.05)',
+  borderRadius: 22,
+  padding: '16px 18px',
+  color: '#f4f4f5',
+  fontFamily: fontSans,
+  transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+};
+
+// Circular synapse handles
+const makeHandleStyle = (color: string) => ({
+  width: 10,
+  height: 10,
+  borderRadius: '50%',
+  background: color,
+  border: '2px solid #09090b',
+  boxShadow: `0 0 10px ${color}`,
+  transition: 'transform 0.2s ease',
+});
+
+// Soft Pill Badge
+const Pill = ({
+  color,
+  bg,
+  children,
+  pulse = false,
+}: {
+  color: string;
+  bg?: string;
+  children: React.ReactNode;
+  pulse?: boolean;
+}) => (
+  <div
+    style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 5,
+      padding: '3px 10px',
+      borderRadius: 9999,
+      background: bg || `${color}18`,
+      border: `1px solid ${color}35`,
+      color: color,
+      fontSize: 10,
+      fontWeight: 600,
+      letterSpacing: '0.02em',
+      fontFamily: fontSans,
+    }}
+  >
+    {pulse && (
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          background: color,
+          boxShadow: `0 0 8px ${color}`,
+          display: 'inline-block',
+        }}
+      />
+    )}
+    {children}
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────
+// Custom Node: Human / Directive Goal Node
+// ─────────────────────────────────────────────────────────────
 const GoalNode = ({ data }: { data: { goal: string } }) => {
   return (
     <div
       style={{
-        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95))',
-        border: '1px solid rgba(148, 163, 184, 0.3)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(56, 189, 248, 0.15)',
-        borderRadius: 14,
-        padding: '12px 16px',
-        color: '#f8fafc',
-        width: 260,
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        ...baseFlowCardStyle,
+        width: 280,
+        border: '1px solid rgba(56, 189, 248, 0.35)',
+        boxShadow: '0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.15)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <div
-          style={{
-            width: 26,
-            height: 26,
-            borderRadius: 7,
-            background: 'linear-gradient(135deg, #0ea5e9, #38bdf8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-          }}
-        >
-          <Compass size={15} />
-        </div>
-        <div>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', fontWeight: 700 }}>
-            Task Directive
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>Human Operator Intent</div>
-        </div>
-      </div>
-      <div
-        style={{
-          fontSize: 11,
-          color: '#cbd5e1',
-          lineHeight: 1.4,
-          background: 'rgba(15, 23, 42, 0.6)',
-          borderRadius: 8,
-          padding: '8px 10px',
-          border: '1px solid rgba(255, 255, 255, 0.05)',
-          maxHeight: 65,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        "{data.goal || 'Build 9-layer tower using all available blocks.'}"
-      </div>
-      <Handle type="source" position={Position.Bottom} style={{ background: '#38bdf8', width: 8, height: 8 }} />
-    </div>
-  );
-};
-
-/* ─────────────────────────────────────────────────────────────
-   Custom Node: Multi-Agent Persona Node
-───────────────────────────────────────────────────────────── */
-const AgentPersonaNode = ({
-  data,
-}: {
-  data: {
-    role: string;
-    model: string;
-    emoji: string;
-    color: string;
-    isActive: boolean;
-    lastSnippet: string;
-  };
-}) => {
-  return (
-    <div
-      style={{
-        background: `linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(15, 23, 42, 0.95))`,
-        border: data.isActive
-          ? `1.5px solid ${data.color}`
-          : '1px solid rgba(255, 255, 255, 0.1)',
-        boxShadow: data.isActive
-          ? `0 0 25px ${data.color}40, 0 10px 30px rgba(0,0,0,0.5)`
-          : '0 8px 24px rgba(0, 0, 0, 0.4)',
-        borderRadius: 14,
-        padding: '12px 14px',
-        width: 250,
-        color: '#f8fafc',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-      }}
-    >
-      <Handle type="target" position={Position.Top} style={{ background: data.color, width: 8, height: 8 }} />
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div
             style={{
               width: 28,
               height: 28,
-              borderRadius: 8,
-              background: `linear-gradient(135deg, ${data.color}22, ${data.color}55)`,
-              border: `1px solid ${data.color}66`,
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 14,
+              boxShadow: '0 0 12px rgba(56, 189, 248, 0.4)',
+            }}
+          >
+            <Sparkles size={15} color="#ffffff" />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#ffffff' }}>Operator Directive</div>
+            <div style={{ fontSize: 9, color: '#94a3b8' }}>High-Level Goal</div>
+          </div>
+        </div>
+        <Pill color="#38bdf8" pulse>VLA Input</Pill>
+      </div>
+
+      <div
+        style={{
+          background: 'rgba(15, 23, 42, 0.65)',
+          borderRadius: 14,
+          padding: '10px 12px',
+          border: '1px solid rgba(56, 189, 248, 0.15)',
+          color: '#e2e8f0',
+          fontSize: 11,
+          lineHeight: '1.45',
+          fontStyle: 'italic',
+          maxHeight: 70,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        "{data.goal || 'Build a 9-layer tower on the central target table'}"
+      </div>
+
+      <Handle type="source" position={Position.Bottom} style={makeHandleStyle('#38bdf8')} />
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// Custom Node: Multi-Agent Persona Node
+// ─────────────────────────────────────────────────────────────
+const AgentPersonaNode = ({ data }: any) => {
+  const activeColor = data.isActive ? data.color : 'rgba(255, 255, 255, 0.12)';
+  const activeGlow = data.isActive ? `0 0 24px ${data.color}35` : 'none';
+
+  return (
+    <div
+      style={{
+        ...baseFlowCardStyle,
+        width: 260,
+        border: `1px solid ${activeColor}`,
+        boxShadow: `0 14px 32px -4px rgba(0, 0, 0, 0.6), ${activeGlow}`,
+      }}
+    >
+      <Handle type="target" position={Position.Top} style={makeHandleStyle(data.color)} />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: `${data.color}20`,
+              border: `1px solid ${data.color}50`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 16,
+              boxShadow: `0 0 12px ${data.color}30`,
             }}
           >
             {data.emoji}
           </div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc' }}>{data.role}</div>
-            <div style={{ fontSize: 9.5, color: '#94a3b8', fontFamily: 'monospace' }}>{data.model}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#f4f4f5' }}>{data.role}</div>
+            <div style={{ fontSize: 9, color: '#71717a', fontFamily: fontMono }}>{data.model}</div>
           </div>
         </div>
-        {data.isActive && (
-          <span
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 9.5,
-              fontWeight: 700,
-              padding: '2px 8px',
-              borderRadius: 12,
-              background: `${data.color}22`,
-              color: data.color,
-              border: `1px solid ${data.color}55`,
-            }}
-          >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: data.color,
-                boxShadow: `0 0 8px ${data.color}`,
-              }}
-            />
-            ACTIVE
-          </span>
-        )}
+        <Pill color={data.isActive ? data.color : '#71717a'} pulse={data.isActive}>
+          {data.isActive ? 'Active' : 'Standby'}
+        </Pill>
       </div>
 
       <div
         style={{
-          fontSize: 10.5,
-          color: '#cbd5e1',
-          background: 'rgba(0, 0, 0, 0.35)',
-          padding: '6px 8px',
-          borderRadius: 6,
-          border: '1px solid rgba(255, 255, 255, 0.04)',
-          lineHeight: 1.35,
-          minHeight: 38,
-          maxHeight: 52,
+          background: 'rgba(24, 24, 27, 0.6)',
+          borderRadius: 14,
+          padding: '8px 12px',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          color: data.isActive ? '#e4e4e7' : '#a1a1aa',
+          fontSize: 10,
+          lineHeight: '1.4',
+          minHeight: 40,
+          maxHeight: 56,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
         }}
       >
-        {data.lastSnippet || 'Ready for task brainstorm iteration.'}
+        {data.lastSnippet || 'Awaiting turn deliberation...'}
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={{ background: data.color, width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Bottom} style={makeHandleStyle(data.color)} />
     </div>
   );
 };
 
-/* ─────────────────────────────────────────────────────────────
-   Custom Node: Robot Arm (FR3_1, FR3_2, FR3_3)
-───────────────────────────────────────────────────────────── */
-const RobotArmNode = ({
-  data,
-}: {
-  data: {
-    name: string;
-    quadrant: string;
-    phase: string;
-    target: string;
-    busyPct: number;
-    tasksCompleted: number;
-    color: string;
-    isBusy: boolean;
-  };
-}) => {
-  const isExecuting = data.phase && data.phase !== 'IDLE' && data.phase !== 'QUEUED';
+// ─────────────────────────────────────────────────────────────
+// Custom Node: Rule-Based Task Generator Node
+// ─────────────────────────────────────────────────────────────
+const RuleGeneratorNode = ({ data }: any) => {
+  const activeColor = data.isActive ? '#10b981' : 'rgba(255, 255, 255, 0.12)';
+  const activeGlow = data.isActive ? '0 0 24px rgba(16, 185, 129, 0.35)' : 'none';
 
   return (
     <div
       style={{
-        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95))',
-        border: isExecuting
-          ? `1.5px solid ${data.color}`
-          : '1px solid rgba(148, 163, 184, 0.2)',
-        boxShadow: isExecuting
-          ? `0 0 20px ${data.color}33, 0 10px 25px rgba(0,0,0,0.5)`
-          : '0 6px 20px rgba(0, 0, 0, 0.35)',
-        borderRadius: 14,
-        padding: '12px 14px',
-        width: 240,
-        color: '#f8fafc',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        ...baseFlowCardStyle,
+        width: 270,
+        border: `1px solid ${activeColor}`,
+        boxShadow: `0 14px 32px -4px rgba(0, 0, 0, 0.6), ${activeGlow}`,
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: data.color, width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Top} style={makeHandleStyle('#10b981')} />
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div
             style={{
-              width: 26,
-              height: 26,
-              borderRadius: 6,
-              background: `${data.color}22`,
-              border: `1px solid ${data.color}55`,
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: 'rgba(16, 185, 129, 0.2)',
+              border: '1px solid rgba(16, 185, 129, 0.5)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: data.color,
+              fontSize: 16,
+              boxShadow: '0 0 12px rgba(16, 185, 129, 0.3)',
             }}
           >
-            <Cpu size={15} />
+            📋
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{data.name}</div>
-            <div style={{ fontSize: 9.5, color: '#94a3b8' }}>{data.quadrant}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#f4f4f5' }}>Rule-Based Generator</div>
+            <div style={{ fontSize: 9, color: '#10b981', fontFamily: fontMono }}>Deterministic Blueprint</div>
           </div>
         </div>
-
-        <div
-          style={{
-            fontSize: 9.5,
-            fontWeight: 700,
-            padding: '3px 8px',
-            borderRadius: 8,
-            background: isExecuting ? `${data.color}25` : 'rgba(255,255,255,0.06)',
-            color: isExecuting ? data.color : '#94a3b8',
-            border: isExecuting ? `1px solid ${data.color}66` : '1px solid rgba(255,255,255,0.08)',
-            textTransform: 'uppercase',
-          }}
-        >
-          {data.phase || 'IDLE'}
-        </div>
+        <Pill color="#10b981" pulse={data.isActive}>
+          {data.isActive ? 'Blueprint Ready' : 'Standby'}
+        </Pill>
       </div>
 
-      <div style={{ fontSize: 11, marginBottom: 8, background: 'rgba(0,0,0,0.25)', padding: '6px 8px', borderRadius: 6 }}>
-        <div style={{ color: '#94a3b8', fontSize: 9.5, marginBottom: 2 }}>CURRENT TARGET</div>
-        <div style={{ fontWeight: 600, color: data.target ? '#f1f5f9' : '#64748b' }}>
-          {data.target ? data.target : 'No active block target'}
-        </div>
+      <div
+        style={{
+          background: 'rgba(24, 24, 27, 0.6)',
+          borderRadius: 14,
+          padding: '8px 12px',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          color: data.isActive ? '#e4e4e7' : '#a1a1aa',
+          fontSize: 10,
+          lineHeight: '1.4',
+          minHeight: 40,
+          maxHeight: 56,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {data.lastSnippet || 'Formulates physical reachability & layer schedule from /tf'}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#94a3b8' }}>
-        <span>Utilization: <b style={{ color: '#f8fafc' }}>{Math.round(data.busyPct)}%</b></span>
-        <span>Tasks: <b style={{ color: '#22c55e' }}>{data.tasksCompleted}</b></span>
-        <span style={{ color: '#38bdf8', fontWeight: 600 }}>⚡ 20 stp</span>
-      </div>
-
-      <Handle type="source" position={Position.Bottom} style={{ background: data.color, width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Bottom} style={makeHandleStyle('#10b981')} />
     </div>
   );
 };
 
-/* ─────────────────────────────────────────────────────────────
-   Custom Node: Mutex & Workspace Collision Arbiter
-───────────────────────────────────────────────────────────── */
-const MutexNode = ({
-  data,
-}: {
-  data: {
-    occupiedBy: string | null;
-  };
-}) => {
-  const isLocked = Boolean(data.occupiedBy);
+// ─────────────────────────────────────────────────────────────
+// Custom Node: Rule-Based Safety Verifier Node
+// ─────────────────────────────────────────────────────────────
+const RuleVerifierNode = ({ data }: any) => {
+  const activeColor = data.isActive ? '#a855f7' : 'rgba(255, 255, 255, 0.12)';
+  const activeGlow = data.isActive ? '0 0 24px rgba(168, 85, 247, 0.35)' : 'none';
 
   return (
     <div
       style={{
-        background: isLocked
-          ? 'linear-gradient(135deg, rgba(234, 88, 12, 0.25), rgba(15, 23, 42, 0.95))'
-          : 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(15, 23, 42, 0.95))',
-        border: isLocked
-          ? '1.5px solid #f97316'
-          : '1.5px solid rgba(16, 185, 129, 0.4)',
-        boxShadow: isLocked
-          ? '0 0 25px rgba(249, 115, 22, 0.35)'
-          : '0 0 15px rgba(16, 185, 129, 0.2)',
-        borderRadius: 14,
-        padding: '10px 14px',
-        width: 230,
-        color: '#f8fafc',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        ...baseFlowCardStyle,
+        width: 270,
+        border: `1px solid ${activeColor}`,
+        boxShadow: `0 14px 32px -4px rgba(0, 0, 0, 0.6), ${activeGlow}`,
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: isLocked ? '#f97316' : '#10b981', width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Top} style={makeHandleStyle('#a855f7')} />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 7,
-            background: isLocked ? '#ea580c' : '#10b981',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-          }}
-        >
-          {isLocked ? <ShieldAlert size={16} /> : <ShieldCheck size={16} />}
-        </div>
-        <div>
-          <div style={{ fontSize: 9.5, textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700 }}>
-            Central Table Arbiter
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: 'rgba(168, 85, 247, 0.2)',
+              border: '1px solid rgba(168, 85, 247, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 16,
+              boxShadow: '0 0 12px rgba(168, 85, 247, 0.3)',
+            }}
+          >
+            🛡️
           </div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: isLocked ? '#fb923c' : '#34d399' }}>
-            {isLocked ? `LOCKED (${data.occupiedBy})` : 'UNLOCKED / CLEAR'}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#f4f4f5' }}>Rule-Based Verifier</div>
+            <div style={{ fontSize: 9, color: '#a855f7', fontFamily: fontMono }}>Pre-execution Interceptor</div>
           </div>
         </div>
+        <Pill color="#a855f7" pulse={data.isActive}>
+          {data.isActive ? 'Guarding' : 'Standby'}
+        </Pill>
       </div>
 
-      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6, lineHeight: 1.3 }}>
-        {isLocked
-          ? `Arbitrating exclusive entry for ${data.occupiedBy} to prevent multi-arm center collision.`
-          : 'Safe for next arm entry into target table.'}
+      <div
+        style={{
+          background: 'rgba(24, 24, 27, 0.6)',
+          borderRadius: 14,
+          padding: '8px 12px',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          color: data.isActive ? '#e4e4e7' : '#a1a1aa',
+          fontSize: 10,
+          lineHeight: '1.4',
+          minHeight: 40,
+          maxHeight: 56,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {data.lastSnippet || 'Validates table ownership, holding state, & center table bounds'}
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={{ background: isLocked ? '#f97316' : '#10b981', width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Bottom} style={makeHandleStyle('#a855f7')} />
     </div>
   );
 };
 
-/* ─────────────────────────────────────────────────────────────
-   Custom Node: Physical Isaac Sim Construction
-───────────────────────────────────────────────────────────── */
-const ConstructionNode = ({
-  data,
-}: {
-  data: {
-    towerHeight: number;
-    placedCount: number;
-  };
-}) => {
+// ─────────────────────────────────────────────────────────────
+// Custom Node: Robot Arm Node
+// ─────────────────────────────────────────────────────────────
+const RobotArmNode = ({ data }: any) => {
+  const isExecuting = data.phase && data.phase !== 'IDLE' && data.phase !== 'QUEUED';
+  const glow = isExecuting ? `0 0 25px ${data.color}35` : 'none';
+
   return (
     <div
       style={{
-        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95))',
-        border: '1px solid rgba(56, 189, 248, 0.3)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(56, 189, 248, 0.15)',
-        borderRadius: 14,
-        padding: '12px 16px',
+        ...baseFlowCardStyle,
         width: 250,
-        color: '#f8fafc',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        border: `1px solid ${isExecuting ? data.color : 'rgba(255, 255, 255, 0.1)'}`,
+        boxShadow: `0 14px 32px -4px rgba(0, 0, 0, 0.6), ${glow}`,
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: '#38bdf8', width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Top} style={makeHandleStyle(data.color)} />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 7,
-            background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-          }}
-        >
-          <Box size={16} />
-        </div>
-        <div>
-          <div style={{ fontSize: 9.5, textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700 }}>
-            Isaac Sim 4.5 Physics
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 10,
+              background: `${data.color}20`,
+              border: `1px solid ${data.color}50`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: `0 0 10px ${data.color}25`,
+            }}
+          >
+            <Bot size={16} color={data.color} />
           </div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>Target Construction</div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#ffffff' }}>{data.name}</div>
+            <div style={{ fontSize: 9, color: '#a1a1aa' }}>{data.quadrant}</div>
+          </div>
         </div>
+        <Pill color={isExecuting ? data.color : '#71717a'} pulse={isExecuting}>
+          {data.phase || 'IDLE'}
+        </Pill>
+      </div>
+
+      {/* Target object capsule */}
+      <div
+        style={{
+          background: 'rgba(24, 24, 27, 0.7)',
+          borderRadius: 12,
+          padding: '6px 10px',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          marginBottom: 10,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <span style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', fontWeight: 600 }}>Target</span>
+        <span style={{ fontSize: 10, color: data.target ? '#f4f4f5' : '#52525b', fontWeight: 600 }}>
+          {data.target || 'None'}
+        </span>
+      </div>
+
+      {/* Metrics Row */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'rgba(0, 0, 0, 0.25)',
+          borderRadius: 10,
+          padding: '6px 10px',
+          fontSize: 10,
+          fontFamily: fontMono,
+          color: '#a1a1aa',
+        }}
+      >
+        <span>
+          Util: <strong style={{ color: '#fff' }}>{Math.round(data.busyPct || 0)}%</strong>
+        </span>
+        <span>
+          Ops: <strong style={{ color: data.color }}>{data.tasksCompleted || 0}</strong>
+        </span>
+        <span style={{ color: '#38bdf8', fontSize: 9, fontWeight: 600 }}>100 Hz</span>
+      </div>
+
+      <Handle type="source" position={Position.Bottom} style={makeHandleStyle(data.color)} />
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// Custom Node: Mutex Arbiter Node
+// ─────────────────────────────────────────────────────────────
+const MutexNode = ({ data }: any) => {
+  const isLocked = Boolean(data.occupiedBy);
+  const color = isLocked ? '#f97316' : '#10b981';
+
+  return (
+    <div
+      style={{
+        ...baseFlowCardStyle,
+        width: 250,
+        border: `1px solid ${color}60`,
+        boxShadow: `0 14px 32px -4px rgba(0, 0, 0, 0.6), 0 0 20px ${color}20`,
+      }}
+    >
+      <Handle type="target" position={Position.Top} style={makeHandleStyle(color)} />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 10,
+              background: `${color}20`,
+              border: `1px solid ${color}50`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: `0 0 10px ${color}30`,
+            }}
+          >
+            {isLocked ? <ShieldAlert size={16} color={color} /> : <ShieldCheck size={16} color={color} />}
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#ffffff' }}>Spatial Arbiter</div>
+            <div style={{ fontSize: 9, color: '#a1a1aa' }}>Center Staging Zone</div>
+          </div>
+        </div>
+        <Pill color={color} pulse={isLocked}>
+          {isLocked ? 'Locked' : 'Clear'}
+        </Pill>
+      </div>
+
+      <div
+        style={{
+          background: 'rgba(24, 24, 27, 0.7)',
+          borderRadius: 12,
+          padding: '8px 12px',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <span style={{ fontSize: 10, color: '#a1a1aa' }}>Active Possession:</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: isLocked ? '#f4f4f5' : '#71717a' }}>
+          {isLocked ? data.occupiedBy : 'Available'}
+        </span>
+      </div>
+
+      <Handle type="source" position={Position.Bottom} style={makeHandleStyle(color)} />
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// Custom Node: Construction / Tower State Node
+// ─────────────────────────────────────────────────────────────
+const ConstructionNode = ({ data }: any) => {
+  return (
+    <div
+      style={{
+        ...baseFlowCardStyle,
+        width: 260,
+        border: '1px solid rgba(56, 189, 248, 0.3)',
+        boxShadow: '0 16px 36px -4px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.15)',
+      }}
+    >
+      <Handle type="target" position={Position.Top} style={makeHandleStyle('#38bdf8')} />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 10,
+              background: 'rgba(56, 189, 248, 0.2)',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 0 10px rgba(56, 189, 248, 0.3)',
+            }}
+          >
+            <Layers size={16} color="#38bdf8" />
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#ffffff' }}>Tower Digital Twin</div>
+            <div style={{ fontSize: 9, color: '#94a3b8' }}>PhysX Rigid Bodies</div>
+          </div>
+        </div>
+        <Pill color="#10b981">
+          <CheckCircle2 size={10} style={{ marginRight: 2 }} /> Stable
+        </Pill>
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
         <div
           style={{
             flex: 1,
-            background: 'rgba(0,0,0,0.3)',
-            borderRadius: 8,
-            padding: '8px 10px',
-            border: '1px solid rgba(255,255,255,0.05)',
+            background: 'rgba(15, 23, 42, 0.6)',
+            border: '1px solid rgba(56, 189, 248, 0.15)',
+            borderRadius: 14,
+            padding: '10px 8px',
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600 }}>TOWER LAYERS</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: '#38bdf8' }}>{data.towerHeight}</div>
+          <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>Layers Stacked</div>
+          <div style={{ fontSize: 18, color: '#38bdf8', fontWeight: 800, fontFamily: fontMono }}>
+            {data.towerHeight || 0}
+            <span style={{ fontSize: 11, color: '#64748b' }}>/9</span>
+          </div>
         </div>
+
         <div
           style={{
             flex: 1,
-            background: 'rgba(0,0,0,0.3)',
-            borderRadius: 8,
-            padding: '8px 10px',
-            border: '1px solid rgba(255,255,255,0.05)',
+            background: 'rgba(15, 23, 42, 0.6)',
+            border: '1px solid rgba(16, 185, 129, 0.15)',
+            borderRadius: 14,
+            padding: '10px 8px',
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600 }}>PHYSICS STATE</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#34d399', marginTop: 4 }}>STABLE</div>
+          <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>Placement State</div>
+          <div style={{ fontSize: 13, color: '#10b981', fontWeight: 700, marginTop: 4 }}>
+            Aligned
+          </div>
         </div>
       </div>
     </div>
@@ -438,380 +614,295 @@ const ConstructionNode = ({
 
 const nodeTypes = {
   goalNode: GoalNode,
+  generatorNode: RuleGeneratorNode,
   agentNode: AgentPersonaNode,
+  verifierNode: RuleVerifierNode,
   robotNode: RobotArmNode,
   mutexNode: MutexNode,
   constructionNode: ConstructionNode,
 };
 
-/* ─────────────────────────────────────────────────────────────
-   Main Agent Workflow Graph Component
-───────────────────────────────────────────────────────────── */
+const initialNodes: Node[] = [
+  { id: 'goal', type: 'goalNode', position: { x: 370, y: 20 }, data: { goal: '' } },
+  { id: 'generator', type: 'generatorNode', position: { x: 370, y: 160 }, data: { isActive: true, lastSnippet: '' } },
+  { id: 'orchestrator', type: 'agentNode', position: { x: 370, y: 310 }, data: { role: 'VLA Brain', emoji: '🦾', color: '#38bdf8', model: 'gemini-robotics-er-2' } },
+  { id: 'verifier', type: 'verifierNode', position: { x: 370, y: 460 }, data: { isActive: true, lastSnippet: '' } },
+  { id: 'robot1', type: 'robotNode', position: { x: 50, y: 620 }, data: { name: 'FR3_1 (Bottom)', color: '#ef4444', quadrant: 'Table 1' } },
+  { id: 'robot2', type: 'robotNode', position: { x: 370, y: 620 }, data: { name: 'FR3_2 (Top-Right)', color: '#10b981', quadrant: 'Table 2' } },
+  { id: 'robot3', type: 'robotNode', position: { x: 690, y: 620 }, data: { name: 'FR3_3 (Top-Left)', color: '#3b82f6', quadrant: 'Table 3' } },
+  { id: 'mutex', type: 'mutexNode', position: { x: 370, y: 810 }, data: { occupiedBy: null } },
+  { id: 'construction', type: 'constructionNode', position: { x: 370, y: 960 }, data: { towerHeight: 0, placedCount: 0 } },
+];
+
+// Fluid cubic Bezier curves ('default') instead of rigid square 'step'
+const initialEdges: Edge[] = [
+  { id: 'e-goal-gen', source: 'goal', target: 'generator', type: 'default' },
+  { id: 'e-gen-vla', source: 'generator', target: 'orchestrator', type: 'default' },
+  { id: 'e-vla-verif', source: 'orchestrator', target: 'verifier', type: 'default' },
+  { id: 'e-verif-r1', source: 'verifier', target: 'robot1', type: 'default' },
+  { id: 'e-verif-r2', source: 'verifier', target: 'robot2', type: 'default' },
+  { id: 'e-verif-r3', source: 'verifier', target: 'robot3', type: 'default' },
+  { id: 'e-r1-mutex', source: 'robot1', target: 'mutex', type: 'default' },
+  { id: 'e-r2-mutex', source: 'robot2', target: 'mutex', type: 'default' },
+  { id: 'e-r3-mutex', source: 'robot3', target: 'mutex', type: 'default' },
+  { id: 'e-mutex-const', source: 'mutex', target: 'construction', type: 'default' },
+];
+
+// ─────────────────────────────────────────────────────────────
+// Main Agent Workflow Graph Component
+// ─────────────────────────────────────────────────────────────
 export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
   metrics,
   chatMessages,
   actions,
   userGoal,
 }) => {
-  // Find latest messages per persona
-  const latestVla = [...chatMessages].reverse().find(m => m.role === 'vla');
-  const latestArchitect = [...chatMessages].reverse().find(m => m.role === 'architect' && (m.senderName?.includes('Spatial') || m.emoji === '📐'));
-  const latestOptimizer = [...chatMessages].reverse().find(m => m.role === 'architect' && (m.senderName?.includes('Performance') || m.senderName?.includes('Optimizer') || m.emoji === '⚡'));
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  const lastMessage = chatMessages[chatMessages.length - 1];
-  const isVlaSpeaking = lastMessage?.role === 'vla';
-  const isArchitectSpeaking = lastMessage?.role === 'architect' && (lastMessage?.senderName?.includes('Spatial') || lastMessage?.emoji === '📐');
-  const isOptimizerSpeaking = lastMessage?.role === 'architect' && (lastMessage?.senderName?.includes('Performance') || lastMessage?.emoji === '⚡');
+  useEffect(() => {
+    // Find latest messages per persona
+    const latestGenerator = [...chatMessages].reverse().find(
+      m => m.role === 'generator' || m.senderName?.includes('Generator') || m.emoji === '📋'
+    );
+    const latestVla = [...chatMessages].reverse().find(
+      m => m.role === 'vla' || m.senderName?.includes('Gemini') || m.emoji === '🦾'
+    );
 
-  const r1 = metrics?.robots?.FR3_1;
-  const r2 = metrics?.robots?.FR3_2;
-  const r3 = metrics?.robots?.FR3_3;
+    const lastMessage = chatMessages[chatMessages.length - 1];
+    const isGeneratorSpeaking =
+      lastMessage?.role === 'generator' || lastMessage?.senderName?.includes('Generator') || lastMessage?.emoji === '📋';
+    const isVlaSpeaking =
+      lastMessage?.role === 'vla' || lastMessage?.senderName?.includes('Gemini') || lastMessage?.emoji === '🦾';
 
-  const isR1Active = r1 && r1.phase !== 'IDLE' && r1.phase !== 'QUEUED';
-  const isR2Active = r2 && r2.phase !== 'IDLE' && r2.phase !== 'QUEUED';
-  const isR3Active = r3 && r3.phase !== 'IDLE' && r3.phase !== 'QUEUED';
+    const r1 = metrics?.robots?.FR3_1;
+    const r2 = metrics?.robots?.FR3_2;
+    const r3 = metrics?.robots?.FR3_3;
 
-  // Construct Flow Nodes
-  const nodes: Node[] = useMemo(
-    () => [
-      // Top: Goal
-      {
-        id: 'goal',
-        type: 'goalNode',
-        position: { x: 370, y: 20 },
-        data: { goal: userGoal },
-        width: 260,
-        height: 120,
-      },
+    const isR1Active = r1 && r1.phase !== 'IDLE' && r1.phase !== 'QUEUED';
+    const isR2Active = r2 && r2.phase !== 'IDLE' && r2.phase !== 'QUEUED';
+    const isR3Active = r3 && r3.phase !== 'IDLE' && r3.phase !== 'QUEUED';
+    const anyRobotActive = isR1Active || isR2Active || isR3Active;
 
-      // Level 1: Three-Agent Brainstorm Pipeline
-      {
-        id: 'orchestrator',
-        type: 'agentNode',
-        position: { x: 50, y: 160 },
-        data: {
-          role: 'Robotics Orchestrator',
-          model: 'gemini-robotics-er-2-preview',
-          emoji: '🦾',
-          color: '#38bdf8',
-          isActive: isVlaSpeaking,
-          lastSnippet: latestVla?.text ? latestVla.text.slice(0, 100) + '...' : 'Coordinates task schedule and execution.',
-        },
-        width: 250,
-        height: 130,
-      },
-      {
-        id: 'architect',
-        type: 'agentNode',
-        position: { x: 370, y: 160 },
-        data: {
-          role: 'Spatial Architect',
-          model: 'gemini-3.8-flash',
-          emoji: '📐',
-          color: '#a78bfa',
-          isActive: isArchitectSpeaking,
-          lastSnippet: latestArchitect?.text ? latestArchitect.text.slice(0, 100) + '...' : 'Generates ASCII relative spatial layouts.',
-        },
-        width: 250,
-        height: 130,
-      },
-      {
-        id: 'optimizer',
-        type: 'agentNode',
-        position: { x: 690, y: 160 },
-        data: {
-          role: 'Performance Optimizer',
-          model: 'gemini-3.8-flash',
-          emoji: '⚡',
-          color: '#fbbf24',
-          isActive: isOptimizerSpeaking,
-          lastSnippet: latestOptimizer?.text ? latestOptimizer.text.slice(0, 100) + '...' : 'Enforces speed=fast and max concurrency.',
-        },
-        width: 250,
-        height: 130,
-      },
+    // Update Nodes Data (preserving coordinates)
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === 'goal') n.data = { ...n.data, goal: userGoal };
+        if (n.id === 'generator')
+          n.data = {
+            ...n.data,
+            isActive: Boolean(isGeneratorSpeaking || latestGenerator),
+            lastSnippet: latestGenerator?.text ? latestGenerator.text.slice(0, 95) + '...' : n.data.lastSnippet,
+          };
+        if (n.id === 'orchestrator')
+          n.data = {
+            ...n.data,
+            isActive: isVlaSpeaking,
+            lastSnippet: latestVla?.text ? latestVla.text.slice(0, 95) + '...' : n.data.lastSnippet,
+          };
+        if (n.id === 'verifier')
+          n.data = {
+            ...n.data,
+            isActive: Boolean(anyRobotActive),
+            lastSnippet: anyRobotActive
+              ? 'Guarding active pick/place kinematics, table ownership, & mutex locks'
+              : 'Grounded physical reachability: Table 1 (FR3_1), Table 2 (FR3_2), Table 3 (FR3_3)',
+          };
 
-      // Level 2: Three Robot Arms
-      {
-        id: 'robot1',
-        type: 'robotNode',
-        position: { x: 50, y: 350 },
-        data: {
-          name: 'FR3_1 (Arm 1)',
-          quadrant: 'Bottom Table 1',
-          phase: r1?.phase || 'IDLE',
-          target: r1?.target || '',
-          busyPct: r1?.busy_pct || 0,
-          tasksCompleted: r1?.tasks_completed || 0,
-          color: '#ef4444',
-          isBusy: isR1Active,
-        },
-        width: 240,
-        height: 140,
-      },
-      {
-        id: 'robot2',
-        type: 'robotNode',
-        position: { x: 370, y: 350 },
-        data: {
-          name: 'FR3_2 (Arm 2)',
-          quadrant: 'Top-Right Table 2',
-          phase: r2?.phase || 'IDLE',
-          target: r2?.target || '',
-          busyPct: r2?.busy_pct || 0,
-          tasksCompleted: r2?.tasks_completed || 0,
-          color: '#10b981',
-          isBusy: isR2Active,
-        },
-        width: 240,
-        height: 140,
-      },
-      ...(r3 || Object.keys(metrics?.robots || {}).length > 2 ? [{
-        id: 'robot3',
-        type: 'robotNode',
-        position: { x: 690, y: 350 },
-        data: {
-          name: 'FR3_3 (Arm 3)',
-          quadrant: 'Top-Left Table 3',
-          phase: r3?.phase || 'IDLE',
-          target: r3?.target || '',
-          busyPct: r3?.busy_pct || 0,
-          tasksCompleted: r3?.tasks_completed || 0,
-          color: '#3b82f6',
-          isBusy: isR3Active,
-        },
-        width: 240,
-        height: 140,
-      }] : []),
+        if (n.id === 'robot1')
+          n.data = {
+            ...n.data,
+            phase: r1?.phase,
+            target: r1?.target,
+            busyPct: r1?.busy_pct,
+            tasksCompleted: r1?.tasks_completed,
+          };
+        if (n.id === 'robot2')
+          n.data = {
+            ...n.data,
+            phase: r2?.phase,
+            target: r2?.target,
+            busyPct: r2?.busy_pct,
+            tasksCompleted: r2?.tasks_completed,
+          };
+        if (n.id === 'robot3')
+          n.data = {
+            ...n.data,
+            phase: r3?.phase,
+            target: r3?.target,
+            busyPct: r3?.busy_pct,
+            tasksCompleted: r3?.tasks_completed,
+          };
 
-      // Level 3: Center Mutex Arbiter
-      {
-        id: 'mutex',
-        type: 'mutexNode',
-        position: { x: 380, y: 550 },
-        data: {
-          occupiedBy: metrics?.center_occupied_by || null,
-        },
-        width: 230,
-        height: 100,
-      },
+        if (n.id === 'mutex') n.data = { ...n.data, occupiedBy: metrics?.center_occupied_by };
+        if (n.id === 'construction')
+          n.data = { ...n.data, towerHeight: metrics?.tower_height, placedCount: actions.length };
 
-      // Level 4: Physical Construction
-      {
-        id: 'construction',
-        type: 'constructionNode',
-        position: { x: 370, y: 690 },
-        data: {
-          towerHeight: metrics?.tower_height || 0,
-          placedCount: actions.length,
-        },
-        width: 250,
-        height: 120,
-      },
-    ],
-    [
-      userGoal,
-      isVlaSpeaking,
-      isArchitectSpeaking,
-      isOptimizerSpeaking,
-      latestVla,
-      latestArchitect,
-      latestOptimizer,
-      r1,
-      r2,
-      r3,
-      isR1Active,
-      isR2Active,
-      isR3Active,
-      metrics,
-      actions.length,
-    ]
-  );
+        return n;
+      })
+    );
 
-  // Construct Flow Edges with dynamic animations
-  const edges: Edge[] = useMemo(
-    () => [
-      // Goal to Agents
-      {
-        id: 'e-goal-orch',
-        source: 'goal',
-        target: 'orchestrator',
-        animated: isVlaSpeaking,
-        style: { stroke: isVlaSpeaking ? '#38bdf8' : '#64748b', strokeWidth: isVlaSpeaking ? 2.5 : 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isVlaSpeaking ? '#38bdf8' : '#64748b' },
-      },
-      {
-        id: 'e-orch-arch',
-        source: 'orchestrator',
-        target: 'architect',
-        animated: isArchitectSpeaking,
-        style: { stroke: isArchitectSpeaking ? '#a78bfa' : '#64748b', strokeWidth: isArchitectSpeaking ? 2.5 : 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isArchitectSpeaking ? '#a78bfa' : '#64748b' },
-      },
-      {
-        id: 'e-arch-opt',
-        source: 'architect',
-        target: 'optimizer',
-        animated: isOptimizerSpeaking,
-        style: { stroke: isOptimizerSpeaking ? '#fbbf24' : '#64748b', strokeWidth: isOptimizerSpeaking ? 2.5 : 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isOptimizerSpeaking ? '#fbbf24' : '#64748b' },
-      },
+    // Update Flow Edges with organic Bezier curves & fluid glow animations
+    setEdges((eds) =>
+      eds.map((e) => {
+        let active = false;
+        let color = '#3f3f46';
 
-      // Optimizer / Orchestrator dispatching to Robots
-      {
-        id: 'e-opt-r1',
-        source: 'optimizer',
-        target: 'robot1',
-        animated: isR1Active,
-        style: { stroke: isR1Active ? '#ef4444' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR1Active ? 2 : 1 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isR1Active ? '#ef4444' : '#64748b' },
-      },
-      {
-        id: 'e-opt-r2',
-        source: 'optimizer',
-        target: 'robot2',
-        animated: isR2Active,
-        style: { stroke: isR2Active ? '#10b981' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR2Active ? 2 : 1 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isR2Active ? '#10b981' : '#64748b' },
-      },
-      ...(r3 || Object.keys(metrics?.robots || {}).length > 2 ? [{
-        id: 'e-opt-r3',
-        source: 'optimizer',
-        target: 'robot3',
-        animated: isR3Active,
-        style: { stroke: isR3Active ? '#3b82f6' : 'rgba(148, 163, 184, 0.3)', strokeWidth: isR3Active ? 2 : 1 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isR3Active ? '#3b82f6' : '#64748b' },
-      }] : []),
+        if (e.id === 'e-goal-gen') {
+          active = isGeneratorSpeaking || isVlaSpeaking;
+          color = active ? '#10b981' : '#27272a';
+        }
+        if (e.id === 'e-gen-vla') {
+          active = isVlaSpeaking;
+          color = active ? '#38bdf8' : '#27272a';
+        }
+        if (e.id === 'e-vla-verif') {
+          active = Boolean(anyRobotActive);
+          color = active ? '#a855f7' : '#27272a';
+        }
 
-      // Robots through Mutex
-      {
-        id: 'e-r1-mutex',
-        source: 'robot1',
-        target: 'mutex',
-        animated: metrics?.center_occupied_by === 'FR3_1',
-        style: {
-          stroke: metrics?.center_occupied_by === 'FR3_1' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
-          strokeWidth: metrics?.center_occupied_by === 'FR3_1' ? 2.5 : 1,
-        },
-      },
-      {
-        id: 'e-r2-mutex',
-        source: 'robot2',
-        target: 'mutex',
-        animated: metrics?.center_occupied_by === 'FR3_2',
-        style: {
-          stroke: metrics?.center_occupied_by === 'FR3_2' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
-          strokeWidth: metrics?.center_occupied_by === 'FR3_2' ? 2.5 : 1,
-        },
-      },
-      ...(r3 || Object.keys(metrics?.robots || {}).length > 2 ? [{
-        id: 'e-r3-mutex',
-        source: 'robot3',
-        target: 'mutex',
-        animated: metrics?.center_occupied_by === 'FR3_3',
-        style: {
-          stroke: metrics?.center_occupied_by === 'FR3_3' ? '#f97316' : 'rgba(148, 163, 184, 0.3)',
-          strokeWidth: metrics?.center_occupied_by === 'FR3_3' ? 2.5 : 1,
-        },
-      }] : []),
+        if (e.id === 'e-verif-r1') {
+          active = Boolean(isR1Active);
+          color = active ? '#ef4444' : '#27272a';
+        }
+        if (e.id === 'e-verif-r2') {
+          active = Boolean(isR2Active);
+          color = active ? '#10b981' : '#27272a';
+        }
+        if (e.id === 'e-verif-r3') {
+          active = Boolean(isR3Active);
+          color = active ? '#3b82f6' : '#27272a';
+        }
 
-      // Mutex to Construction Output
-      {
-        id: 'e-mutex-const',
-        source: 'mutex',
-        target: 'construction',
-        animated: Boolean(metrics?.center_occupied_by),
-        style: { stroke: '#38bdf8', strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: '#38bdf8' },
-      },
-    ],
-    [
-      isVlaSpeaking,
-      isArchitectSpeaking,
-      isOptimizerSpeaking,
-      isR1Active,
-      isR2Active,
-      isR3Active,
-      metrics?.center_occupied_by,
-    ]
-  );
+        if (e.id === 'e-r1-mutex') {
+          active = metrics?.center_occupied_by === 'FR3_1';
+          color = active ? '#f97316' : '#27272a';
+        }
+        if (e.id === 'e-r2-mutex') {
+          active = metrics?.center_occupied_by === 'FR3_2';
+          color = active ? '#f97316' : '#27272a';
+        }
+        if (e.id === 'e-r3-mutex') {
+          active = metrics?.center_occupied_by === 'FR3_3';
+          color = active ? '#f97316' : '#27272a';
+        }
+
+        if (e.id === 'e-mutex-const') {
+          active = Boolean(metrics?.center_occupied_by);
+          color = active ? '#38bdf8' : '#27272a';
+        }
+
+        return {
+          ...e,
+          type: 'default', // Organic Bezier curved flow
+          animated: active,
+          style: {
+            stroke: color,
+            strokeWidth: active ? 2.5 : 1.5,
+            filter: active ? `drop-shadow(0 0 6px ${color})` : 'none',
+            transition: 'stroke 0.3s ease, stroke-width 0.3s ease',
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: color,
+            width: 14,
+            height: 14,
+          },
+        };
+      })
+    );
+  }, [metrics, chatMessages, actions.length, userGoal, setNodes, setEdges]);
 
   return (
     <div
       style={{
         width: '100%',
         height: '100%',
-        background: 'radial-gradient(circle at 50% 20%, #111827 0%, #030712 100%)',
+        background: '#09090b',
         position: 'relative',
+        fontFamily: fontSans,
       }}
     >
-      {/* Visual Header Overlay */}
+      {/* Floating HUD Pill */}
       <div
         style={{
           position: 'absolute',
-          top: 14,
-          left: 16,
+          top: 16,
+          left: 18,
           zIndex: 10,
-          background: 'rgba(15, 23, 42, 0.75)',
-          backdropFilter: 'blur(12px)',
+          background: 'rgba(24, 24, 27, 0.75)',
+          backdropFilter: 'blur(16px)',
           border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: 10,
-          padding: '6px 12px',
+          padding: '6px 14px',
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: 10,
           fontSize: 11,
-          color: '#f8fafc',
-          fontWeight: 600,
+          color: '#f4f4f5',
+          borderRadius: 9999,
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
         }}
       >
         <Activity size={14} color="#38bdf8" />
-        <span>Multi-Agent Task & Kinematics Flow</span>
-        <span
+        <span style={{ fontWeight: 600, letterSpacing: '0.01em' }}>Neural Task Topology</span>
+        <div
           style={{
-            fontSize: 9.5,
-            padding: '2px 6px',
-            borderRadius: 4,
-            background: 'rgba(56, 189, 248, 0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 9,
+            padding: '2px 8px',
+            background: 'rgba(56, 189, 248, 0.2)',
             color: '#38bdf8',
-            border: '1px solid rgba(56, 189, 248, 0.3)',
+            borderRadius: 9999,
+            fontWeight: 700,
           }}
         >
-          LIVE REACT-FLOW
-        </span>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#38bdf8', display: 'inline-block' }} />
+          LIVE
+        </div>
       </div>
 
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.22 }}
         minZoom={0.3}
         maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="rgba(255, 255, 255, 0.12)" />
+        <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="rgba(255, 255, 255, 0.08)" />
         <Controls
           style={{
-            background: 'rgba(15, 23, 42, 0.85)',
+            background: 'rgba(24, 24, 27, 0.85)',
+            backdropFilter: 'blur(12px)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: 8,
+            borderRadius: 14,
             overflow: 'hidden',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
           }}
         />
         <MiniMap
-          nodeStrokeWidth={3}
+          nodeStrokeWidth={2}
           zoomable
           pannable
           style={{
-            background: 'rgba(15, 23, 42, 0.85)',
+            background: 'rgba(18, 18, 24, 0.85)',
+            backdropFilter: 'blur(12px)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: 10,
+            borderRadius: 16,
+            overflow: 'hidden',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
           }}
-          nodeColor={n => {
+          nodeColor={(n) => {
             if (n.type === 'goalNode') return '#38bdf8';
-            if (n.type === 'agentNode') return '#a78bfa';
+            if (n.type === 'generatorNode') return '#10b981';
+            if (n.type === 'agentNode') return '#38bdf8';
+            if (n.type === 'verifierNode') return '#a855f7';
             if (n.type === 'robotNode') return '#10b981';
             if (n.type === 'mutexNode') return '#f97316';
             return '#0ea5e9';

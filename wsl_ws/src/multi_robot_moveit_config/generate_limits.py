@@ -11,7 +11,7 @@ def generate_limits():
     
     new_data = {'joint_limits': {}}
     for i in range(1, 4):
-        prefix = f'fr3_{i}_'
+        prefix = f'robot{i}_fr3_'
         for joint, props in limits.items():
             if 'limit' in props:
                 new_data['joint_limits'][f'{prefix}{joint}'] = {
@@ -23,7 +23,7 @@ def generate_limits():
             
     # Add finger joints manually just in case
     for i in range(1, 4):
-        prefix = f'fr3_{i}_'
+        prefix = f'robot{i}_fr3_'
         new_data['joint_limits'][f'{prefix}finger_joint1'] = {
             'has_velocity_limits': True, 'max_velocity': 0.1,
             'has_acceleration_limits': True, 'max_acceleration': 0.1

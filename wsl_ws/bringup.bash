@@ -36,7 +36,7 @@ if [ -d "$WINDOWS_WS_DIR" ]; then
     
     # Sync package source files (using rsync if available, fallback to cp)
     if command -v rsync >/dev/null 2>&1; then
-        rsync -ru --delete "$WINDOWS_WS_DIR/src/" "${HOME}/catkin_ws/src/"
+        rsync -ru --delete --exclude 'libfranka*' "$WINDOWS_WS_DIR/src/" "${HOME}/catkin_ws/src/"
     else
         cp -ru "$WINDOWS_WS_DIR/src"/* "${HOME}/catkin_ws/src/"
     fi
@@ -171,8 +171,8 @@ case "$OPTION" in
         echo -e "\n${GREEN}[TRIGGER] Calling /gemini/plan_task service...${NC}"
         ros2 service call /gemini/plan_task std_srvs/srv/Trigger
         ;;
-    7)
-        echo -e "\n${GREEN}[LAUNCH] Starting Dual FR3 Conveyor controller...${NC}"
+    7|8)
+        echo -e "\n${GREEN}[LAUNCH] Starting Dual FR3 Conveyor / Assembly controller...${NC}"
         ros2 launch rosbridge_server rosbridge_websocket_launch.xml &
         ros2 launch isaac_ros2_control conveyor_dual_controller.launch.py
         ;;

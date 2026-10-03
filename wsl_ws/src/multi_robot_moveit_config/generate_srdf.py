@@ -6,25 +6,26 @@ def generate_srdf():
 
     # Define groups
     for i in range(1, 4):
-        prefix = f'fr3_{i}_'
+        prefix = f'robot{i}_fr3_'
+        group_name = f'fr3_{i}'
         
         # Arm group
-        srdf += f'  <group name="{prefix}arm">\n'
+        srdf += f'  <group name="{group_name}_arm">\n'
         srdf += f'    <chain base_link="{prefix}link0" tip_link="{prefix}hand_tcp"/>\n'
         srdf += f'  </group>\n'
         
         # Hand group
-        srdf += f'  <group name="{prefix}hand">\n'
+        srdf += f'  <group name="{group_name}_hand">\n'
         srdf += f'    <link name="{prefix}hand"/>\n'
         srdf += f'    <link name="{prefix}leftfinger"/>\n'
         srdf += f'    <link name="{prefix}rightfinger"/>\n'
         srdf += f'  </group>\n'
 
         # End effector
-        srdf += f'  <end_effector name="{prefix}hand_tcp" parent_link="{prefix}hand_tcp" group="{prefix}hand" parent_group="{prefix}arm"/>\n'
+        srdf += f'  <end_effector name="{prefix}hand_tcp" parent_link="{prefix}hand_tcp" group="{group_name}_hand" parent_group="{group_name}_arm"/>\n'
         
         # Group states (Home pose)
-        srdf += f'  <group_state name="{prefix}home" group="{prefix}arm">\n'
+        srdf += f'  <group_state name="{group_name}_home" group="{group_name}_arm">\n'
         srdf += f'    <joint name="{prefix}joint1" value="0.0"/>\n'
         srdf += f'    <joint name="{prefix}joint2" value="-0.7854"/>\n'
         srdf += f'    <joint name="{prefix}joint3" value="0.0"/>\n'
@@ -38,7 +39,7 @@ def generate_srdf():
     # Note: For strict correctness, we disable collisions only between known adjacent links in the chain
     # plus common internal intersections for Franka.
     for i in range(1, 4):
-        p = f'fr3_{i}_'
+        p = f'robot{i}_fr3_'
         links = ['link0', 'link1', 'link2', 'link3', 'link4', 'link5', 'link6', 'link7', 'link8', 'hand', 'leftfinger', 'rightfinger']
         
         # Adjacent links

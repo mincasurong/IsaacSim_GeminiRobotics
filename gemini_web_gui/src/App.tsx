@@ -22,7 +22,7 @@ const API = 'http://localhost:3001';
 /* ── Main App ───────────────────────────────────────────── */
 function App() {
   // Theme state
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(true);
   useEffect(() => {
     const t = isDark ? C_dark : C_light;
     for (const [k, v] of Object.entries(t)) {
@@ -186,11 +186,11 @@ function App() {
 
   /* ── Render ───────────────────────────────────────────── */
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: C.text, fontSize }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: isDark ? 'radial-gradient(ellipse at 50% -20%, #18181b, #09090b 80%)' : C.bg, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: C.text, fontSize }}>
 
       {/* ════ Top Bar ════ */}
-      <div style={{ height: 50, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, background: C.glassBg, backdropFilter: 'blur(16px)', flexShrink: 0 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}><Bot size={17} color="#fff" /></div>
+      <div style={{ height: 50, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : C.border}`, background: C.glassBg, backdropFilter: 'blur(24px) saturate(150%)', flexShrink: 0, zIndex: 10 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 8, background: isDark ? 'linear-gradient(135deg, #a855f7, #6366f1)' : '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: isDark ? '0 0 16px rgba(99, 102, 241, 0.4)' : '0 4px 6px rgba(0,0,0,0.1)' }}><Bot size={17} color="#fff" /></div>
         <div>
           <span style={{ fontWeight: 800, color: C.white, fontSize: 14, letterSpacing: '-0.02em' }}>Gemini Robotics ER</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -2 }}>
@@ -198,7 +198,7 @@ function App() {
           </div>
         </div>
         <div style={{ width: 1, height: 22, background: C.border, margin: '0 4px' }} />
-        <a href="https://blog.google/technology/google-deepmind/antigravity-ai-coding/" target="_blank" rel="noreferrer" title="Powered by Google Antigravity" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, transition: 'all 0.2s' }}>
+        <a href="https://antigravity.google/" target="_blank" rel="noreferrer" title="Powered by Google Antigravity" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, transition: 'all 0.2s' }}>
           <img src="/antigravity.svg" alt="Antigravity" style={{ width: 18, height: 18 }} />
           <span style={{ fontSize: 10.5, color: C.textDim, fontWeight: 600 }}>Antigravity</span>
         </a>
@@ -270,13 +270,15 @@ function App() {
             <div style={{ maxWidth: 760, width: '100%', margin: '0 auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
               {messages.map(m => {
                 const isOrch = m.role === 'vla';
+                const isGen = m.role === 'generator' || m.senderName?.includes('Generator') || m.emoji === '📋';
+                const isVerif = m.role === 'verifier' || m.senderName?.includes('Verifier') || m.emoji === '🛡️';
                 const isArch = m.role === 'architect' && (m.senderName?.includes('Spatial') || m.emoji === '📐');
                 const isOpt = m.role === 'architect' && (m.senderName?.includes('Performance') || m.emoji === '⚡');
                 const isUser = m.role === 'user';
                 
-                const borderColor = isOrch ? '#d46a43' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? 'rgba(148, 163, 184, 0.3)' : 'rgba(34, 197, 94, 0.3)')));
-                const badgeBg = isOrch ? 'rgba(56, 189, 248, 0.15)' : (isArch ? 'rgba(167, 139, 250, 0.15)' : (isOpt ? 'rgba(251, 191, 36, 0.15)' : (isUser ? 'rgba(255,255,255,0.06)' : 'rgba(34, 197, 94, 0.15)')));
-                const badgeColor = isOrch ? '#d46a43' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? '#94a3b8' : '#22c55e')));
+                const borderColor = isOrch ? '#38bdf8' : (isGen ? '#10b981' : (isVerif ? '#a855f7' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? 'rgba(148, 163, 184, 0.3)' : 'rgba(34, 197, 94, 0.3)')))));
+                const badgeBg = isOrch ? 'rgba(56, 189, 248, 0.15)' : (isGen ? 'rgba(16, 185, 129, 0.15)' : (isVerif ? 'rgba(168, 85, 247, 0.15)' : (isArch ? 'rgba(167, 139, 250, 0.15)' : (isOpt ? 'rgba(251, 191, 36, 0.15)' : (isUser ? 'rgba(255,255,255,0.06)' : 'rgba(34, 197, 94, 0.15)')))));
+                const badgeColor = isOrch ? '#38bdf8' : (isGen ? '#10b981' : (isVerif ? '#a855f7' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? '#94a3b8' : '#22c55e')))));
 
                 return (
                   <div key={m.id} style={{
@@ -304,7 +306,7 @@ function App() {
                             {m.role === 'user' ? 'Human Operator' : (m.senderName || 'Gemini Robotics')}
                           </span>
                           <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: badgeBg, color: badgeColor, fontWeight: 600, fontFamily: monoFont }}>
-                            {isUser ? 'USER' : (isOrch ? 'ORCHESTRATOR' : (isArch ? 'SPATIAL ARCHITECT' : (isOpt ? 'PERFORMANCE OPTIMIZER' : 'SYSTEM')))}
+                            {isUser ? 'USER' : (isOrch ? 'VLA BRAIN' : (isGen ? 'TASK GENERATOR' : (isVerif ? 'SAFETY VERIFIER' : (isArch ? 'SPATIAL ARCHITECT' : (isOpt ? 'PERFORMANCE OPTIMIZER' : 'SYSTEM')))))}
                           </span>
                         </div>
                         <span style={{ fontSize: 10, color: C.textMuted }}>{fmt(m.ts)}</span>
@@ -376,8 +378,8 @@ function App() {
           </div>
 
           {/* Input Bar */}
-          <div style={{ borderTop: `1px solid ${C.border}`, background: C.glassBg, backdropFilter: 'blur(16px)', padding: '12px 24px' }}>
-            <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center', background: C.bgInput, borderRadius: 12, padding: '4px 6px 4px 16px', border: `1px solid ${C.borderHi}`, boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
+          <div style={{ borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : C.border}`, background: isDark ? 'rgba(9, 9, 11, 0.75)' : C.glassBg, backdropFilter: 'blur(24px) saturate(180%)', padding: '16px 24px', zIndex: 10 }}>
+            <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center', background: isDark ? 'rgba(255, 255, 255, 0.03)' : C.bgInput, borderRadius: 16, padding: '6px 8px 6px 18px', border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : C.borderHi}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)' : '0 4px 20px rgba(0,0,0,0.1)' }}>
               <button onClick={toggleMic} style={{
                 width: 32, height: 32, borderRadius: '50%', border: 'none', cursor: 'pointer', flexShrink: 0,
                 background: isRecording ? C.red : 'transparent', color: isRecording ? '#fff' : C.textMuted,
@@ -386,7 +388,7 @@ function App() {
               }}>{isRecording ? <MicOff size={15} /> : <Mic size={15} />}</button>
 
               <input type="text" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendGoal()}
-                placeholder={isRecording ? 'Listening...' : 'Send goal or shape command to multi-agent team...'}
+                placeholder={isRecording ? 'Listening...' : 'Send task directive to Gemini Robotics-ER-2 VLA...'}
                 style={{ flex: 1, height: 38, border: 'none', background: 'transparent', color: C.white, fontSize: fontSize, outline: 'none' }}
               />
 
@@ -399,11 +401,11 @@ function App() {
               }}><Send size={14} /></button>
             </div>
             <div style={{ maxWidth: 760, margin: '6px auto 0', fontSize: 10.5, color: C.textMuted, textAlign: 'center' }}>
-              Gemini Robotics-ER Orchestrator × Spatial Architect × Performance Optimizer
+              Rule-Based Task Generator × Gemini Robotics-ER-2 VLA Brain × Rule-Based Safety Verifier
               {' · '}
               <a href="https://mincasurong.ai.studio/" target="_blank" rel="noreferrer" style={{ color: C.blue, textDecoration: 'none' }}>m9g</a>
               {' · '}
-              <a href="https://blog.google/technology/google-deepmind/antigravity-ai-coding/" target="_blank" rel="noreferrer" style={{ color: C.textMuted, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
+              <a href="https://antigravity.google/" target="_blank" rel="noreferrer" style={{ color: C.textMuted, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
                 <img src="/antigravity.svg" alt="" style={{ width: 12, height: 12, verticalAlign: 'middle' }} />
                 Powered by Antigravity
               </a>

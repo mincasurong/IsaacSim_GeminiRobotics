@@ -49,7 +49,7 @@ def generate_launch_description():
             'mode': 'gemini',
             'tower_x': 0.0,
             'tower_y': 0.0,
-            'block_height': 0.06,
+            'block_height': 0.045,
             'hover_height': 0.15,
             'steps_per_phase': 40,
             'dwell_steps': 15,

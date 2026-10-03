@@ -1,136 +1,136 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <robot name="three_robot_scene">
   <group name="fr3_1_arm">
-    <chain base_link="fr3_1_link0" tip_link="fr3_1_hand_tcp"/>
+    <chain base_link="robot1_fr3_link0" tip_link="robot1_fr3_hand_tcp"/>
   </group>
   <group name="fr3_1_hand">
-    <link name="fr3_1_hand"/>
-    <link name="fr3_1_leftfinger"/>
-    <link name="fr3_1_rightfinger"/>
+    <link name="robot1_fr3_hand"/>
+    <link name="robot1_fr3_leftfinger"/>
+    <link name="robot1_fr3_rightfinger"/>
   </group>
-  <end_effector name="fr3_1_hand_tcp" parent_link="fr3_1_hand_tcp" group="fr3_1_hand" parent_group="fr3_1_arm"/>
+  <end_effector name="robot1_fr3_hand_tcp" parent_link="robot1_fr3_hand_tcp" group="fr3_1_hand" parent_group="fr3_1_arm"/>
   <group_state name="fr3_1_home" group="fr3_1_arm">
-    <joint name="fr3_1_joint1" value="0.0"/>
-    <joint name="fr3_1_joint2" value="-0.7854"/>
-    <joint name="fr3_1_joint3" value="0.0"/>
-    <joint name="fr3_1_joint4" value="-2.356"/>
-    <joint name="fr3_1_joint5" value="0.0"/>
-    <joint name="fr3_1_joint6" value="1.571"/>
-    <joint name="fr3_1_joint7" value="0.7854"/>
+    <joint name="robot1_fr3_joint1" value="0.0"/>
+    <joint name="robot1_fr3_joint2" value="-0.7854"/>
+    <joint name="robot1_fr3_joint3" value="0.0"/>
+    <joint name="robot1_fr3_joint4" value="-2.356"/>
+    <joint name="robot1_fr3_joint5" value="0.0"/>
+    <joint name="robot1_fr3_joint6" value="1.571"/>
+    <joint name="robot1_fr3_joint7" value="0.7854"/>
   </group_state>
   <group name="fr3_2_arm">
-    <chain base_link="fr3_2_link0" tip_link="fr3_2_hand_tcp"/>
+    <chain base_link="robot2_fr3_link0" tip_link="robot2_fr3_hand_tcp"/>
   </group>
   <group name="fr3_2_hand">
-    <link name="fr3_2_hand"/>
-    <link name="fr3_2_leftfinger"/>
-    <link name="fr3_2_rightfinger"/>
+    <link name="robot2_fr3_hand"/>
+    <link name="robot2_fr3_leftfinger"/>
+    <link name="robot2_fr3_rightfinger"/>
   </group>
-  <end_effector name="fr3_2_hand_tcp" parent_link="fr3_2_hand_tcp" group="fr3_2_hand" parent_group="fr3_2_arm"/>
+  <end_effector name="robot2_fr3_hand_tcp" parent_link="robot2_fr3_hand_tcp" group="fr3_2_hand" parent_group="fr3_2_arm"/>
   <group_state name="fr3_2_home" group="fr3_2_arm">
-    <joint name="fr3_2_joint1" value="0.0"/>
-    <joint name="fr3_2_joint2" value="-0.7854"/>
-    <joint name="fr3_2_joint3" value="0.0"/>
-    <joint name="fr3_2_joint4" value="-2.356"/>
-    <joint name="fr3_2_joint5" value="0.0"/>
-    <joint name="fr3_2_joint6" value="1.571"/>
-    <joint name="fr3_2_joint7" value="0.7854"/>
+    <joint name="robot2_fr3_joint1" value="0.0"/>
+    <joint name="robot2_fr3_joint2" value="-0.7854"/>
+    <joint name="robot2_fr3_joint3" value="0.0"/>
+    <joint name="robot2_fr3_joint4" value="-2.356"/>
+    <joint name="robot2_fr3_joint5" value="0.0"/>
+    <joint name="robot2_fr3_joint6" value="1.571"/>
+    <joint name="robot2_fr3_joint7" value="0.7854"/>
   </group_state>
   <group name="fr3_3_arm">
-    <chain base_link="fr3_3_link0" tip_link="fr3_3_hand_tcp"/>
+    <chain base_link="robot3_fr3_link0" tip_link="robot3_fr3_hand_tcp"/>
   </group>
   <group name="fr3_3_hand">
-    <link name="fr3_3_hand"/>
-    <link name="fr3_3_leftfinger"/>
-    <link name="fr3_3_rightfinger"/>
+    <link name="robot3_fr3_hand"/>
+    <link name="robot3_fr3_leftfinger"/>
+    <link name="robot3_fr3_rightfinger"/>
   </group>
-  <end_effector name="fr3_3_hand_tcp" parent_link="fr3_3_hand_tcp" group="fr3_3_hand" parent_group="fr3_3_arm"/>
+  <end_effector name="robot3_fr3_hand_tcp" parent_link="robot3_fr3_hand_tcp" group="fr3_3_hand" parent_group="fr3_3_arm"/>
   <group_state name="fr3_3_home" group="fr3_3_arm">
-    <joint name="fr3_3_joint1" value="0.0"/>
-    <joint name="fr3_3_joint2" value="-0.7854"/>
-    <joint name="fr3_3_joint3" value="0.0"/>
-    <joint name="fr3_3_joint4" value="-2.356"/>
-    <joint name="fr3_3_joint5" value="0.0"/>
-    <joint name="fr3_3_joint6" value="1.571"/>
-    <joint name="fr3_3_joint7" value="0.7854"/>
+    <joint name="robot3_fr3_joint1" value="0.0"/>
+    <joint name="robot3_fr3_joint2" value="-0.7854"/>
+    <joint name="robot3_fr3_joint3" value="0.0"/>
+    <joint name="robot3_fr3_joint4" value="-2.356"/>
+    <joint name="robot3_fr3_joint5" value="0.0"/>
+    <joint name="robot3_fr3_joint6" value="1.571"/>
+    <joint name="robot3_fr3_joint7" value="0.7854"/>
   </group_state>
-  <disable_collisions link1="fr3_1_link0" link2="fr3_1_link1" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link1" link2="fr3_1_link2" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link2" link2="fr3_1_link3" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link3" link2="fr3_1_link4" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link4" link2="fr3_1_link5" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link5" link2="fr3_1_link6" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link6" link2="fr3_1_link7" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link7" link2="fr3_1_link8" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link8" link2="fr3_1_hand" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_leftfinger" link2="fr3_1_rightfinger" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link0" link2="fr3_1_link2" reason="Never"/>
-  <disable_collisions link1="fr3_1_link1" link2="fr3_1_link3" reason="Never"/>
-  <disable_collisions link1="fr3_1_link2" link2="fr3_1_link4" reason="Never"/>
-  <disable_collisions link1="fr3_1_link3" link2="fr3_1_link5" reason="Never"/>
-  <disable_collisions link1="fr3_1_link4" link2="fr3_1_link6" reason="Never"/>
-  <disable_collisions link1="fr3_1_link5" link2="fr3_1_link7" reason="Never"/>
-  <disable_collisions link1="fr3_1_link6" link2="fr3_1_hand" reason="Never"/>
-  <disable_collisions link1="fr3_1_link7" link2="fr3_1_hand" reason="Never"/>
-  <disable_collisions link1="fr3_1_link7" link2="fr3_1_leftfinger" reason="Never"/>
-  <disable_collisions link1="fr3_1_link7" link2="fr3_1_rightfinger" reason="Never"/>
-  <disable_collisions link1="fr3_1_hand" link2="fr3_1_leftfinger" reason="Never"/>
-  <disable_collisions link1="fr3_1_hand" link2="fr3_1_rightfinger" reason="Never"/>
-  <disable_collisions link1="fr3_1_leftfinger" link2="fr3_1_rightfinger" reason="Never"/>
-  <disable_collisions link1="fr3_1_link0" link2="main_table_link" reason="Adjacent"/>
-  <disable_collisions link1="fr3_1_link1" link2="main_table_link" reason="Never"/>
-  <disable_collisions link1="fr3_1_link2" link2="main_table_link" reason="Never"/>
-  <disable_collisions link1="fr3_2_link0" link2="fr3_2_link1" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link1" link2="fr3_2_link2" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link2" link2="fr3_2_link3" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link3" link2="fr3_2_link4" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link4" link2="fr3_2_link5" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link5" link2="fr3_2_link6" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link6" link2="fr3_2_link7" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link7" link2="fr3_2_link8" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link8" link2="fr3_2_hand" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_leftfinger" link2="fr3_2_rightfinger" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link0" link2="fr3_2_link2" reason="Never"/>
-  <disable_collisions link1="fr3_2_link1" link2="fr3_2_link3" reason="Never"/>
-  <disable_collisions link1="fr3_2_link2" link2="fr3_2_link4" reason="Never"/>
-  <disable_collisions link1="fr3_2_link3" link2="fr3_2_link5" reason="Never"/>
-  <disable_collisions link1="fr3_2_link4" link2="fr3_2_link6" reason="Never"/>
-  <disable_collisions link1="fr3_2_link5" link2="fr3_2_link7" reason="Never"/>
-  <disable_collisions link1="fr3_2_link6" link2="fr3_2_hand" reason="Never"/>
-  <disable_collisions link1="fr3_2_link7" link2="fr3_2_hand" reason="Never"/>
-  <disable_collisions link1="fr3_2_link7" link2="fr3_2_leftfinger" reason="Never"/>
-  <disable_collisions link1="fr3_2_link7" link2="fr3_2_rightfinger" reason="Never"/>
-  <disable_collisions link1="fr3_2_hand" link2="fr3_2_leftfinger" reason="Never"/>
-  <disable_collisions link1="fr3_2_hand" link2="fr3_2_rightfinger" reason="Never"/>
-  <disable_collisions link1="fr3_2_leftfinger" link2="fr3_2_rightfinger" reason="Never"/>
-  <disable_collisions link1="fr3_2_link0" link2="main_table_link" reason="Adjacent"/>
-  <disable_collisions link1="fr3_2_link1" link2="main_table_link" reason="Never"/>
-  <disable_collisions link1="fr3_2_link2" link2="main_table_link" reason="Never"/>
-  <disable_collisions link1="fr3_3_link0" link2="fr3_3_link1" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link1" link2="fr3_3_link2" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link2" link2="fr3_3_link3" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link3" link2="fr3_3_link4" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link4" link2="fr3_3_link5" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link5" link2="fr3_3_link6" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link6" link2="fr3_3_link7" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link7" link2="fr3_3_link8" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link8" link2="fr3_3_hand" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_leftfinger" link2="fr3_3_rightfinger" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link0" link2="fr3_3_link2" reason="Never"/>
-  <disable_collisions link1="fr3_3_link1" link2="fr3_3_link3" reason="Never"/>
-  <disable_collisions link1="fr3_3_link2" link2="fr3_3_link4" reason="Never"/>
-  <disable_collisions link1="fr3_3_link3" link2="fr3_3_link5" reason="Never"/>
-  <disable_collisions link1="fr3_3_link4" link2="fr3_3_link6" reason="Never"/>
-  <disable_collisions link1="fr3_3_link5" link2="fr3_3_link7" reason="Never"/>
-  <disable_collisions link1="fr3_3_link6" link2="fr3_3_hand" reason="Never"/>
-  <disable_collisions link1="fr3_3_link7" link2="fr3_3_hand" reason="Never"/>
-  <disable_collisions link1="fr3_3_link7" link2="fr3_3_leftfinger" reason="Never"/>
-  <disable_collisions link1="fr3_3_link7" link2="fr3_3_rightfinger" reason="Never"/>
-  <disable_collisions link1="fr3_3_hand" link2="fr3_3_leftfinger" reason="Never"/>
-  <disable_collisions link1="fr3_3_hand" link2="fr3_3_rightfinger" reason="Never"/>
-  <disable_collisions link1="fr3_3_leftfinger" link2="fr3_3_rightfinger" reason="Never"/>
-  <disable_collisions link1="fr3_3_link0" link2="main_table_link" reason="Adjacent"/>
-  <disable_collisions link1="fr3_3_link1" link2="main_table_link" reason="Never"/>
-  <disable_collisions link1="fr3_3_link2" link2="main_table_link" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link0" link2="robot1_fr3_link1" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link1" link2="robot1_fr3_link2" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link2" link2="robot1_fr3_link3" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link3" link2="robot1_fr3_link4" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link4" link2="robot1_fr3_link5" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link5" link2="robot1_fr3_link6" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link6" link2="robot1_fr3_link7" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link7" link2="robot1_fr3_link8" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link8" link2="robot1_fr3_hand" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_leftfinger" link2="robot1_fr3_rightfinger" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link0" link2="robot1_fr3_link2" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link1" link2="robot1_fr3_link3" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link2" link2="robot1_fr3_link4" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link3" link2="robot1_fr3_link5" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link4" link2="robot1_fr3_link6" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link5" link2="robot1_fr3_link7" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link6" link2="robot1_fr3_hand" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link7" link2="robot1_fr3_hand" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link7" link2="robot1_fr3_leftfinger" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link7" link2="robot1_fr3_rightfinger" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_hand" link2="robot1_fr3_leftfinger" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_hand" link2="robot1_fr3_rightfinger" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_leftfinger" link2="robot1_fr3_rightfinger" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link0" link2="main_table_link" reason="Adjacent"/>
+  <disable_collisions link1="robot1_fr3_link1" link2="main_table_link" reason="Never"/>
+  <disable_collisions link1="robot1_fr3_link2" link2="main_table_link" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link0" link2="robot2_fr3_link1" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link1" link2="robot2_fr3_link2" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link2" link2="robot2_fr3_link3" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link3" link2="robot2_fr3_link4" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link4" link2="robot2_fr3_link5" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link5" link2="robot2_fr3_link6" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link6" link2="robot2_fr3_link7" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link7" link2="robot2_fr3_link8" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link8" link2="robot2_fr3_hand" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_leftfinger" link2="robot2_fr3_rightfinger" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link0" link2="robot2_fr3_link2" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link1" link2="robot2_fr3_link3" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link2" link2="robot2_fr3_link4" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link3" link2="robot2_fr3_link5" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link4" link2="robot2_fr3_link6" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link5" link2="robot2_fr3_link7" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link6" link2="robot2_fr3_hand" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link7" link2="robot2_fr3_hand" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link7" link2="robot2_fr3_leftfinger" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link7" link2="robot2_fr3_rightfinger" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_hand" link2="robot2_fr3_leftfinger" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_hand" link2="robot2_fr3_rightfinger" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_leftfinger" link2="robot2_fr3_rightfinger" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link0" link2="main_table_link" reason="Adjacent"/>
+  <disable_collisions link1="robot2_fr3_link1" link2="main_table_link" reason="Never"/>
+  <disable_collisions link1="robot2_fr3_link2" link2="main_table_link" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link0" link2="robot3_fr3_link1" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link1" link2="robot3_fr3_link2" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link2" link2="robot3_fr3_link3" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link3" link2="robot3_fr3_link4" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link4" link2="robot3_fr3_link5" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link5" link2="robot3_fr3_link6" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link6" link2="robot3_fr3_link7" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link7" link2="robot3_fr3_link8" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link8" link2="robot3_fr3_hand" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_leftfinger" link2="robot3_fr3_rightfinger" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link0" link2="robot3_fr3_link2" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link1" link2="robot3_fr3_link3" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link2" link2="robot3_fr3_link4" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link3" link2="robot3_fr3_link5" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link4" link2="robot3_fr3_link6" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link5" link2="robot3_fr3_link7" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link6" link2="robot3_fr3_hand" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link7" link2="robot3_fr3_hand" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link7" link2="robot3_fr3_leftfinger" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link7" link2="robot3_fr3_rightfinger" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_hand" link2="robot3_fr3_leftfinger" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_hand" link2="robot3_fr3_rightfinger" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_leftfinger" link2="robot3_fr3_rightfinger" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link0" link2="main_table_link" reason="Adjacent"/>
+  <disable_collisions link1="robot3_fr3_link1" link2="main_table_link" reason="Never"/>
+  <disable_collisions link1="robot3_fr3_link2" link2="main_table_link" reason="Never"/>
   <disable_collisions link1="main_table_link" link2="target_table_link" reason="Adjacent"/>
 </robot>

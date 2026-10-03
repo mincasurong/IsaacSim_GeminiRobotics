@@ -39,6 +39,7 @@ setup(
             'experiment_runner = isaac_ros2_control.experiment_runner:main',
             'analyze_experiments = isaac_ros2_control.analyze_experiments:main',
             'trajectory_adapter = isaac_ros2_control.trajectory_adapter:main',
+            'multi_robot_moveit_controller = isaac_ros2_control.multi_robot_moveit_controller:main',
         ],
     },
 )

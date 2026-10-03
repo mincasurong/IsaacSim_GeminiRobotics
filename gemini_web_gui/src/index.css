@@ -1,7 +1,7 @@
 body {
   margin: 0;
-  background-color: #fafafa;
-  color: #111111;
+  background-color: var(--bg, #09090b);
+  color: var(--text, #f4f4f5);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

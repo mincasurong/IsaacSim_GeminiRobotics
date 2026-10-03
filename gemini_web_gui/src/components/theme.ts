@@ -45,14 +45,44 @@ export const C_light = {
 };
 
 export const C_dark = {
-  // Previous Dark Theme backup
-  bg: '#262624', bgChat: '#2a2a28', bgSide: '#212120', bgInput: '#30302e', bgHover: '#3a3a38',
-  border: '#454441', borderHi: '#555451', green: '#4ade80', greenDim: '#22c55e', greenGlow: 'rgba(74,222,128,0.25)',
-  yellow: '#facc15', white: '#ffffff', text: '#f4f3f1', textDim: '#a09e9c', textMuted: '#757471',
-  red: '#ef4444', redGlow: 'rgba(239,68,68,0.25)', blue: '#d46a43', blueGlow: 'rgba(212,106,67,0.25)',
-  accent: '#d46a43', accentDim: '#b35532', accentGlow: 'rgba(212,106,67,0.3)', orange: '#f97316',
-  purple: '#a78bfa', purpleGlow: 'rgba(167,139,250,0.25)', cyan: '#06b6d4', magenta: '#f472b6', lime: '#a3e635',
-  glassBg: 'rgba(38,38,36,0.75)', cardBg: 'linear-gradient(135deg, rgba(48,48,46,0.9), rgba(38,38,36,0.7))'
+  // 2026 Trendy Glassmorphic Dark Theme
+  bg: '#09090b',          // Zinc 950
+  bgChat: '#18181b',      // Zinc 900
+  bgSide: '#09090b',
+  bgInput: '#27272a',     // Zinc 800
+  bgHover: '#27272a',
+  border: '#27272a',
+  borderHi: '#3f3f46',    // Zinc 700
+  
+  green: '#10b981',
+  greenDim: '#059669',
+  greenGlow: 'rgba(16, 185, 129, 0.25)',
+  yellow: '#fbbf24',
+  
+  white: '#ffffff',
+  text: '#f4f4f5',        // Zinc 100
+  textDim: '#a1a1aa',     // Zinc 400
+  textMuted: '#52525b',   // Zinc 600
+  
+  red: '#ef4444',
+  redGlow: 'rgba(239, 68, 68, 0.25)',
+  
+  blue: '#3b82f6',
+  blueGlow: 'rgba(59, 130, 246, 0.3)',
+  
+  accent: '#8b5cf6',      // Violet 500
+  accentDim: '#7c3aed',
+  accentGlow: 'rgba(139, 92, 246, 0.35)',
+  
+  orange: '#f97316',
+  purple: '#d946ef',      // Fuchsia
+  purpleGlow: 'rgba(217, 70, 239, 0.25)',
+  cyan: '#22d3ee',        // Cyan 400
+  magenta: '#ec4899',
+  lime: '#a3e635',
+  
+  glassBg: 'rgba(9, 9, 11, 0.7)',
+  cardBg: 'linear-gradient(145deg, rgba(24, 24, 27, 0.95), rgba(9, 9, 11, 0.95))',
 };
 
 // Map CSS variables to C so existing inline styles work unmodified!
@@ -63,7 +93,7 @@ export const C = Object.keys(C_light).reduce((acc, key) => {
 
 export interface ChatMessage { 
   id: number | string; 
-  role: 'user' | 'system' | 'architect' | 'vla'; 
+  role: 'user' | 'system' | 'architect' | 'vla' | 'generator' | 'verifier'; 
   text: string; 
   ts: Date;
   senderName?: string;

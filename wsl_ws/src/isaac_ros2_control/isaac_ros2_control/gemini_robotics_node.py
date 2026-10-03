@@ -24,7 +24,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.duration import Duration
 from sensor_msgs.msg import Image, CameraInfo
-from std_msgs.msg import String
+from std_msgs.msg import String, Empty
 from std_srvs.srv import Trigger
 import tf2_ros
 
@@ -47,6 +47,10 @@ try:
     from isaac_ros2_control import gemini_tools
     from isaac_ros2_control import workspace_state
     from isaac_ros2_control import experiment_logger
+    from isaac_ros2_control.rule_based_verifier import (
+        RuleBasedTaskGenerator,
+        RuleBasedTaskVerifier,
+    )
 except ImportError:
     try:
         from . import gemini_config
@@ -55,6 +59,10 @@ except ImportError:
         from . import gemini_tools
         from . import workspace_state
         from . import experiment_logger
+        from .rule_based_verifier import (
+            RuleBasedTaskGenerator,
+            RuleBasedTaskVerifier,
+        )
     except ImportError:
         import gemini_config
         import gemini_utils
@@ -62,6 +70,10 @@ except ImportError:
         import gemini_tools
         import workspace_state
         import experiment_logger
+        from rule_based_verifier import (
+            RuleBasedTaskGenerator,
+            RuleBasedTaskVerifier,
+        )
 
 
 class GeminiRoboticsNode(Node):
@@ -130,6 +142,7 @@ class GeminiRoboticsNode(Node):
         }
         
         self.workspace_state = workspace_state.WorkspaceState()
+        self.verifier = RuleBasedTaskVerifier(logger=self.get_logger())
         self.experiment_logger = None
         self.experiment_target_blocks = 9
         
@@ -149,6 +162,8 @@ class GeminiRoboticsNode(Node):
             String, '/gemini/action_result', self._result_callback, 10, callback_group=self.cb_group)
         self.custom_goal_sub = self.create_subscription(
             String, '/gemini/custom_goal', self._custom_goal_callback, 10, callback_group=self.cb_group)
+        self.reset_sim_sub = self.create_subscription(
+            Empty, '/reset_simulation', self._reset_sim_cb, 10, callback_group=self.cb_group)
 
         # Publishers
         self.detection_pub = self.create_publisher(
@@ -208,6 +223,13 @@ class GeminiRoboticsNode(Node):
             self.get_logger().error(f"Failed to parse action result: {e}")
 
     def _custom_goal_callback(self, msg):
+        import time
+        now = time.time()
+        if hasattr(self, '_last_goal_time') and (now - self._last_goal_time < 2.0):
+            self.get_logger().info("Ignoring duplicate goal command received within 2 seconds.")
+            return
+        self._last_goal_time = now
+        
         try:
             payload = json.loads(msg.data)
             if isinstance(payload, dict) and "goal" in payload:
@@ -240,6 +262,11 @@ class GeminiRoboticsNode(Node):
             self._plan_task_cb(req, res)
         
         threading.Thread(target=trigger_plan, daemon=True).start()
+
+    def _reset_sim_cb(self, msg):
+        self.get_logger().info("\033[93m[RESET] Resetting Rule-Based Task Verifier and workspace state.\033[0m")
+        self.verifier.reset()
+        self.action_results.clear()
 
     # Service Callbacks
 
@@ -333,6 +360,7 @@ class GeminiRoboticsNode(Node):
             self.cancel_current_task = False
 
         self.is_running = True
+        self.verifier.reset()
         try:
             self._run_agentic_task()
             response.success = True
@@ -393,14 +421,12 @@ class GeminiRoboticsNode(Node):
 
 
     def _brainstorm_spatial_plan(self, goal_text: str, image_bytes: bytes = None) -> str:
-        """Multi-agent discussion between Gemini Robotics-ER and Gemini Flash Spatial Architect."""
+        """Formulate high-level VLA plan using Rule-Based Task Generator + Gemini Robotics-ER-2."""
         from google.genai import types as genai_types
-        from isaac_ros2_control import gemini_config
         import time
         import uuid
         import json
         
-        architect_model = gemini_config.get_planner_model()
         robotics_model = self.model_name
         
         def stream_chat(sender, emoji, role, model_name, req_contents, req_config):
@@ -442,132 +468,61 @@ class GeminiRoboticsNode(Node):
 
             return full_text
 
-        self.get_logger().info("\033[93m[MULTI-AGENT] Starting Brainstorming...\033[0m")
+        self.get_logger().info("\033[93m[RULE-BASED TASK GENERATOR] Formulating Deterministic Stacking Blueprint...\033[0m")
         try:
-            # Query TF for block proximity data
-            proximity_text = ""
-            block_positions = self._query_block_positions()
-            if block_positions:
-                lines = []
-                for robot_name, base_xy in self.robot_bases.items():
-                    dists = []
-                    for block_name, pos in block_positions.items():
-                        d = np.hypot(pos[0] - base_xy[0], pos[1] - base_xy[1])
-                        dists.append((block_name, pos, d))
-                    dists.sort(key=lambda x: x[2])
-                    ranked = ", ".join([f"{b}({round(d,2)}m)" for b, _, d in dists[:5]])
-                    lines.append(f"  {robot_name}: nearest blocks → {ranked}")
-                proximity_text = "\n".join(lines)
+            # 1. Update real-time TF state and generate deterministic blueprint
+            self.workspace_state.update_from_tf(self.tf_buffer)
+            blueprint_data, blueprint_text = RuleBasedTaskGenerator.generate_blueprint(self.workspace_state)
 
-            # --- Turn 1: Robotics VLA Drafts Initial Plan ---
-            prompt_1 = f'''
-You are the Robotics VLA Orchestrator ({robotics_model}). The user wants to build: "{goal_text}".
+            # Publish the deterministic blueprint directly to the chat stream so the user sees it in the GUI
+            blueprint_msg_id = str(uuid.uuid4())
+            bp_header = {
+                "id": blueprint_msg_id,
+                "text": blueprint_text,
+                "senderName": "Rule-Based Task Generator (Deterministic Blueprint)",
+                "emoji": "📋",
+                "role": "generator"
+            }
+            bp_ros_msg = String()
+            bp_ros_msg.data = json.dumps(bp_header)
+            self.chat_pub.publish(bp_ros_msg)
 
-Workspace layout:
-- FR3_1 (Bottom arm): operates on Source Table 1 ([0.0, -1.05]) and the Central Target Table ([0.0, 0.0])
-- FR3_2 (Top-right arm): operates on Source Table 2 ([0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
-- FR3_3 (Top-left arm): operates on Source Table 3 ([-0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
+            # 2. Single-turn VLA Reasoning with Gemini Robotics-ER-2
+            vla_prompt = f"""
+You are the Robotics VLA Orchestrator ({robotics_model}). The user's goal is: "{goal_text}".
 
-MEASURED block distances from each robot base (pick CLOSEST blocks first!):
-{proximity_text if proximity_text else "(TF data not yet available — use visual proximity from the camera image)"}
+{blueprint_text}
 
-Draft an initial plan assigning tasks to the robots to achieve the user's goal.
-1. Proximity Rule: ALWAYS pick the block with the SHORTEST distance from the robot base first. The distances above are measured in meters — lower = closer = pick first.
-2. Concurrency: Maximize MULTI-ROBOT CONCURRENCY so multiple arms can pick/place simultaneously.
-CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
-'''
-            req_1 = [
+Instructions:
+1. Physical Workspace Assignment: Review the camera image and the Grounded Rule-Based Blueprint above.
+   - FR3_1 must pick exclusively from Table 1 (Block1, Block2, Block3).
+   - FR3_2 must pick exclusively from Table 2 (Block4, Block5, Block6).
+   - FR3_3 must pick exclusively from Table 3 (Block7, Block8, Block9).
+   - All robots place on the Central Target Table [0.0, 0.0] (|x| <= 0.15m, |y| <= 0.15m).
+2. Concurrency: Maximize concurrent picks across independent robots.
+3. Pre-execution Safety: All actions are validated by the Rule-Based Task Verifier before dispatch to FR3 arms.
+
+Provide a crisp, 2-3 sentence executive summary of your VLA task strategy.
+"""
+            req_contents = [
                 genai_types.Part.from_bytes(data=image_bytes, mime_type='image/png'),
-                genai_types.Part.from_text(text=prompt_1)
-            ] if image_bytes else prompt_1
+                genai_types.Part.from_text(text=vla_prompt)
+            ] if image_bytes else vla_prompt
 
-            response_1 = stream_chat(
-                "Robotics Orchestrator", "🦾", "vla",
-                robotics_model, req_1,
-                genai_types.GenerateContentConfig(temperature=0.2)
-            )
-            
-            is_complex = any(kw in goal_text.lower() for kw in ['tower', 'layer', 'stack', 'build', 'pattern', 'replan', 'arrange'])
-            
-            if is_complex:
-                # --- Turn 2: Spatial Architect Corrects Geometry ---
-                prompt_2 = f'''
-You are the Spatial Architect ({architect_model}). The Robotics VLA has proposed the following schedule for building: "{goal_text}".
-
-{response_1}
-
-Your job is strictly GEOMETRIC and MATHEMATICAL CORRECTION.
-Do NOT try to guess raw absolute (X,Y) coordinates for complex shapes! Instead, use Relative Placement.
-1. First, draw an ASCII top-down grid of the desired shape using `[]` for blocks and `.` for empty space.
-2. Second, pick ONE block to be the central anchor placed at (0, 0).
-3. Third, map all other blocks relative to that anchor using the relation keywords: `on_top_of`, `left_of`, `right_of`, `front_of`, `back_of`.
-
-CRITICAL: Keep your response EXTREMELY concise. Draw the ASCII grid, then list the exact relative placement mappings.
-'''
-                response_2 = stream_chat(
-                    "Spatial Architect", "📐", "architect",
-                    architect_model, prompt_2,
-                    genai_types.GenerateContentConfig(temperature=0.1)
-                )
-
-                # --- Turn 3: Agility & Performance Optimizer ---
-                prompt_3 = f'''
-You are the Agility & Performance Optimizer ({architect_model}). Review the proposed multi-robot execution plan:
-
-{response_2}
-
-Your mission is to MAXIMIZE ROBOT PERFORMANCE, SPEED, and CONCURRENCY while remaining open-minded and flexible:
-1. Low-Level Protection Note: The ROS 2 low-level controller ALREADY features an atomic mutex lock (`center_occupied_by`) preventing physical arm collisions at the center table, plus DLS inverse kinematics preventing singularities. You DO NOT need to worry about hardware collisions or artificially slow down the robots.
-2. Maximize Speed: Explicitly recommend `speed='fast'` for all pick, transfer, and placement actions to ensure snappy, high-performance execution. Do NOT limit speed to 'slow'.
-3. Aggressive Concurrency: Actively encourage dispatching multiple robots (FR3_1, FR3_2, FR3_3) simultaneously in parallel turns. The robots should work concurrently rather than waiting in sequential turns.
-4. Flexible Decision-Making: Encourage open-minded spatial choices and dynamic adaptations. Keep approach_height compact (0.1m - 0.12m) to avoid wasted vertical travel.
-
-CRITICAL: Provide clear, actionable performance directives emphasizing speed='fast' and maximum multi-arm concurrency in under 2-3 sentences.
-'''
-                response_3 = stream_chat(
-                    "Performance Optimizer", "⚡", "architect",
-                    architect_model, prompt_3,
-                    genai_types.GenerateContentConfig(temperature=0.2)
-                )
-
-                # --- Turn 4: Robotics VLA Finalizes ---
-                prompt_4 = f'''
-Here is the performance optimization review (including relative placement mappings and agility directives):
-{response_3}
-
-Finalize the plan by integrating the relative placement strategy with MAXIMUM AGILITY and SPEED:
-- Emphasize `speed='fast'` and bold parallel multi-robot actions.
-- Use the `place_relative` tool for stacking and adjacent placements.
-- Keep the robots moving fluidly, efficiently, and concurrently.
-Provide the FINAL high-performance execution blueprint.
-CRITICAL: Keep your text concise. Format your final response starting with "Here is the final execution blueprint:"
-'''
-            else:
-                prompt_4 = f'''
-Based on your initial plan, finalize the execution blueprint. 
-Since this is a simple task, no complex spatial coordinates or safety overrides are needed. Just proceed.
-CRITICAL: Keep your text concise. Format your final response starting with "Here is the final execution blueprint:"
-'''
-
-            contents = [
-                genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=prompt_1)]),
-                genai_types.Content(role="model", parts=[genai_types.Part.from_text(text=response_1)]),
-                genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=prompt_4)])
-            ]
-            response_4 = stream_chat(
-                "Robotics Orchestrator", "🚀", "vla",
-                robotics_model, contents,
+            vla_response = stream_chat(
+                "Gemini Robotics-ER-2", "🦾", "vla",
+                robotics_model, req_contents,
                 genai_types.GenerateContentConfig(temperature=0.1)
             )
-            
-            return response_4
+
+            combined_blueprint = f"{blueprint_text}\n\nVLA Task Strategy:\n{vla_response}"
+            return combined_blueprint
 
         except Exception as e:
-            self.get_logger().error(f"Failed multi-agent brainstorm: {e}")
+            self.get_logger().error(f"Failed task generation: {e}")
             return "No blueprint available due to error."
 
     def _run_agentic_task(self):
-
         """Agentic loop: Gemini calls functions, we execute them."""
         self.get_logger().info("\033[94m[AGENT] Starting Agentic Loop...\033[0m")
         
@@ -575,17 +530,16 @@ CRITICAL: Keep your text concise. Format your final response starting with "Here
         
         # Initial contents for the conversation
         
-        # 1. Multi-Agent Brainstorming Phase (Spatial Architect)
+        # 1. Deterministic Rule-Based Task Blueprint & VLA Strategy
         blueprint = self._brainstorm_spatial_plan(self.user_goal, image_bytes)
         
         enhanced_goal = f'''
 User Goal: {self.user_goal}
 
---- SPATIAL ARCHITECT BLUEPRINT ---
-The Spatial Architect agent has brainstormed the following precise coordinate layout for you:
+--- GROUNDED RULE-BASED BLUEPRINT & VLA STRATEGY ---
 {blueprint}
------------------------------------
-Use this blueprint as a strong recommendation for your 'place' function X,Y coordinates.
+----------------------------------------------------
+All actions are strictly intercepted and verified by the Rule-Based Task Verifier before execution.
 '''
         sys_prompt = gemini_prompts.SYSTEM_PROMPT.format(user_goal=enhanced_goal)
         contents = [
@@ -663,29 +617,53 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     futures = {}
                     for p in func_parts:
                         fc = p.function_call
-                        if self.experiment_logger:
-                            self.experiment_logger.log_action_dispatched(
-                                robot_id=fc.args.get("robot", "global"),
-                                action=fc.name,
-                                target=fc.args.get("object_label") or fc.args.get("anchor_block"),
-                                params=dict(fc.args) if fc.args else {}
+                        raw_args = dict(fc.args) if fc.args else {}
+
+                        # ── PRE-EXECUTION RULE-BASED SAFETY INTERCEPTION ──
+                        is_valid, sanitized_args, verif_msg = self.verifier.verify_action(
+                            fc.name, raw_args, self.workspace_state
+                        )
+
+                        if not is_valid:
+                            self.get_logger().warn(
+                                f"\033[91m[RULE VERIFIER BLOCKED] {fc.name}({raw_args}) -> {verif_msg}\033[0m"
                             )
-                        futures[executor.submit(self._execute_function, fc.name, fc.args)] = fc
+                            def make_rejected(msg=verif_msg, name=fc.name):
+                                return {
+                                    "success": False,
+                                    "verified": False,
+                                    "rejection_reason": msg,
+                                    "error_context": f"Action '{name}' rejected by Rule-Based Task Verifier: {msg}. Follow table boundaries and the Rule-Based Blueprint."
+                                }
+                            futures[executor.submit(make_rejected)] = (fc, raw_args, verif_msg, False)
+                        else:
+                            if verif_msg and "[INTERCEPT]" in verif_msg:
+                                self.get_logger().info(
+                                    f"\033[93m[RULE VERIFIER AUTO-CORRECT] {verif_msg}\033[0m"
+                                )
+                            if self.experiment_logger:
+                                self.experiment_logger.log_action_dispatched(
+                                    robot_id=sanitized_args.get("robot", "global"),
+                                    action=fc.name,
+                                    target=sanitized_args.get("object_label") or sanitized_args.get("anchor_block") or sanitized_args.get("target"),
+                                    params=sanitized_args
+                                )
+                            futures[executor.submit(self._execute_function, fc.name, sanitized_args)] = (fc, sanitized_args, verif_msg, True)
                     
                     for future in concurrent.futures.as_completed(futures):
-                        fc = futures[future]
-                        self.get_logger().info(f"\033[96m[TOOL] Executing: {fc.name} with args {fc.args}\033[0m")
+                        fc, used_args, verif_msg, was_dispatched = futures[future]
+                        self.get_logger().info(f"\033[96m[TOOL] Result for {fc.name} (args: {used_args})\033[0m")
                         try:
                             res = future.result()
                             duration = res.get("elapsed_sec", 0.0)
-                            if self.experiment_logger:
+                            if self.experiment_logger and was_dispatched:
                                 self.experiment_logger.log_action_result(
-                                    robot_id=fc.args.get("robot", "global"),
+                                    robot_id=used_args.get("robot", "global"),
                                     action=fc.name,
                                     success=res.get("success", False),
                                     duration_sec=duration,
-                                    message=res.get("message", ""),
-                                    target=fc.args.get("object_label") or fc.args.get("anchor_block")
+                                    message=res.get("message", res.get("rejection_reason", "")),
+                                    target=used_args.get("object_label") or used_args.get("anchor_block") or used_args.get("target")
                                 )
                             if fc.name == "place" and res.get("success", False):
                                 placement_count += 1
@@ -697,15 +675,15 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                             import traceback
                             self.get_logger().error(f"Function {fc.name} failed with exception: {e}")
                             self.get_logger().error(traceback.format_exc())
-                            res = {"error": str(e)}
+                            res = {"error": str(e), "success": False}
                             if self.experiment_logger:
                                 self.experiment_logger.log_action_result(
-                                    robot_id=fc.args.get("robot", "global"),
+                                    robot_id=used_args.get("robot", "global"),
                                     action=fc.name,
                                     success=False,
                                     duration_sec=0.0,
                                     message=str(e),
-                                    target=fc.args.get("object_label") or fc.args.get("anchor_block")
+                                    target=used_args.get("object_label") or used_args.get("anchor_block") or used_args.get("target")
                                 )
                             
                         response_parts.append(
@@ -724,14 +702,14 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                 )
                 
                 if replan_triggered:
-                    self.get_logger().info("\033[93m[REPLAN] Initiating mid-task brainstorm...\033[0m")
+                    self.get_logger().info("\033[93m[REPLAN] Initiating mid-task rule-based re-planning...\033[0m")
                     fresh_image = gemini_utils.encode_image_to_bytes(self.latest_rgb)
                     new_blueprint = self._brainstorm_spatial_plan("REPLAN AND RECOVER. " + self.user_goal, fresh_image)
                     contents.append(
                         genai_types.Content(
                             role="user",
                             parts=[
-                                genai_types.Part.from_text(text=f"[SYSTEM REPLAN RESULTS] The Spatial Architect provides a new blueprint:\n{new_blueprint}")
+                                genai_types.Part.from_text(text=f"[SYSTEM REPLAN RESULTS] Updated Grounded Blueprint:\n{new_blueprint}")
                             ]
                         )
                     )
@@ -789,7 +767,8 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             if name == "detect_objects":
                 result = {"objects": self._fn_detect_objects()}
             elif name == "pick":
-                result = self._fn_pick(args.get("robot"), args.get("object_label"), args.get("speed", "fast"), args.get("approach_height", 0.1))
+                target_block = args.get("target") or args.get("object_label")
+                result = self._fn_pick(args.get("robot"), target_block, args.get("speed", "fast"), float(args.get("approach_height", 0.1)))
                 # Auto-retry / enriched error context on pick failure
                 if not result.get("success", True):
                     self.get_logger().warn(f"Pick failed. Enclosing fresh workspace status.")
@@ -797,9 +776,9 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     status = self.workspace_state.get_summary()
                     result["error_context"] = f"Pick failed. Current workspace status: {json.dumps(status)}. Suggest calling replan or try an alternative."
             elif name == "place":
-                result = self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "fast"), args.get("approach_height", 0.1))
+                result = self._fn_place(args.get("robot"), float(args.get("x", 0.0)), float(args.get("y", 0.0)), args.get("speed", "fast"), float(args.get("approach_height", 0.1)))
             elif name == "place_relative":
-                result = self._fn_place_relative(args.get("robot"), args.get("anchor_block"), args.get("relation"), args.get("speed", "fast"), args.get("approach_height", 0.1))
+                result = self._fn_place_relative(args.get("robot"), args.get("anchor_block"), args.get("relation"), args.get("speed", "fast"), float(args.get("approach_height", 0.1)))
             elif name == "verify_tower":
                 result = self._fn_verify_tower()
             elif name == "go_home":

@@ -111,6 +111,33 @@ def get_robot_tools():
                 ),
             ),
             types.FunctionDeclaration(
+                name="dual_arm_pick",
+                description="Coordinately pick a long or heavy object (e.g. 'LongBar', 'HeavyEnginePart') using both FR3_1 and FR3_2 arms simultaneously.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "object_label": types.Schema(type="STRING", description="Label of the object to pick, e.g. 'LongBar'."),
+                        "offset_1": types.Schema(type="NUMBER", description="Grasp offset along length for FR3_1 (meters, default -0.3)."),
+                        "offset_2": types.Schema(type="NUMBER", description="Grasp offset along length for FR3_2 (meters, default 0.3)."),
+                        "speed": types.Schema(type="STRING", enum=["fast", "normal", "slow"], description="Movement speed."),
+                    },
+                    required=["object_label"],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="dual_arm_place",
+                description="Coordinately place the dual-arm held object at specified target X, Y coordinates.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "x": types.Schema(type="NUMBER", description="Target X coordinate."),
+                        "y": types.Schema(type="NUMBER", description="Target Y coordinate."),
+                        "speed": types.Schema(type="STRING", enum=["fast", "normal", "slow"], description="Movement speed."),
+                    },
+                    required=["x", "y"],
+                ),
+            ),
+            types.FunctionDeclaration(
                 name="verify_tower",
                 description="Take a new overhead photo and verify the current workspace state. Returns assessment of the shapes/towers and any issues.",
                 parameters=types.Schema(

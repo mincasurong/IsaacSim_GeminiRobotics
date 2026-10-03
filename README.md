@@ -36,12 +36,13 @@ Three Franka FR3 robotic arms cooperatively manipulate objects and construct com
   - **7 Standardized Benchmark Scenarios** (S1–S7) covering primitive pick-and-place, cooperative towers, 3×3 grids, triangular pyramids, cross-table relays, and dynamic disturbance recovery.
   - **35+ Metrics** across task success (TSR, GCR), multi-robot coordination (Gini workload balance, mutex contention), physical accuracy, and VLA throughput.
   - **Automated Experiment Runner** (`experiment_runner.py`) & **LaTeX/Vector Plot Generator** (`analyze_experiments.py`) compiling ready-to-publish tables with 95% Wilson Score confidence intervals.
-- **⚡ High-Speed Agile Motion Controller**: 50 Hz closed-loop control with Damped Least Squares (DLS) IK, Joint 1 Null-Space singularity avoidance, and tuned 20-step execution phases (0.4 s per motion segment).
-- **📊 Claude Codex Switch (CCS) Digital Twin Dashboard**: Elegant dark-warm aesthetic (`#262624` background, `Crail` accents) with tabbed navigation:
-  - `[🤖 Workflow Graph]` (Interactive React Flow canvas)
-  - `[🗺️ 2D Workspace]` (Designtific auto-adapting XYFlow top-down map tracking dynamic objects)
+- **⚡ High-Speed Agile Motion Controller**: 50 Hz closed-loop control with Damped Least Squares (DLS) IK, Joint 1 Null-Space azimuth decoupling, state-gated mutual exclusion (`CENTER_WORKSPACE_STATES`), and tuned 20-step execution phases (0.4 s per motion segment).
+- **📊 Claude Codex Switch (CCS) Digital Twin Dashboard**: Elegant dark-warm aesthetic (`#09090b` background, high-contrast accents) with tabbed navigation:
+  - `[🤖 Workflow Graph]` (Interactive React Flow v12 canvas with live agent reasoning)
+  - `[🗺️ 2D Workspace]` (Analytical metric digital twin with real-time 9-block TF tracking, arm heading needles, and layer badges)
   - `[⏱️ Gantt]` (Parallel execution and mutex contention timeline)
   - `[📈 KPIs & Trace]` (Resource utilization bars and discrete event table)
+- **🔌 Native Model Context Protocol (MCP)**: Built-in ROS 2 Jazzy MCP server (`wsl_ws/scripts/ros2_mcp.py` + `opencode.json`) allowing AI coding agents to introspect live nodes, echo topics, and monitor simulation health.
 - **🚀 Dual Control Modes**: Switch seamlessly between the Gemini VLA reasoning engine and a standalone rule-based sequencer (no API required).
 - **🌐 Cross-OS Bridge**: Automated FastDDS Unicast bridging between Windows 11 (Isaac Sim) and WSL2 Ubuntu 24.04 (ROS 2 Jazzy).
 
@@ -168,7 +169,7 @@ A futuristic, high-performance web dashboard running at `http://localhost:5173`:
 | Tab / View | Capabilities |
 |---|---|
 | **🔀 Workflow Graph** | Interactive `@xyflow/react` v12 canvas displaying the active goal, agent persona cards (Orchestrator 🦾, Spatial Architect 📐, Performance Optimizer ⚡), live robot arms (FR3_1, FR3_2, FR3_3 with phase and utilization), central mutex status, and animated particle flows. |
-| **🗺️ 2D Workspace** | Top-down SVG digital twin tracking all 9 colored block tokens, 3 FR3 robot bases, reach envelopes, and the central target table in real time. |
+| **🗺️ 2D Workspace** | Analytical top-down digital twin projecting physical workspace coordinates ($S = 220\,\text{px/m}$) onto an interactive React Flow canvas. Features live TF tracking of all 9 blocks (`TABLE_1/2/3`, `HELD`, `STACKED`), rotating arm heading needles reflecting Link 1 Z orientation, stacked layer elevation badges (`L1`–`L9`), and active task laser beams. |
 | **⏱️ Enhanced Gantt** | High-precision timeline tracking parallel arm execution, pick/place phases, and shared workspace lock contention (mutex wait times). |
 | **📊 KPIs & Trace** | Numerical robot resource utilization bars (busy/idle %), active state badges, and a discrete event table with duration calculations and one-click CSV export. |
 | **💬 VLA Multi-Agent Chat** | Natural language and voice input (Web Speech API), glowing agent role badges, monospace formatting for spatial reasoning grids, and quick prompt chips. |
@@ -176,65 +177,81 @@ A futuristic, high-performance web dashboard running at `http://localhost:5173`:
 
 ---
 
-## 📐 Physical Workspace & Scene Layout
+## 📐 Physical Workspace & Kinematic Cell Topology
 
 ```text
                   [ Source Table 3 (FR3_3) ]
                      R=1.05m, θ=150°
                            │
                     [ FR3_3 Base ]
-                     R=0.45m, θ=150°
+                 R=0.45m, Yaw=42.0°
                            │
 [ Source Table 1 ] ──── [ FR3_1 Base ] ──── [ Center Target Table ] ──── [ FR3_2 Base ] ──── [ Source Table 2 ]
-  R=1.05m, θ=270°      R=0.45m, θ=270°           R=0.0m              R=0.45m, θ=30°       R=1.05m, θ=30°
+  R=1.05m, θ=270°     R=0.45m, Yaw=168°           R=0.0m           R=0.45m, Yaw=-64°    R=1.05m, θ=30°
 ```
 
+### Robot Base Mounts & Tangential Orientations
+The Franka FR3 manipulator has a mechanical limit of $[-2.8973, +2.8973]\,\text{rad}$ ($\pm 166.004^\circ$) on Joint 1, producing a physical **$28^\circ$ blind zone** directly behind the base. To eliminate joint limit clipping and avoid arm collisions:
+- **`FR3_1` (Bottom)**: Mounted at `[0.0, -0.45, 0.20]m`, Base Yaw = **`168.0°`** (Center Table: local $-78^\circ$, Source Table 1: local $+102^\circ$).
+- **`FR3_2` (Top-Right)**: Mounted at `[0.3897, 0.225, 0.20]m`, Base Yaw = **`-64.0°`** (Center Table: local $-86^\circ$, Source Table 2: local $+94^\circ$).
+- **`FR3_3` (Top-Left)**: Mounted at `[-0.3897, 0.225, 0.20]m`, Base Yaw = **`42.0°`** (Center Table: local $-72^\circ$, Source Table 3: local $+108^\circ$).
+- **Collision-Free Standby Posture**: In home configuration ($\mathbf{q}_{\text{home}} = [0, 0, 0, -1.57, 0, 1.57, 0.79]$), Joint 1 rests at neutral ($0.0\,\text{rad}$), pointing each arm outward along its base azimuth, maintaining $>65^\circ$ reach margin to all targets without mutual arm contention.
+
+### Workspace Specifications
 - **Main Workbench**: 2.8 × 2.8 × 0.20 m, centered at origin $(0, 0, 0)$
-- **3 Robot Mounts**: Mounted at $R = 0.45\,\text{m}$ on the workbench ($Z = 0.20\,\text{m}$)
 - **3 Source Tables**: 0.50 × 0.50 × 0.10 m at $R = 1.05\,\text{m}$ (behind each robot)
-- **1 Target Table**: 0.36 × 0.36 × 0.10 m at the center ($R = 0.0\,\text{m}$)
+- **1 Central Target Table**: 0.36 × 0.36 × 0.10 m at the center ($R = 0.0\,\text{m}$)
+- **Physics Stacking Surface**: $Z_{\text{table\_top}} = 0.30\,\text{m}$
 
 ### 9-Block Specifications
 
 | Block | Assigned Robot | Geometric Shape | Color Label | Initial Position $(X, Y, Z)$ |
 |---|:---:|:---:|:---:|:---:|
-| `Block1` | FR3_1 | Cube | 🔴 Red | `[-0.12, -1.05, 0.33]` |
-| `Block2` | FR3_1 | Cylinder | 🟢 Green | `[ 0.00, -1.15, 0.33]` |
-| `Block3` | FR3_1 | Cube | 🔵 Blue | `[ 0.12, -1.05, 0.33]` |
-| `Block4` | FR3_2 | Cylinder | 🟡 Yellow | `[ 0.81,  0.43, 0.33]` |
-| `Block5` | FR3_2 | Cube | 🟣 Magenta | `[ 1.01,  0.48, 0.33]` |
-| `Block6` | FR3_2 | Cylinder | 🔵 Cyan | `[ 0.91,  0.63, 0.33]` |
-| `Block7` | FR3_3 | Cube | 🟠 Orange | `[-1.01,  0.48, 0.33]` |
-| `Block8` | FR3_3 | Cylinder | 🟣 Purple | `[-0.81,  0.43, 0.33]` |
-| `Block9` | FR3_3 | Cube | 🟢 Lime | `[-0.91,  0.63, 0.33]` |
+| `Block1` | FR3_1 | Cube (4.5cm) | 🔴 Red | `[-0.12, -1.05, 0.33]` |
+| `Block2` | FR3_1 | Cylinder (4.5cm) | 🟢 Green | `[ 0.00, -1.15, 0.33]` |
+| `Block3` | FR3_1 | Cube (4.5cm) | 🔵 Blue | `[ 0.12, -1.05, 0.33]` |
+| `Block4` | FR3_2 | Cylinder (4.5cm) | 🟡 Yellow | `[ 0.81,  0.43, 0.33]` |
+| `Block5` | FR3_2 | Cube (4.5cm) | 🟣 Magenta | `[ 1.01,  0.48, 0.33]` |
+| `Block6` | FR3_2 | Cylinder (4.5cm) | 🔵 Cyan | `[ 0.91,  0.63, 0.33]` |
+| `Block7` | FR3_3 | Cube (4.5cm) | 🟠 Orange | `[-1.01,  0.48, 0.33]` |
+| `Block8` | FR3_3 | Cylinder (4.5cm) | 🟣 Purple | `[-0.81,  0.43, 0.33]` |
+| `Block9` | FR3_3 | Cube (4.5cm) | 🟢 Lime | `[-0.91,  0.63, 0.33]` |
 
 ---
 
 <details>
 <summary><h2>🧮 Control Algorithms & Kinematics (Click to Expand)</h2></summary>
 
-### 1. Damped Least Squares (DLS) Inverse Kinematics
+### 1. Damped Least Squares (DLS) IK with Null-Space Azimuth Decoupling
 $$\mathbf{J}^\dagger = \mathbf{J}^T (\mathbf{J} \mathbf{J}^T + \lambda^2 \mathbf{I})^{-1}$$
-$$\Delta \mathbf{q} = \mathbf{J}^\dagger \mathbf{e} + (\mathbf{I} - \mathbf{J}^\dagger \mathbf{J}) k_{\text{null}} (\mathbf{q}_{\text{home}} - \mathbf{q})$$
+$$\Delta \mathbf{q} = \mathbf{J}^\dagger \mathbf{e} + (\mathbf{I} - \mathbf{J}^\dagger \mathbf{J}) \nabla \Phi(\mathbf{q})$$
 
-The null-space projection term keeps joints near their home configuration while tracking Cartesian end-effector targets, preventing joint limit saturation and kinematic singularities.
+To prevent Joint 1 azimuth fighting when reaching between source tables ($q_1 \approx -\pi/2$) and the central target ($q_1 \approx +\pi/2$), the null-space posture gradient decouples Joint 1:
+$$\nabla \Phi(\mathbf{q}) = \mathbf{k}_{\text{null}} \odot (\mathbf{q}_{\text{home}} - \mathbf{q}), \quad \text{with } \nabla \Phi(\mathbf{q})_1 \equiv 0$$
+Joint 1 is driven purely by task-space Cartesian tracking, eliminating internal posture counter-torques.
 
-### 2. Tuned Agile Motion Dynamics
-Motion execution velocity is controlled per phase segment at 50 Hz:
-- **`fast`**: **20 steps** ($0.4\,\text{s}$ per phase segment) — recommended default for high agility.
-- **`normal`**: **40 steps** ($0.8\,\text{s}$ per phase segment).
-- **`slow`**: **70 steps** ($1.4\,\text{s}$ per phase segment).
+### 2. State-Gated Spatial Mutual Exclusion
+To eliminate mid-air collisions while maximizing execution concurrency, the shared central workspace is governed by a state-gated lock:
+$$\mathcal{S}_{\text{center}} = \{\text{TUCK\_AFTER\_PICK}, \text{ROTATE\_TO\_PLACE}, \text{HOVER\_PLACE}, \text{DESCEND\_PLACE}, \text{RELEASE}, \text{RETRACT}, \text{TUCK\_AFTER\_PLACE}, \text{RETURN\_HOME}\}$$
+A robot entering `WAIT_FOR_CENTER` may only claim the zone when:
+$$\text{IsFree}(i) \iff (\text{lock} \in \{\varnothing, i\}) \land \bigwedge_{j \neq i} \big( \text{state}_j \notin \mathcal{S}_{\text{center}} \big)$$
+The lock is held through the entirety of `RETURN_HOME` until the manipulator physically clears the table perimeter.
 
-### 3. Dual-Safety Dynamic Stacking Height
-Guarantees collision-free placement even during sensor latency:
-$$\text{target\_z} = \max(\text{tf\_place\_z},\;\text{base\_place\_z})$$
-$$\text{base\_place\_z} = Z_{\text{table}} + Z_{\text{half\_block}} + 0.005 + (\text{tower\_height} \times 0.06)$$
+### 3. Precision Zero-Drop Anti-Bounce Stacking
+Dropping blocks from clearance offsets ($+5\,\text{mm}$) causes contact restitution impulses that destabilize tall towers ($N \ge 4$). The controller commands descent directly to the continuous contact coordinate:
+$$Z_{\text{target}} = Z_{\text{table\_top}} (0.30\,\text{m}) + \left(N - \frac{1}{2}\right) H_{\text{block}} (0.06\,\text{m})$$
+holding nominal joint waypoints during `RELEASE` before vertically retracting.
 
-### 4. Workspace Collision Mutex
-The central workbench zone is protected by an atomic mutex lock in `multi_robot_controller.py`:
-- Before descending into the shared workspace, a robot arm must acquire `center_occupied_by`.
-- When contending, the waiting robot safely hovers at clearance height ($Z = 0.35\,\text{m}$), recording contention events for logging.
-- Mutexes are cleared upon lifting or returning home.
+### 4. Windowed Physical Grasp Verification & Dwell Dynamics
+Franka parallel fingers require $250$–$350\,\text{ms}$ under PhysX dynamic joint drive compliance to establish normal grip force. The controller enforces `dwell_steps = 15` ($300\,\text{ms}$ at 50 Hz), followed by a windowed gap check:
+$$\text{pick\_success} \iff 0.005\,\text{m} < d_{\text{finger}} < 0.038\,\text{m}$$
+Rejecting both empty-hand under-travel ($< 5\,\text{mm}$) and unactuated open over-travel ($> 38\,\text{mm}$).
+
+### 5. Tuned Agile Motion Dynamics
+Motion execution velocity is controlled per phase segment using quintic polynomial minimum-jerk interpolation at 50 Hz:
+- **`fast`**: **20 steps** ($0.4\,\text{s}$ per segment) — default for agile manipulation.
+- **`normal`**: **40 steps** ($0.8\,\text{s}$ per segment).
+- **`slow`**: **70 steps** ($1.4\,\text{s}$ per segment).
 
 </details>
 
@@ -298,30 +315,38 @@ npm run build
 ```text
 IsaacSim_Gemini/
 ├── .env.example                      # Template environment file
-├── fastdds_profile.xml               # Dynamic FastDDS unicast network profile
-├── launcher.bat                      # One-click Windows launch menu
+├── .gitattributes                    # Git LFS & line ending rules
+├── .gitignore                        # Standard git ignores (build artifacts, secrets)
 ├── LICENSE                           # Apache 2.0 open-source license
-├── README.md                         # Main repository documentation
+├── opencode.json                     # OpenCode Agent & ROS 2 MCP configuration
+├── README.md                         # Main repository documentation & guide
+├── .agent/skills/                    # Local specialized agent skills
+│   ├── multi-robot-motion-planning/  # Kinematics, reachability & mutual exclusion
+│   ├── isaacsim-troubleshooting/     # Cross-OS FastDDS, TF & PhysX troubleshooting
+│   └── system_designer/              # System extension & layer design guidelines
 ├── docs/                             # Developer guides & release history
 │   ├── CHANGELOG.md                  # Semantic Versioning release notes
 │   ├── CONTRIBUTING.md               # Open-source contribution guidelines
 │   ├── DEVELOPMENT.md                # In-depth architectural & developer guide
+│   ├── LESSONS_LEARNED_2026-09-30.md # Detailed algorithmic failure analyses & fixes
 │   └── QUICKSTART.md                 # Step-by-step onboarding walkthrough
 ├── gemini_web_gui/                   # Modern React 19 + @xyflow/react web GUI
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── AgentWorkflowGraph.tsx # Interactive React Flow v12 canvas
+│   │   │   ├── AgentWorkflowGraph.tsx # Interactive React Flow v12 reasoning graph
 │   │   │   ├── GanttChart.tsx        # Execution & mutex contention timeline
 │   │   │   ├── KpiDashboard.tsx      # Utilization & state tracking
-│   │   │   ├── SceneMap.tsx          # 2D SVG digital twin
+│   │   │   ├── SceneMap.tsx          # 2D Metric Digital Twin with live block TF
 │   │   │   ├── EventTrace.tsx        # Discrete event table & CSV export
-│   │   │   └── theme.ts              # Obsidian glassmorphic styling tokens
+│   │   │   └── theme.ts              # Theme tokens & telemetry types
 │   │   ├── App.tsx                   # Main dashboard application
 │   │   └── main.tsx                  # Vite entry point
 │   ├── server.cjs                    # Express gateway with SSE streaming
 │   └── package.json                  # Frontend dependencies
 ├── isaacsim_scripts/                 # Standalone NVIDIA Isaac Sim scene scripts
-│   ├── three_robot_tower.py          # Primary 3x FR3 multi-robot simulation
+│   ├── three_robot_tower.py          # Primary 3x FR3 multi-robot simulation (Option 1)
+│   ├── conveyor_dual_robot.py        # Dual-arm conveyor visual servoing (Option 5)
+│   ├── assembly_dual_robot.py        # Long-horizon dual-arm assembly (Option 6)
 │   └── assemble_industrial_mobile_manipulator.py # Carter + FR3 mobile manipulation
 ├── logs/experiments/                 # Benchmarking outputs & paper artifacts
 │   ├── raw/                          # High-frequency JSONL telemetry traces
@@ -329,24 +354,29 @@ IsaacSim_Gemini/
 │   ├── tables/                       # Generated publication LaTeX tables (.tex)
 │   └── figures/                      # Generated publication vector plots (.pdf)
 ├── scripts/                          # Utility & automation launch scripts
+│   ├── launcher.bat                  # Unified Windows menu launcher (Options 0-6)
 │   ├── start_dashboard.bat           # Launcher for Web GUI & Express server
 │   └── setup_fastdds_wsl.py          # Automatic IP discovery & FastDDS config
 └── wsl_ws/                           # ROS 2 Jazzy workspace
     ├── bringup.bash                  # Auto-sync, build, and launch orchestrator
     ├── setup_all.sh                  # Automated WSL2 environment bootstrapper
-    └── src/isaac_ros2_control/       # Core ROS 2 package
-        ├── isaac_ros2_control/
+    ├── scripts/
+    │   └── ros2_mcp.py               # Model Context Protocol ROS 2 bridge
+    └── src/
+        ├── isaac_ros2_control/       # Core ROS 2 package
         │   ├── analyze_experiments.py # Statistical analysis & LaTeX compiler
+        │   ├── conveyor_dual_controller.py # Dual FR3 conveyor controller
         │   ├── experiment_logger.py   # Telemetry logger (35+ metrics)
         │   ├── experiment_runner.py   # Batch trial runner for S1–S7 scenarios
         │   ├── experiment_scenarios.py# Scenario specifications & ground-truth TF
-        │   ├── gemini_prompts.py      # Spatial & agility multi-agent prompts
+        │   ├── gemini_prompts.py      # Spatial, relay & agility multi-agent prompts
         │   ├── gemini_robotics_node.py# 4-turn multi-agent VLA reasoning engine
         │   ├── gemini_tools.py        # Function calling schemas (pick, place, etc.)
         │   ├── kinematics.py          # Damped Least Squares IK & Null-Space solver
-        │   ├── multi_robot_controller.py # 50 Hz controller & mutex arbiter
-        │   └── workspace_state.py     # Real-time TF block distance tracking
-        └── setup.py                   # ROS 2 package setup
+        │   ├── multi_robot_controller.py # 50 Hz controller, TF tracking & mutex arbiter
+        │   └── rule_based_verifier.py # Pre-execution deterministic safety verification
+        ├── multi_robot_description/   # 3-arm unified URDF/Xacro descriptions
+        └── multi_robot_moveit_config/ # MoveIt 2 OMPL / MoveItPy configuration
 ```
 
 ---

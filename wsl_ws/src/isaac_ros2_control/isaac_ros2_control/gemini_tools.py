@@ -117,11 +117,24 @@ def get_robot_tools():
                     type="OBJECT",
                     properties={
                         "object_label": types.Schema(type="STRING", description="Label of the object to pick, e.g. 'LongBar'."),
-                        "offset_1": types.Schema(type="NUMBER", description="Grasp offset along length for FR3_1 (meters, default -0.3)."),
-                        "offset_2": types.Schema(type="NUMBER", description="Grasp offset along length for FR3_2 (meters, default 0.3)."),
+                        "offset_1": types.Schema(type="NUMBER", description="Grasp offset along length for FR3_1 (meters, default -0.25)."),
+                        "offset_2": types.Schema(type="NUMBER", description="Grasp offset along length for FR3_2 (meters, default 0.25)."),
                         "speed": types.Schema(type="STRING", enum=["fast", "normal", "slow"], description="Movement speed."),
                     },
                     required=["object_label"],
+                ),
+            ),
+            types.FunctionDeclaration(
+                name="dual_arm_circle",
+                description="Synchronously execute a circular trajectory while holding an object (e.g. LongBar) with both FR3_1 and FR3_2 arms together.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "radius": types.Schema(type="NUMBER", description="Radius of the circular path in meters (default 0.08)."),
+                        "cycles": types.Schema(type="INTEGER", description="Number of complete circular rotations (default 1)."),
+                        "plane": types.Schema(type="STRING", enum=["XY", "YZ", "XZ"], description="Plane of the circle (default 'XY')."),
+                        "speed": types.Schema(type="STRING", enum=["fast", "normal", "slow"], description="Movement speed."),
+                    },
                 ),
             ),
             types.FunctionDeclaration(

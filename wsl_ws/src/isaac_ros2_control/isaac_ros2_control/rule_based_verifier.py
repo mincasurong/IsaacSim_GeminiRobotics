@@ -57,7 +57,9 @@ BLOCK_DESCRIPTIONS = {
 
 
 def resolve_block_name(label: str) -> str:
-    """Normalize object labels (e.g. 'Red Cube', 'block 1') to canonical 'Block1'."""
+    """Normalize object labels (e.g. 'Red Cube', 'block 1', 'ConvItem0', 'LongBar') to canonical prim names."""
+    if not label:
+        return ""
     l = str(label).lower().strip()
     if 'red' in l or 'block1' in l or 'block 1' in l: return 'Block1'
     if 'green' in l or 'block2' in l or 'block 2' in l: return 'Block2'
@@ -68,6 +70,11 @@ def resolve_block_name(label: str) -> str:
     if 'orange' in l or 'block7' in l or 'block 7' in l: return 'Block7'
     if 'purple' in l or 'block8' in l or 'block 8' in l: return 'Block8'
     if 'lime' in l or 'block9' in l or 'block 9' in l: return 'Block9'
+    if 'bar' in l or 'longbar' in l: return 'LongBar'
+    if 'engine' in l or 'heavyengine' in l: return 'HeavyEnginePart'
+    for i in range(10):
+        if f'convitem{i}' in l or f'convitem {i}' in l or f'item{i}' in l or f'item {i}' in l:
+            return f'ConvItem{i}'
     return label
 
 
@@ -221,6 +228,16 @@ class RuleBasedTaskVerifier:
         if action in ['detect_objects', 'get_workspace_status', 'verify_tower', 'replan']:
             self.verified_count += 1
             return True, sanitized, f"Rule-verifier pass: {action} is safe."
+
+        # Dual-arm coordinated actions control both FR3_1 and FR3_2
+        if action in ['dual_arm_pick', 'dual_arm_place', 'dual_arm_circle', 'dual_arm_draw_circle', 'dual_arm_motion']:
+            sanitized['speed'] = sanitized.get('speed', 'fast')
+            if action in ['dual_arm_circle', 'dual_arm_draw_circle', 'dual_arm_motion']:
+                sanitized['radius'] = float(sanitized.get('radius', 0.08))
+                sanitized['cycles'] = int(sanitized.get('cycles', 1))
+                sanitized['plane'] = str(sanitized.get('plane', 'XY')).upper()
+            self.verified_count += 1
+            return True, sanitized, f"Rule-verifier pass: {action} dual-arm coordinated motion is safe."
 
         # Robot identifier validation
         robot_raw = sanitized.get('robot', '')

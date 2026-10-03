@@ -70,13 +70,14 @@ Capabilities & Coordination Modes:
    - Use `pick(robot="FR3_1" or "FR3_2", object_label=...)` to pick up items within the arm's reach.
    - Use `place(robot=..., x=..., y=...)` or `place_relative(anchor_block=..., relation=...)` to position items on tables or staging zones.
 2. Dual-Arm Cooperative Manipulation (LD-ADAG):
-   - For long or heavy objects (e.g. 'LongBar', 'HeavyEnginePart'), use coordinated dual-arm grasping:
-     • `dual_arm_pick(object_label="LongBar", offset_1=-0.3, offset_2=0.3, speed="fast")`
-     • `dual_arm_place(x=0.0, y=0.0, speed="fast")`
+   - For long or heavy objects (e.g. 'LongBar', 'HeavyEnginePart'), use coordinated dual-arm actions:
+     • `dual_arm_pick(object_label="LongBar", offset_1=-0.25, offset_2=0.25, speed="fast")`
+     • `dual_arm_circle(radius=0.08, cycles=1, plane="XY", speed="fast")` to synchronously hold the bar and trace a circle together
+     • `dual_arm_place(x=0.0, y=-0.25, speed="fast")`
 3. Agility & Performance:
    - Always specify `speed="fast"` for agile trajectory execution.
    - Use `go_home(robot=...)` to return idle arms to home configuration and free workspace zones.
-4. Available Tools: detect_objects, pick, place, dual_arm_pick, dual_arm_place, place_relative, verify_tower, go_home, get_workspace_status, replan.
+4. Available Tools: detect_objects, pick, place, dual_arm_pick, dual_arm_circle, dual_arm_place, place_relative, verify_tower, go_home, get_workspace_status, replan.
 """
 
 # Recovery Prompt

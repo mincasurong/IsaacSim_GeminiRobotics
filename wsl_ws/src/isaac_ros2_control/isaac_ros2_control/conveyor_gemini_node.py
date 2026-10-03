@@ -122,11 +122,10 @@ class GeminiRoboticsNode(Node):
         self.tf_buffer = tf2_ros.Buffer(node=self)
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         
-        # Known robot base positions in world frame (from three_robot_tower.py)
+        # Known robot base positions in world frame (for conveyor dual robot setup)
         self.robot_bases = {
-            'FR3_1': np.array([0.0, -0.45]),
-            'FR3_2': np.array([0.3897, 0.225]),
-            'FR3_3': np.array([-0.3897, 0.225]),
+            'FR3_1': np.array([-0.7, 0.0]),
+            'FR3_2': np.array([0.7, 0.0]),
         }
         
         self.workspace_state = workspace_state.WorkspaceState()
@@ -799,9 +798,11 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             elif name == "place":
                 result = self._fn_place(args.get("robot"), args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "fast"), args.get("approach_height", 0.1))
             elif name == "dual_arm_pick":
-                result = self._fn_dual_arm_pick(args.get("object_label"), args.get("offset_1", -0.3), args.get("offset_2", 0.3), args.get("speed", "fast"))
+                result = self._fn_dual_arm_pick(args.get("object_label"), args.get("offset_1", -0.25), args.get("offset_2", 0.25), args.get("speed", "fast"))
+            elif name in ["dual_arm_circle", "dual_arm_draw_circle"]:
+                result = self._fn_dual_arm_circle(args.get("radius", 0.08), args.get("cycles", 1), args.get("plane", "XY"), args.get("speed", "fast"))
             elif name == "dual_arm_place":
-                result = self._fn_dual_arm_place(args.get("x", 0.0), args.get("y", 0.0), args.get("speed", "fast"))
+                result = self._fn_dual_arm_place(args.get("x", 0.0), args.get("y", -0.25), args.get("speed", "fast"))
             elif name == "place_relative":
                 result = self._fn_place_relative(args.get("robot"), args.get("anchor_block"), args.get("relation"), args.get("speed", "fast"), args.get("approach_height", 0.1))
             elif name == "verify_tower":
@@ -912,7 +913,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         self.action_pub.publish(msg)
         return self._wait_for_action_complete(robot, timeout=25.0)
 
-    def _fn_dual_arm_pick(self, object_label: str, offset_1: float, offset_2: float, speed: str = 'fast') -> dict:
+    def _fn_dual_arm_pick(self, object_label: str, offset_1: float = -0.25, offset_2: float = 0.25, speed: str = 'fast') -> dict:
         msg = String()
         msg.data = json.dumps({
             "action": "dual_arm_pick",
@@ -922,12 +923,22 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
             "speed": speed
         })
         self.action_pub.publish(msg)
-        # Wait for both robots to complete
-        import time
-        start_time = time.time()
-        res1 = self._wait_for_action_complete("FR3_1", timeout=30.0)
-        res2 = self._wait_for_action_complete("FR3_2", timeout=30.0)
+        res1 = self._wait_for_action_complete("FR3_1", timeout=35.0)
+        res2 = self._wait_for_action_complete("FR3_2", timeout=35.0)
         return {"success": res1.get("success", False) and res2.get("success", False), "FR3_1": res1, "FR3_2": res2}
+
+    def _fn_dual_arm_circle(self, radius: float = 0.08, cycles: int = 1, plane: str = 'XY', speed: str = 'fast') -> dict:
+        msg = String()
+        msg.data = json.dumps({
+            "action": "dual_arm_circle",
+            "radius": float(radius),
+            "cycles": int(cycles),
+            "plane": str(plane),
+            "speed": str(speed)
+        })
+        self.action_pub.publish(msg)
+        res = self._wait_for_action_complete("global", timeout=45.0)
+        return res
 
     def _fn_dual_arm_place(self, x: float, y: float, speed: str = 'fast') -> dict:
         msg = String()

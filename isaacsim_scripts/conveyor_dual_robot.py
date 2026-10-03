@@ -97,8 +97,8 @@ main_table = UsdGeom.Cube.Define(stage, "/MainTable")
 main_table.GetSizeAttr().Set(1.0)
 xform_main = UsdGeom.Xformable(main_table.GetPrim())
 xform_main.ClearXformOpOrder()
-xform_main.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.2, 0.10)) # Top surface at Z=0.20m
-xform_main.AddScaleOp().Set(Gf.Vec3f(2.8, 0.90, 0.20)) # 0.90m Y scale keeps clear of conveyor table at Y=+0.30m
+xform_main.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.25, 0.10)) # Top surface at Z=0.20m
+xform_main.AddScaleOp().Set(Gf.Vec3f(2.8, 0.90, 0.20)) # Y in [-0.70, +0.20]
 main_table.CreateDisplayColorAttr().Set([Gf.Vec3f(0.22, 0.24, 0.26)])
 
 UsdPhysics.RigidBodyAPI.Apply(main_table.GetPrim())
@@ -114,8 +114,8 @@ conveyor_table = UsdGeom.Cube.Define(stage, "/ConveyorTable")
 conveyor_table.GetSizeAttr().Set(1.0)
 xform_conv = UsdGeom.Xformable(conveyor_table.GetPrim())
 xform_conv.ClearXformOpOrder()
-xform_conv.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.6, 0.25)) # Top surface at Z=0.5m
-xform_conv.AddScaleOp().Set(Gf.Vec3f(3.0, 0.6, 0.50))
+xform_conv.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.50, 0.25)) # Top surface at Z=0.5m, Y in [0.30, 0.70]
+xform_conv.AddScaleOp().Set(Gf.Vec3f(3.0, 0.40, 0.50))
 conveyor_table.CreateDisplayColorAttr().Set([Gf.Vec3f(0.15, 0.15, 0.15)])
 
 UsdPhysics.RigidBodyAPI.Apply(conveyor_table.GetPrim())
@@ -125,7 +125,6 @@ if rb_conv.IsValid(): rb_conv.Set(False)
 kin_conv = conveyor_table.GetPrim().GetAttribute("physics:kinematicEnabled")
 if kin_conv.IsValid(): kin_conv.Set(True)
 
-# (PhysxSurfaceVelocityAPI removed because it applied velocity to the robot arms upon contact, causing oscillation. Velocity is manually enforced below instead.)
 # 4. Add 2 Robots (FR3_1 and FR3_2) side-by-side facing the conveyor
 FR3_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaFR3/fr3.usd"
 
@@ -134,7 +133,7 @@ print("Loading Robot 1 (FR3_1)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_1")
 robot1_prim = get_prim_at_path("/FR3_1")
 xform_api1 = UsdGeom.XformCommonAPI(robot1_prim)
-xform_api1.SetTranslate(Gf.Vec3d(-0.7, -0.2, 0.20))
+xform_api1.SetTranslate(Gf.Vec3d(-0.7, 0.0, 0.20))
 xform_api1.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 # Robot 2 (Right Arm)
@@ -142,7 +141,7 @@ print("Loading Robot 2 (FR3_2)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_2")
 robot2_prim = get_prim_at_path("/FR3_2")
 xform_api2 = UsdGeom.XformCommonAPI(robot2_prim)
-xform_api2.SetTranslate(Gf.Vec3d(0.7, -0.2, 0.20))
+xform_api2.SetTranslate(Gf.Vec3d(0.7, 0.0, 0.20))
 xform_api2.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True):
@@ -196,15 +195,15 @@ for i in range(num_conv_items):
     
     if shape_type == "Cube":
         block = UsdGeom.Cube.Define(stage, block_path)
-        scale = Gf.Vec3f(0.06, 0.06, 0.06)
+        scale = Gf.Vec3f(0.045, 0.045, 0.045)
     elif shape_type == "Cylinder":
         block = UsdGeom.Cylinder.Define(stage, block_path)
-        block.GetRadiusAttr().Set(0.03)
-        block.GetHeightAttr().Set(0.06)
+        block.GetRadiusAttr().Set(0.0225)
+        block.GetHeightAttr().Set(0.045)
         scale = Gf.Vec3f(1.0, 1.0, 1.0)
     else:
         block = UsdGeom.Sphere.Define(stage, block_path)
-        block.GetRadiusAttr().Set(0.03)
+        block.GetRadiusAttr().Set(0.0225)
         scale = Gf.Vec3f(1.0, 1.0, 1.0)
         
     block.GetSizeAttr().Set(1.0) if shape_type == "Cube" else None
@@ -221,8 +220,6 @@ for i in range(num_conv_items):
     
     UsdPhysics.RigidBodyAPI.Apply(block.GetPrim())
     UsdPhysics.CollisionAPI.Apply(block.GetPrim())
-    
-# We will still keep a static LongBar and HeavyEnginePart for dual-arm tasks if needed.
 
 # Long Bar (Requires dual arm)
 bar_path = "/LongBar"
@@ -230,8 +227,8 @@ bar = UsdGeom.Cube.Define(stage, bar_path)
 bar.GetSizeAttr().Set(1.0)
 xform = UsdGeom.Xformable(bar.GetPrim())
 xform.ClearXformOpOrder()
-xform.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.3, 0.25))
-xform.AddScaleOp().Set(Gf.Vec3f(0.8, 0.06, 0.06)) # 80cm long
+xform.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.25, 0.2225))
+xform.AddScaleOp().Set(Gf.Vec3f(0.8, 0.045, 0.045)) # 80cm long
 bar.CreateDisplayColorAttr().Set([Gf.Vec3f(0.1, 0.1, 0.9)]) # Blue
 
 UsdPhysics.RigidBodyAPI.Apply(bar.GetPrim())
@@ -243,8 +240,8 @@ engine = UsdGeom.Cube.Define(stage, engine_path)
 engine.GetSizeAttr().Set(1.0)
 engine_xform = UsdGeom.Xformable(engine.GetPrim())
 engine_xform.ClearXformOpOrder()
-engine_xform.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.6, 0.25))
-engine_xform.AddScaleOp().Set(Gf.Vec3f(1.0, 0.15, 0.1)) # 100cm long, bulkier
+engine_xform.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.50, 0.245))
+engine_xform.AddScaleOp().Set(Gf.Vec3f(1.0, 0.12, 0.09))
 engine.CreateDisplayColorAttr().Set([Gf.Vec3f(0.4, 0.4, 0.4)]) # Grey
 
 UsdPhysics.RigidBodyAPI.Apply(engine.GetPrim())
@@ -417,11 +414,11 @@ try:
     
     robot1_art = Articulation("/FR3_1")
     robot1_art.initialize()
-    robot1_art.set_world_poses(positions=np.array([[-0.7, -0.2, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+    robot1_art.set_world_poses(positions=np.array([[-0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
     robot2_art = Articulation("/FR3_2")
     robot2_art.initialize()
-    robot2_art.set_world_poses(positions=np.array([[0.7, -0.2, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+    robot2_art.set_world_poses(positions=np.array([[0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
     # FR3 has 7 arm DOFs; gripper fingers are separate joints
     # Canonical home configuration (upright standby facing conveyor)
@@ -465,10 +462,15 @@ bar_rp.initialize()
 engine_rp = RigidPrim("/HeavyEnginePart")
 engine_rp.initialize()
 
-# UI Reset Button setup
-import omni.appwindow
-import carb.input
-import omni.ui as ui
+# ROS 2 Reset Mechanism setup
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Empty
+
+if not rclpy.ok():
+    rclpy.init()
+
+conveyor_sim_node = Node('conveyor_sim_reset_node')
 
 def reset_simulation():
     print("[RESET] Resetting robot arms and clearing conveyor...")
@@ -476,11 +478,11 @@ def reset_simulation():
         # Reset Robot Arms
         robot1_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
         robot1_art.set_joint_velocities(np.zeros(robot1_art.num_dof))
-        robot1_art.set_world_poses(positions=np.array([[-0.7, -0.2, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+        robot1_art.set_world_poses(positions=np.array([[-0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
         
         robot2_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
         robot2_art.set_joint_velocities(np.zeros(robot2_art.num_dof))
-        robot2_art.set_world_poses(positions=np.array([[0.7, -0.2, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
+        robot2_art.set_world_poses(positions=np.array([[0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
         
         # Put conveyor objects back under the floor
         for rp in conv_rigid_prims:
@@ -489,16 +491,23 @@ def reset_simulation():
             rp.set_angular_velocities(np.zeros((1, 3)))
             
         # Reset static dual-arm objects to their original positions on the main table
-        bar_rp.set_world_poses(positions=np.array([[0.0, -0.3, 0.25]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
+        bar_rp.set_world_poses(positions=np.array([[0.0, -0.25, 0.2225]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
         bar_rp.set_linear_velocities(np.zeros((1, 3)))
         bar_rp.set_angular_velocities(np.zeros((1, 3)))
         
-        engine_rp.set_world_poses(positions=np.array([[0.0, -0.6, 0.25]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
+        engine_rp.set_world_poses(positions=np.array([[0.0, -0.50, 0.245]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
         engine_rp.set_linear_velocities(np.zeros((1, 3)))
         engine_rp.set_angular_velocities(np.zeros((1, 3)))
             
     except Exception as e:
         print(f"Failed to reset simulation: {e}")
+
+conveyor_reset_sub = conveyor_sim_node.create_subscription(Empty, '/reset_simulation', lambda msg: reset_simulation(), 10)
+
+# UI Reset Button setup
+import omni.appwindow
+import carb.input
+import omni.ui as ui
 
 def on_keyboard_event(event, *args, **kwargs):
     if event.type == carb.input.KeyboardEventType.KEY_PRESS:
@@ -521,30 +530,17 @@ print("\n--- STARTING SIMULATION AND CONVEYOR SPAWNER ---")
 while simulation_app.is_running():
     now = time.time()
     
-    if 'log_file' not in locals():
-        log_file = open("fr3_1_angles.csv", "w")
-        log_file.write("time,j1,j2,j3,j4,j5,j6,j7\n")
-        log_start = now
-    
-    if now - log_start < 5.0:
-        pos = robot1_art.get_joint_positions()
-        print(f"Time: {now - log_start:.2f}, pos type: {type(pos)}, pos: {pos}")
-        if pos is not None and len(pos) >= 7:
-            log_file.write(f"{now - log_start},{','.join(map(str, pos[:7]))}\n")
-            log_file.flush()
-    elif now - log_start >= 5.0 and not log_file.closed:
-        print("[Log] Finished recording 5s of joint data.")
-        log_file.close()
-        if args.headless: break
+    # Process incoming ROS 2 reset requests
+    if conveyor_sim_node is not None:
+        rclpy.spin_once(conveyor_sim_node, timeout_sec=0.0)
         
     if now - last_spawn_time > spawn_interval:
-        # Spawn next item at start of conveyor (X = -1.4, Y = 0.5 to 0.7, Z = 0.55)
-        # Note: num_conv_items is 10, so we only spawn the first 10 items (ConvItem0...9)
+        # Spawn next item at start of conveyor (X = -1.4, Y = 0.50, Z = 0.525)
         if next_item_idx < num_conv_items:
             rp = conv_rigid_prims[next_item_idx]
-            y_pos = np.random.uniform(0.5, 0.7)
+            y_pos = np.random.uniform(0.45, 0.55)
             rp.set_world_poses(
-                positions=np.array([[-1.4, y_pos, 0.55]]),
+                positions=np.array([[-1.4, y_pos, 0.525]]),
                 orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
             )
             rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
@@ -553,21 +549,28 @@ while simulation_app.is_running():
             last_spawn_time = now
             next_item_idx = (next_item_idx + 1) % num_conv_items
             
-    # Manual Conveyor Enforcer
-    # The PhysxSurfaceVelocityAPI can be finicky. This reliably moves objects
-    # that are resting on the conveyor belt (Z between 0.49 and 0.58).
+    # Dynamic Conveyor Surface Velocity Enforcer & Recycler
     for rp in conv_rigid_prims:
         pos, rot = rp.get_world_poses()
         if pos is not None and len(pos) > 0:
             p = pos[0]
-            # If on the conveyor belt
-            if -1.6 < p[0] < 1.6 and 0.3 < p[1] < 0.9 and 0.49 < p[2] < 0.58:
+            # If on the conveyor belt and NOT lifted by robot gripper (Z between 0.48 and 0.54)
+            if -1.5 < p[0] < 1.45 and 0.30 < p[1] < 0.70 and 0.48 < p[2] < 0.54:
                 vel = rp.get_linear_velocities()
                 if vel is not None and len(vel) > 0:
                     v = vel[0]
-                    # Gently enforce X velocity to match conveyor speed
+                    # Enforce constant conveyor transport velocity
                     if v[0] < 0.15:
                         rp.set_linear_velocities(np.array([[0.15, v[1], v[2]]]))
+            # Recycle items that reached the conveyor end back to the start
+            elif p[0] >= 1.45 and 0.30 < p[1] < 0.70 and p[2] < 0.56:
+                y_pos = np.random.uniform(0.45, 0.55)
+                rp.set_world_poses(
+                    positions=np.array([[-1.4, y_pos, 0.525]]),
+                    orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
+                )
+                rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
+                rp.set_angular_velocities(np.array([[0.0, 0.0, 0.0]]))
         
     simulation_app.update()
 

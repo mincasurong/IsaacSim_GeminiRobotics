@@ -92,7 +92,7 @@ class MultiRobotController(Node):
             "fr3_finger_joint1", "fr3_finger_joint2"
         ]
 
-        self.q_home_fr3 = [1.5708, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854]
+        self.q_home_fr3 = [0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854]
 
         # Tucked configuration: joints 2-7 only. Joint 1 is controlled independently.
         self.q_tuck_body = [-0.5, 0.0, -2.0, 0.0, 1.5, 0.7854]
@@ -617,6 +617,9 @@ class MultiRobotController(Node):
             
             action = getattr(self, f'gemini_action{r_id}', None) or ''
             target = getattr(self, f'active_target{r_id}', None) or ''
+            q_cur = getattr(self, f'q_current{r_id}', None)
+            j1_deg = round(float(np.degrees(q_cur[0])), 1) if q_cur is not None else 0.0
+            base_yaw = 168.0 if r_id == 1 else (-64.0 if r_id == 2 else 42.0)
             
             robots_data[f'FR3_{r_id}'] = {
                 'state': state,
@@ -627,14 +630,59 @@ class MultiRobotController(Node):
                 'idle_pct': round(idle_pct, 1),
                 'tasks_completed': self._tasks_completed[r_id],
                 'tasks_failed': self._tasks_failed[r_id],
+                'j1_deg': j1_deg,
+                'base_yaw_deg': base_yaw,
             }
         
+        # Query TF for blocks to report ground-truth positions to the 2D dashboard
+        blocks_data = {}
+        for i in range(1, 10):
+            b_name = f"Block{i}"
+            try:
+                trans = self.tf_buffer.lookup_transform('world', b_name, rclpy.time.Time())
+                bx = round(float(trans.transform.translation.x), 3)
+                by = round(float(trans.transform.translation.y), 3)
+                bz = round(float(trans.transform.translation.z), 3)
+                
+                holder = None
+                for rid in self.active_robot_ids:
+                    act_target = getattr(self, f'active_target{rid}', None)
+                    st = getattr(self, f'state{rid}')
+                    if act_target == b_name and st in (
+                        'LIFT', 'WAITING_FOR_PLACE_CMD', 'WAIT_FOR_CENTER',
+                        'TUCK_AFTER_PICK', 'ROTATE_TO_PLACE', 'HOVER_PLACE', 'DESCEND_PLACE'
+                    ):
+                        holder = f"FR3_{rid}"
+                        break
+                
+                if holder:
+                    status = 'HELD'
+                elif np.hypot(bx, by) < 0.20 and bz >= 0.28:
+                    status = 'STACKED'
+                elif by < -0.65:
+                    status = 'TABLE_1'
+                elif bx > 0.35 and by > 0.10:
+                    status = 'TABLE_2'
+                elif bx < -0.35 and by > 0.10:
+                    status = 'TABLE_3'
+                else:
+                    status = 'TRANSIT'
+                    
+                blocks_data[b_name] = {
+                    'x': bx, 'y': by, 'z': bz,
+                    'status': status,
+                    'holder': holder
+                }
+            except Exception:
+                pass
+
         msg = String()
         msg.data = json.dumps({
             'timestamp': now - self._metrics_start_time,
             'robots': robots_data,
             'tower_height': self.tower_height,
             'center_occupied_by': f'FR3_{self.center_occupied_by}' if self.center_occupied_by else None,
+            'blocks': blocks_data,
         })
         self.metrics_pub.publish(msg)
 

@@ -62,6 +62,19 @@ if assets_root_path is None:
 
 stage = omni.usd.get_context().get_stage()
 
+# ── Physics Scene: GPU broadphase + TGS solver for stable simulation ───────────
+physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
+physics_scene.CreateGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -1.0))
+physics_scene.CreateGravityMagnitudeAttr().Set(9.81)
+try:
+    from pxr import PhysxSchema
+    physx_scene_api = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
+    physx_scene_api.CreateEnableGPUDynamicsAttr().Set(True)
+    physx_scene_api.CreateBroadphaseTypeAttr().Set("GPU")
+    physx_scene_api.CreateSolverTypeAttr().Set("TGS")        # Temporal Gauss-Seidel
+except Exception as e:
+    print(f"Warning: Failed to set PhysX TGS solver: {e}")
+
 # Setup camera view
 ViewportManager.set_camera_view("/OmniverseKit_Persp", eye=np.array([2.5, 0.0, 1.8]), target=np.array([0.0, 0.0, 0.5]))
 
@@ -85,7 +98,7 @@ main_table.GetSizeAttr().Set(1.0)
 xform_main = UsdGeom.Xformable(main_table.GetPrim())
 xform_main.ClearXformOpOrder()
 xform_main.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.2, 0.10)) # Top surface at Z=0.20m
-xform_main.AddScaleOp().Set(Gf.Vec3f(2.8, 1.5, 0.20))
+xform_main.AddScaleOp().Set(Gf.Vec3f(2.8, 0.90, 0.20)) # 0.90m Y scale keeps clear of conveyor table at Y=+0.30m
 main_table.CreateDisplayColorAttr().Set([Gf.Vec3f(0.22, 0.24, 0.26)])
 
 UsdPhysics.RigidBodyAPI.Apply(main_table.GetPrim())
@@ -170,21 +183,7 @@ for robot_path in ["/FR3_1", "/FR3_2"]:
             # Leaving Body0 empty implicitly targets the World
             fixed_joint.CreateBody1Rel().SetTargets([base_prim.GetPath()])
 
-
-# Fix invalid inertia warnings: disable RigidBodyAPI on pure sensor/tool frames
-_TCP_FRAMES = ["fr3_hand_tcp", "fr3_link8"]
-for robot_path in ["/FR3_1", "/FR3_2"]:
-    root_prim = stage.GetPrimAtPath(robot_path)
-    if root_prim.IsValid():
-        for prim in Usd.PrimRange(root_prim):
-            if prim.GetName() in _TCP_FRAMES:
-                rb_attr = prim.GetAttribute("physics:rigidBodyEnabled")
-                if rb_attr.IsValid():
-                    rb_attr.Set(False)
-                # Also clear kinematic flag if present
-                kin_attr = prim.GetAttribute("physics:kinematicEnabled")
-                if kin_attr.IsValid():
-                    kin_attr.Set(False)
+simulation_app.update()
 
 # 5. Add Object Pool for Conveyor Spawning
 print("Creating Conveyor Item Pool...")
@@ -405,20 +404,6 @@ except Exception as e:
 
 simulation_app.update()
 
-# Setup physics scene with GPU broadphase + TGS solver for stability
-stage = omni.usd.get_context().get_stage()
-physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
-physics_scene.CreateGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -1.0))
-physics_scene.CreateGravityMagnitudeAttr().Set(9.81)
-try:
-    from pxr import PhysxSchema
-    physx_scene_api = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
-    physx_scene_api.CreateEnableGPUDynamicsAttr().Set(True)
-    physx_scene_api.CreateBroadphaseTypeAttr().Set("GPU")
-    physx_scene_api.CreateSolverTypeAttr().Set("TGS")
-except Exception as e:
-    print(f"Warning: Failed to set PhysX TGS solver: {e}")
-
 # Setup simulation manager and play (240 Hz physics for smooth 100Hz ROS2 tracking)
 # Note: device="cpu" is used here to avoid PyTorch tensor crashes ('numpy.ndarray' object has no attribute 'to').
 # Physics broadphase and solving STILL run on the GPU via EnableGPUDynamicsAttr() above.
@@ -439,7 +424,8 @@ try:
     robot2_art.set_world_poses(positions=np.array([[0.7, -0.2, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
     
     # FR3 has 7 arm DOFs; gripper fingers are separate joints
-    q_home_arm = np.array([0.0, -0.785398, 0.0, -2.35619, 0.0, 1.57079, 0.785398])
+    # Canonical home configuration (upright standby facing conveyor)
+    q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854])
     q_home_gripper = np.array([0.04, 0.04])
     
     # Set arm joint positions (indices 0-6)

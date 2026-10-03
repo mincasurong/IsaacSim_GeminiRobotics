@@ -135,29 +135,29 @@ if kin_main.IsValid(): kin_main.Set(False)
 # 3. Add Robots (Mounted on MainTable at Z=0.20m, R=0.45m)
 FR3_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaFR3/fr3.usd"
 
-# Robot 1: Franka FR3 at [0.0, -0.45, 0.20] rotated 0 deg around Z (Joint 1 [-166°, 166°] covers source and center tables)
+# Robot 1: Franka FR3 at [0.0, -0.45, 0.20] rotated 168 deg around Z
 print("Loading Robot 1 (FR3_1)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_1")
 robot1_prim = get_prim_at_path("/FR3_1")
 xform_api1 = UsdGeom.XformCommonAPI(robot1_prim)
 xform_api1.SetTranslate(Gf.Vec3d(0.0, -0.45, 0.20))
-xform_api1.SetRotate((0, 0, 0), UsdGeom.XformCommonAPI.RotationOrderXYZ)
+xform_api1.SetRotate((0, 0, 168), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
-# Robot 2: Franka FR3 at [0.3897, 0.225, 0.20] rotated 120 deg around Z
+# Robot 2: Franka FR3 at [0.3897, 0.225, 0.20] rotated -64 deg around Z
 print("Loading Robot 2 (FR3_2)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_2")
 robot2_prim = get_prim_at_path("/FR3_2")
 xform_api2 = UsdGeom.XformCommonAPI(robot2_prim)
 xform_api2.SetTranslate(Gf.Vec3d(0.3897, 0.225, 0.20))
-xform_api2.SetRotate((0, 0, 120), UsdGeom.XformCommonAPI.RotationOrderXYZ)
+xform_api2.SetRotate((0, 0, -64), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
-# Robot 3: Franka FR3 at [-0.3897, 0.225, 0.20] rotated 240 deg around Z
+# Robot 3: Franka FR3 at [-0.3897, 0.225, 0.20] rotated 42 deg around Z
 print("Loading Robot 3 (FR3_3)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_3")
 robot3_prim = get_prim_at_path("/FR3_3")
 xform_api3 = UsdGeom.XformCommonAPI(robot3_prim)
 xform_api3.SetTranslate(Gf.Vec3d(-0.3897, 0.225, 0.20))
-xform_api3.SetRotate((0, 0, 240), UsdGeom.XformCommonAPI.RotationOrderXYZ)
+xform_api3.SetRotate((0, 0, 42), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True):
     """Set isaac:nameOverride attribute on prims to eliminate TF duplicate frame warnings."""
@@ -518,19 +518,19 @@ try:
     
     robot1_art = Articulation("/FR3_1")
     robot1_art.initialize()
-    robot1_art.set_world_poses(positions=np.array([[0.0, -0.45, 0.20]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]])) # 0 deg Z
+    robot1_art.set_world_poses(positions=np.array([[0.0, -0.45, 0.20]]), orientations=np.array([[0.1045285, 0.0, 0.0, 0.9945219]])) # 168 deg Z
     
     robot2_art = Articulation("/FR3_2")
     robot2_art.initialize()
-    robot2_art.set_world_poses(positions=np.array([[0.3897, 0.225, 0.20]]), orientations=np.array([[0.5, 0.0, 0.0, 0.8660254]])) # 120 deg Z
+    robot2_art.set_world_poses(positions=np.array([[0.3897, 0.225, 0.20]]), orientations=np.array([[0.8480481, 0.0, 0.0, -0.5299193]])) # -64 deg Z
     
     robot3_art = Articulation("/FR3_3")
     robot3_art.initialize()
-    robot3_art.set_world_poses(positions=np.array([[-0.3897, 0.225, 0.20]]), orientations=np.array([[-0.5, 0.0, 0.0, 0.8660254]])) # 240 deg Z
+    robot3_art.set_world_poses(positions=np.array([[-0.3897, 0.225, 0.20]]), orientations=np.array([[0.9335804, 0.0, 0.0, 0.3583679]])) # 42 deg Z
     
     # FR3 has 7 arm DOFs; gripper fingers are separate joints
-    # q_home_arm faces center table (Joint 1 = +90 deg = +1.5708 rad)
-    q_home_arm = np.array([1.5708, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854])
+    # q_home_arm faces standby/outward with link1 Z orientation at (168°, -64°, 42°)
+    q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854])
     q_home_gripper = np.array([0.04, 0.04])
     
     robot1_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
@@ -570,15 +570,15 @@ try:
             # Reset Robot Arms to Table World Poses & Home Joint States
             robot1_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
             robot1_art.set_joint_velocities(np.zeros(robot1_art.num_dof))
-            robot1_art.set_world_poses(positions=np.array([[0.0, -0.45, 0.20]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
+            robot1_art.set_world_poses(positions=np.array([[0.0, -0.45, 0.20]]), orientations=np.array([[0.1045285, 0.0, 0.0, 0.9945219]]))
             
             robot2_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
             robot2_art.set_joint_velocities(np.zeros(robot2_art.num_dof))
-            robot2_art.set_world_poses(positions=np.array([[0.3897, 0.225, 0.20]]), orientations=np.array([[0.5, 0.0, 0.0, 0.8660254]]))
+            robot2_art.set_world_poses(positions=np.array([[0.3897, 0.225, 0.20]]), orientations=np.array([[0.8480481, 0.0, 0.0, -0.5299193]]))
             
             robot3_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
             robot3_art.set_joint_velocities(np.zeros(robot3_art.num_dof))
-            robot3_art.set_world_poses(positions=np.array([[-0.3897, 0.225, 0.20]]), orientations=np.array([[-0.5, 0.0, 0.0, 0.8660254]]))
+            robot3_art.set_world_poses(positions=np.array([[-0.3897, 0.225, 0.20]]), orientations=np.array([[0.9335804, 0.0, 0.0, 0.3583679]]))
             
             # Reset & Randomize All 9 Block Poses on Source Tables
             for i, block_prim in enumerate(blocks):

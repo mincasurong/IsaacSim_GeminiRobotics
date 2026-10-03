@@ -102,6 +102,14 @@ export interface ChatMessage {
 export interface LogEntry { id: number; level: number; name: string; msg: string; ts: Date; }
 export interface RobotAction { id: number; raw: string; ts: Date; }
 
+export interface BlockData {
+  x: number;
+  y: number;
+  z: number;
+  status: string; // 'TABLE_1' | 'TABLE_2' | 'TABLE_3' | 'STACKED' | 'HELD' | 'TRANSIT'
+  holder?: string | null;
+}
+
 export interface RobotMetrics {
   state: string;
   phase: string;
@@ -111,6 +119,8 @@ export interface RobotMetrics {
   idle_pct: number;
   tasks_completed: number;
   tasks_failed: number;
+  j1_deg?: number;
+  base_yaw_deg?: number;
 }
 
 export interface MetricsData {
@@ -118,6 +128,7 @@ export interface MetricsData {
   robots: Record<string, RobotMetrics>;
   tower_height: number;
   center_occupied_by: string | null;
+  blocks?: Record<string, BlockData>;
 }
 
 export const LOG_COLORS: Record<number, string> = { 10: C.textMuted, 20: C.green, 30: C.yellow, 40: C.red, 50: '#f472b6' };

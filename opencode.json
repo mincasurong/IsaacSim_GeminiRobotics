@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "physical-ai-orchestrator",
+  "instructions": [
+    ".opencode/hardware_context_and_idls.md"
+  ],
+  "mcp": {
+    "ros2-bridge": {
+      "type": "local",
+      "command": [
+        "wsl.exe",
+        "-d",
+        "Ubuntu-24.04",
+        "bash",
+        "-c",
+        "source /opt/ros/jazzy/setup.bash && if [ -f /mnt/d/git/IsaacSim_Gemini/wsl_ws/install/setup.bash ]; then source /mnt/d/git/IsaacSim_Gemini/wsl_ws/install/setup.bash; fi; python3 /mnt/d/git/IsaacSim_Gemini/wsl_ws/scripts/ros2_mcp.py"
+      ],
+      "enabled": true
+    }
+  }
+}

@@ -51,6 +51,7 @@ class MultiRobotController(Node):
         self.declare_parameter('hover_height', 0.12)
         self.declare_parameter('steps_per_phase', 35)
         self.declare_parameter('dwell_steps', 15)
+        self.declare_parameter('enable_guardrail', True)
 
         self.mode = self.get_parameter('mode').get_parameter_value().string_value
         self.stack_pos_world = [
@@ -61,6 +62,7 @@ class MultiRobotController(Node):
         self.hover_height = self.get_parameter('hover_height').get_parameter_value().double_value
         self.steps_per_phase = self.get_parameter('steps_per_phase').get_parameter_value().integer_value
         self.dwell_steps = self.get_parameter('dwell_steps').get_parameter_value().integer_value
+        self.enable_guardrail = self.get_parameter('enable_guardrail').get_parameter_value().bool_value
 
         # Publishers
         self.cmd_pub1 = self.create_publisher(JointState, '/fr3_1/joint_commands', 10)
@@ -516,6 +518,60 @@ class MultiRobotController(Node):
         j1 = np.arctan2(target_pos_local[1], target_pos_local[0])
         return float(np.clip(j1, -2.85, 2.85))
 
+    def _evaluate_pick_guardrail(self, robot_id, target_pos, target_quat):
+        """Evaluate safety guardrails before descending to pick."""
+        frame = self.get_robot_base_frame(robot_id)
+        
+        if not self.enable_guardrail:
+            return {'allow': True, 'reason': 'Guardrail disabled', 'frame': frame, 'residual': 0.0}
+            
+        if target_pos is None:
+            return {'allow': False, 'reason': 'Block TF missing', 'frame': frame, 'residual': 0.0}
+            
+        q_current = getattr(self, f'q_current{robot_id}')
+        
+        # Check IK residual
+        q_sol, _ = kinematics.inverse_kinematics(target_pos, target_quat, q_current)
+        T_sol = kinematics.forward_kinematics(q_sol)
+        p_sol = T_sol[:3, 3]
+        residual = float(np.linalg.norm(p_sol - target_pos))
+        
+        if residual > 0.02:  # 2cm threshold
+            return {'allow': False, 'reason': 'IK residual above threshold', 'frame': frame, 'residual': residual}
+            
+        # Check proposed link orientation intersection
+        try:
+            trans = self.tf_buffer.lookup_transform('world', frame, rclpy.time.Time())
+            p_rot = kinematics.quat_to_rot_matrix([
+                trans.transform.rotation.w,
+                trans.transform.rotation.x,
+                trans.transform.rotation.y,
+                trans.transform.rotation.z
+            ])
+            p_trans = np.array([
+                trans.transform.translation.x,
+                trans.transform.translation.y,
+                trans.transform.translation.z
+            ])
+            target_pos_world = p_rot @ target_pos + p_trans
+            
+            for other_id in self.active_robot_ids:
+                if other_id != robot_id:
+                    other_frame = self.get_robot_base_frame(other_id)
+                    other_trans = self.tf_buffer.lookup_transform('world', other_frame, rclpy.time.Time())
+                    other_base_world = np.array([
+                        other_trans.transform.translation.x,
+                        other_trans.transform.translation.y,
+                        other_trans.transform.translation.z
+                    ])
+                    dist = np.linalg.norm(target_pos_world[:2] - other_base_world[:2])
+                    if dist < 0.35: # 35cm exclusion zone around other bases
+                        return {'allow': False, 'reason': f'Proposed link orientation intersects FR3_{other_id}', 'frame': 'world', 'residual': residual}
+        except Exception:
+            pass
+            
+        return {'allow': True, 'reason': 'Safe', 'frame': frame, 'residual': residual}
+
     def _initialize_joint_phase(self, robot_id, end_q, end_gripper):
         q_current = getattr(self, f'q_current{robot_id}')
         setattr(self, f'start_q{robot_id}', np.array(q_current))
@@ -799,7 +855,24 @@ class MultiRobotController(Node):
 
                 elif state == 'HOVER_PICK':
                     block_pos, block_quat = self.get_block_local_pose(robot_id)
-                    if block_pos is None: return
+                    
+                    # Guardrail Check
+                    guardrail = self._evaluate_pick_guardrail(robot_id, block_pos, block_quat)
+                    
+                    if not guardrail['allow']:
+                        self.get_logger().warn(f"[GUARDRAIL DENY] Robot {robot_id}: {guardrail['reason']} (residual: {guardrail['residual']:.4f})")
+                        
+                        # Abort pick
+                        if self.mode == 'gemini' and getattr(self, f'gemini_action{robot_id}') == 'pick':
+                            self._set_state(robot_id, 'FINISHED')
+                            # Publish structured deny
+                            deny_msg = json.dumps(guardrail)
+                            self._publish_result(False, f"Guardrail Deny: {deny_msg}", f"FR3_{robot_id}")
+                            self._tasks_failed[robot_id] += 1
+                        else:
+                            self._set_state(robot_id, 'INIT')
+                        return
+
                     self._initialize_phase(robot_id, block_pos, self.gripper_open, block_quat)
                     self._set_state(robot_id, 'DESCEND_PICK')
 

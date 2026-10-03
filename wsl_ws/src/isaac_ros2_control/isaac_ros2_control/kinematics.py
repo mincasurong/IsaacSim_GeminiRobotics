@@ -279,9 +279,6 @@ def inverse_kinematics(target_pos, target_quat, q_init, max_iter=150, tol=1e-5):
             dq = dq * (step_limit / dq_norm)
             
         q += dq
-        
-        for i in range(7):
-            q[i] = np.clip(q[i], FR3_JOINT_LIMITS[i][0], FR3_JOINT_LIMITS[i][1])
             
     return q, False
 

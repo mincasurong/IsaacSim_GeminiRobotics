@@ -29,7 +29,9 @@ interface AgentWorkflowGraphProps {
   metrics: MetricsData | null;
   chatMessages: ChatMessage[];
   actions: RobotAction[];
+  results: RobotAction[];
   userGoal: string;
+  mode?: number;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -378,18 +380,20 @@ const RuleVerifierNode = ({ data }: any) => {
 // ─────────────────────────────────────────────────────────────
 const RobotArmNode = ({ data }: any) => {
   const isExecuting = data.phase && data.phase !== 'IDLE' && data.phase !== 'QUEUED';
-  const glow = isExecuting ? `0 0 25px ${data.color}35` : 'none';
+  const isDenied = Boolean(data.deny);
+  const glow = isDenied ? `0 0 25px rgba(239, 68, 68, 0.35)` : (isExecuting ? `0 0 25px ${data.color}35` : 'none');
+  const borderColor = isDenied ? '#ef4444' : (isExecuting ? data.color : 'rgba(255, 255, 255, 0.1)');
 
   return (
     <div
       style={{
         ...baseFlowCardStyle,
         width: 250,
-        border: `1px solid ${isExecuting ? data.color : 'rgba(255, 255, 255, 0.1)'}`,
+        border: `1px solid ${borderColor}`,
         boxShadow: `0 14px 32px -4px rgba(0, 0, 0, 0.6), ${glow}`,
       }}
     >
-      <Handle type="target" position={Position.Top} style={makeHandleStyle(data.color)} />
+      <Handle type="target" position={Position.Top} style={makeHandleStyle(isDenied ? '#ef4444' : data.color)} />
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -398,23 +402,23 @@ const RobotArmNode = ({ data }: any) => {
               width: 30,
               height: 30,
               borderRadius: 10,
-              background: `${data.color}20`,
-              border: `1px solid ${data.color}50`,
+              background: isDenied ? 'rgba(239, 68, 68, 0.2)' : `${data.color}20`,
+              border: `1px solid ${isDenied ? 'rgba(239, 68, 68, 0.5)' : `${data.color}50`}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: `0 0 10px ${data.color}25`,
+              boxShadow: `0 0 10px ${isDenied ? 'rgba(239, 68, 68, 0.25)' : `${data.color}25`}`,
             }}
           >
-            <Bot size={16} color={data.color} />
+            {isDenied ? <Lock size={16} color="#ef4444" /> : <Bot size={16} color={data.color} />}
           </div>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#ffffff' }}>{data.name}</div>
             <div style={{ fontSize: 9, color: '#a1a1aa' }}>{data.quadrant}</div>
           </div>
         </div>
-        <Pill color={isExecuting ? data.color : '#71717a'} pulse={isExecuting}>
-          {data.phase || 'IDLE'}
+        <Pill color={isDenied ? '#ef4444' : (isExecuting ? data.color : '#71717a')} pulse={isExecuting || isDenied}>
+          {isDenied ? 'DENIED' : (data.phase || 'IDLE')}
         </Pill>
       </div>
 
@@ -436,6 +440,12 @@ const RobotArmNode = ({ data }: any) => {
           {data.target || 'None'}
         </span>
       </div>
+
+      {isDenied && (
+        <div style={{ fontSize: 10, color: '#ef4444', marginBottom: 10, lineHeight: 1.3 }}>
+          {data.deny.reason}
+        </div>
+      )}
 
       {/* Metrics Row */}
       <div
@@ -460,7 +470,7 @@ const RobotArmNode = ({ data }: any) => {
         <span style={{ color: '#38bdf8', fontSize: 9, fontWeight: 600 }}>100 Hz</span>
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={makeHandleStyle(data.color)} />
+      <Handle type="source" position={Position.Bottom} style={makeHandleStyle(isDenied ? '#ef4444' : data.color)} />
     </div>
   );
 };
@@ -533,9 +543,19 @@ const MutexNode = ({ data }: any) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Custom Node: Construction / Tower State Node
+// Custom Node: Construction / Workspace Output Node
 // ─────────────────────────────────────────────────────────────
 const ConstructionNode = ({ data }: any) => {
+  const currentMode = data.mode ?? 1;
+  const isConveyor = currentMode === 5;
+  const isAssembly = currentMode === 6;
+
+  const title = isConveyor ? 'Conveyor Digital Twin' : (isAssembly ? 'Dual-Arm Workcell' : 'Tower Digital Twin');
+  const subtitle = isConveyor ? 'PhysX Conveyor Feed' : (isAssembly ? 'Assembly Station' : 'PhysX Rigid Bodies');
+  const metricLabel = isConveyor ? 'Items Handled' : (isAssembly ? 'Parts Placed' : 'Layers Stacked');
+  const metricValue = isConveyor || isAssembly ? (data.placedCount || 0) : (data.towerHeight || 0);
+  const metricSub = isConveyor || isAssembly ? ' processed' : '/9';
+
   return (
     <div
       style={{
@@ -565,12 +585,12 @@ const ConstructionNode = ({ data }: any) => {
             <Layers size={16} color="#38bdf8" />
           </div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#ffffff' }}>Tower Digital Twin</div>
-            <div style={{ fontSize: 9, color: '#94a3b8' }}>PhysX Rigid Bodies</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#ffffff' }}>{title}</div>
+            <div style={{ fontSize: 9, color: '#94a3b8' }}>{subtitle}</div>
           </div>
         </div>
         <Pill color="#10b981">
-          <CheckCircle2 size={10} style={{ marginRight: 2 }} /> Stable
+          <CheckCircle2 size={10} style={{ marginRight: 2 }} /> Active
         </Pill>
       </div>
 
@@ -585,10 +605,10 @@ const ConstructionNode = ({ data }: any) => {
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>Layers Stacked</div>
+          <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>{metricLabel}</div>
           <div style={{ fontSize: 18, color: '#38bdf8', fontWeight: 800, fontFamily: fontMono }}>
-            {data.towerHeight || 0}
-            <span style={{ fontSize: 11, color: '#64748b' }}>/9</span>
+            {metricValue}
+            <span style={{ fontSize: 11, color: '#64748b' }}>{metricSub}</span>
           </div>
         </div>
 
@@ -602,9 +622,9 @@ const ConstructionNode = ({ data }: any) => {
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>Placement State</div>
+          <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>Execution State</div>
           <div style={{ fontSize: 13, color: '#10b981', fontWeight: 700, marginTop: 4 }}>
-            Aligned
+            Synchronized
           </div>
         </div>
       </div>
@@ -622,31 +642,26 @@ const nodeTypes = {
   constructionNode: ConstructionNode,
 };
 
-const initialNodes: Node[] = [
-  { id: 'goal', type: 'goalNode', position: { x: 370, y: 20 }, data: { goal: '' } },
-  { id: 'generator', type: 'generatorNode', position: { x: 370, y: 160 }, data: { isActive: true, lastSnippet: '' } },
-  { id: 'orchestrator', type: 'agentNode', position: { x: 370, y: 310 }, data: { role: 'VLA Brain', emoji: '🦾', color: '#38bdf8', model: 'gemini-robotics-er-2' } },
-  { id: 'verifier', type: 'verifierNode', position: { x: 370, y: 460 }, data: { isActive: true, lastSnippet: '' } },
-  { id: 'robot1', type: 'robotNode', position: { x: 50, y: 620 }, data: { name: 'FR3_1 (Bottom)', color: '#ef4444', quadrant: 'Table 1' } },
-  { id: 'robot2', type: 'robotNode', position: { x: 370, y: 620 }, data: { name: 'FR3_2 (Top-Right)', color: '#10b981', quadrant: 'Table 2' } },
-  { id: 'robot3', type: 'robotNode', position: { x: 690, y: 620 }, data: { name: 'FR3_3 (Top-Left)', color: '#3b82f6', quadrant: 'Table 3' } },
-  { id: 'mutex', type: 'mutexNode', position: { x: 370, y: 810 }, data: { occupiedBy: null } },
-  { id: 'construction', type: 'constructionNode', position: { x: 370, y: 960 }, data: { towerHeight: 0, placedCount: 0 } },
-];
+const getRobotMeta = (robotKey: string, currentMode: number) => {
+  if (currentMode === 5) {
+    if (robotKey === 'FR3_1') return { name: 'FR3_1 (Left Arm)', color: '#ef4444', quadrant: 'Conveyor Sector L' };
+    if (robotKey === 'FR3_2') return { name: 'FR3_2 (Right Arm)', color: '#10b981', quadrant: 'Conveyor Sector R' };
+  } else if (currentMode === 6) {
+    if (robotKey === 'FR3_1') return { name: 'FR3_1 (Primary)', color: '#ef4444', quadrant: 'Assembly Cell A' };
+    if (robotKey === 'FR3_2') return { name: 'FR3_2 (Secondary)', color: '#10b981', quadrant: 'Assembly Cell B' };
+  }
+  if (robotKey === 'FR3_1') return { name: 'FR3_1 (Bottom)', color: '#ef4444', quadrant: 'Table 1' };
+  if (robotKey === 'FR3_2') return { name: 'FR3_2 (Top-Right)', color: '#10b981', quadrant: 'Table 2' };
+  if (robotKey === 'FR3_3') return { name: 'FR3_3 (Top-Left)', color: '#3b82f6', quadrant: 'Table 3' };
+  return { name: robotKey, color: '#a855f7', quadrant: 'Workstation' };
+};
 
-// Fluid cubic Bezier curves ('default') instead of rigid square 'step'
-const initialEdges: Edge[] = [
-  { id: 'e-goal-gen', source: 'goal', target: 'generator', type: 'default' },
-  { id: 'e-gen-vla', source: 'generator', target: 'orchestrator', type: 'default' },
-  { id: 'e-vla-verif', source: 'orchestrator', target: 'verifier', type: 'default' },
-  { id: 'e-verif-r1', source: 'verifier', target: 'robot1', type: 'default' },
-  { id: 'e-verif-r2', source: 'verifier', target: 'robot2', type: 'default' },
-  { id: 'e-verif-r3', source: 'verifier', target: 'robot3', type: 'default' },
-  { id: 'e-r1-mutex', source: 'robot1', target: 'mutex', type: 'default' },
-  { id: 'e-r2-mutex', source: 'robot2', target: 'mutex', type: 'default' },
-  { id: 'e-r3-mutex', source: 'robot3', target: 'mutex', type: 'default' },
-  { id: 'e-mutex-const', source: 'mutex', target: 'construction', type: 'default' },
-];
+const getRobotId = (robotKey: string) => {
+  if (robotKey === 'FR3_1') return 'robot1';
+  if (robotKey === 'FR3_2') return 'robot2';
+  if (robotKey === 'FR3_3') return 'robot3';
+  return `robot_${robotKey.toLowerCase()}`;
+};
 
 // ─────────────────────────────────────────────────────────────
 // Main Agent Workflow Graph Component
@@ -656,12 +671,31 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
   chatMessages,
   actions,
   userGoal,
+  mode = 1,
 }) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  // Dynamically compute active robot keys based on mode or live telemetry
+  const robotKeys = React.useMemo(() => {
+    if (mode === 5 || mode === 6) {
+      return ['FR3_1', 'FR3_2'];
+    }
+    if (metrics?.robots && Object.keys(metrics.robots).length > 0) {
+      return Object.keys(metrics.robots).sort();
+    }
+    return ['FR3_1', 'FR3_2', 'FR3_3'];
+  }, [metrics?.robots, mode]);
+
+  // Center robot cards dynamically under X=500
+  const getRobotX = (index: number, count: number) => {
+    const gap = count === 2 ? 80 : 60;
+    const totalWidth = count * 260 + Math.max(0, count - 1) * gap;
+    const startX = 500 - totalWidth / 2;
+    return startX + index * (260 + gap);
+  };
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   useEffect(() => {
-    // Find latest messages per persona
     const latestGenerator = [...chatMessages].reverse().find(
       m => m.role === 'generator' || m.senderName?.includes('Generator') || m.emoji === '📋'
     );
@@ -675,143 +709,213 @@ export const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({
     const isVlaSpeaking =
       lastMessage?.role === 'vla' || lastMessage?.senderName?.includes('Gemini') || lastMessage?.emoji === '🦾';
 
-    const r1 = metrics?.robots?.FR3_1;
-    const r2 = metrics?.robots?.FR3_2;
-    const r3 = metrics?.robots?.FR3_3;
+    const isRobotActive = (key: string) => {
+      const r = metrics?.robots?.[key];
+      return Boolean(r && r.phase !== 'IDLE' && r.phase !== 'QUEUED');
+    };
+    const anyRobotActive = robotKeys.some(isRobotActive);
 
-    const isR1Active = r1 && r1.phase !== 'IDLE' && r1.phase !== 'QUEUED';
-    const isR2Active = r2 && r2.phase !== 'IDLE' && r2.phase !== 'QUEUED';
-    const isR3Active = r3 && r3.phase !== 'IDLE' && r3.phase !== 'QUEUED';
-    const anyRobotActive = isR1Active || isR2Active || isR3Active;
+    // Build the complete, adaptive nodes list
+    const currentNodes: Node[] = [
+      { id: 'goal', type: 'goalNode', position: { x: 370, y: 20 }, data: { goal: userGoal } },
+      {
+        id: 'generator',
+        type: 'generatorNode',
+        position: { x: 370, y: 160 },
+        data: {
+          isActive: Boolean(isGeneratorSpeaking || latestGenerator),
+          lastSnippet: latestGenerator?.text ? latestGenerator.text.slice(0, 95) + '...' : '',
+        },
+      },
+      {
+        id: 'orchestrator',
+        type: 'agentNode',
+        position: { x: 370, y: 310 },
+        data: {
+          role: 'VLA Brain',
+          emoji: '🦾',
+          color: '#38bdf8',
+          model: 'gemini-robotics-er-2',
+          isActive: isVlaSpeaking,
+          lastSnippet: latestVla?.text ? latestVla.text.slice(0, 95) + '...' : '',
+        },
+      },
+      {
+        id: 'verifier',
+        type: 'verifierNode',
+        position: { x: 370, y: 460 },
+        data: {
+          isActive: Boolean(anyRobotActive),
+          lastSnippet: anyRobotActive
+            ? 'Guarding active pick/place kinematics, table ownership, & mutex locks'
+            : (mode === 5
+                ? 'Conveyor tracking reachability: FR3_1 (Sector L), FR3_2 (Sector R)'
+                : (mode === 6
+                    ? 'Dual-arm assembly workspace: FR3_1 (Cell A), FR3_2 (Cell B)'
+                    : 'Grounded physical reachability: Table 1 (FR3_1), Table 2 (FR3_2), Table 3 (FR3_3)')),
+        },
+      },
+    ];
 
-    // Update Nodes Data (preserving coordinates)
-    setNodes((nds) =>
-      nds.map((n) => {
-        if (n.id === 'goal') n.data = { ...n.data, goal: userGoal };
-        if (n.id === 'generator')
-          n.data = {
-            ...n.data,
-            isActive: Boolean(isGeneratorSpeaking || latestGenerator),
-            lastSnippet: latestGenerator?.text ? latestGenerator.text.slice(0, 95) + '...' : n.data.lastSnippet,
-          };
-        if (n.id === 'orchestrator')
-          n.data = {
-            ...n.data,
-            isActive: isVlaSpeaking,
-            lastSnippet: latestVla?.text ? latestVla.text.slice(0, 95) + '...' : n.data.lastSnippet,
-          };
-        if (n.id === 'verifier')
-          n.data = {
-            ...n.data,
-            isActive: Boolean(anyRobotActive),
-            lastSnippet: anyRobotActive
-              ? 'Guarding active pick/place kinematics, table ownership, & mutex locks'
-              : 'Grounded physical reachability: Table 1 (FR3_1), Table 2 (FR3_2), Table 3 (FR3_3)',
-          };
-
-        if (n.id === 'robot1')
-          n.data = {
-            ...n.data,
-            phase: r1?.phase,
-            target: r1?.target,
-            busyPct: r1?.busy_pct,
-            tasksCompleted: r1?.tasks_completed,
-          };
-        if (n.id === 'robot2')
-          n.data = {
-            ...n.data,
-            phase: r2?.phase,
-            target: r2?.target,
-            busyPct: r2?.busy_pct,
-            tasksCompleted: r2?.tasks_completed,
-          };
-        if (n.id === 'robot3')
-          n.data = {
-            ...n.data,
-            phase: r3?.phase,
-            target: r3?.target,
-            busyPct: r3?.busy_pct,
-            tasksCompleted: r3?.tasks_completed,
-          };
-
-        if (n.id === 'mutex') n.data = { ...n.data, occupiedBy: metrics?.center_occupied_by };
-        if (n.id === 'construction')
-          n.data = { ...n.data, towerHeight: metrics?.tower_height, placedCount: actions.length };
-
-        return n;
-      })
-    );
-
-    // Update Flow Edges with organic Bezier curves & fluid glow animations
-    setEdges((eds) =>
-      eds.map((e) => {
-        let active = false;
-        let color = '#3f3f46';
-
-        if (e.id === 'e-goal-gen') {
-          active = isGeneratorSpeaking || isVlaSpeaking;
-          color = active ? '#10b981' : '#27272a';
+    // Add active robot nodes with dynamic positioning
+    robotKeys.forEach((rKey, index) => {
+      const rId = getRobotId(rKey);
+      const rData = metrics?.robots?.[rKey];
+      const meta = getRobotMeta(rKey, mode);
+      
+      // Find latest result for this robot
+      const latestResult = [...results].reverse().find(r => {
+        try {
+          const parsed = JSON.parse(r.raw);
+          return parsed.robot_id === rKey;
+        } catch {
+          return false;
         }
-        if (e.id === 'e-gen-vla') {
-          active = isVlaSpeaking;
-          color = active ? '#38bdf8' : '#27272a';
-        }
-        if (e.id === 'e-vla-verif') {
-          active = Boolean(anyRobotActive);
-          color = active ? '#a855f7' : '#27272a';
-        }
+      });
+      
+      let deny = null;
+      if (latestResult) {
+        try {
+          const parsed = JSON.parse(latestResult.raw);
+          if (!parsed.success && parsed.message.includes('Guardrail Deny')) {
+            const denyJson = parsed.message.split('Guardrail Deny: ')[1];
+            deny = JSON.parse(denyJson);
+          }
+        } catch (e) {}
+      }
 
-        if (e.id === 'e-verif-r1') {
-          active = Boolean(isR1Active);
-          color = active ? '#ef4444' : '#27272a';
-        }
-        if (e.id === 'e-verif-r2') {
-          active = Boolean(isR2Active);
-          color = active ? '#10b981' : '#27272a';
-        }
-        if (e.id === 'e-verif-r3') {
-          active = Boolean(isR3Active);
-          color = active ? '#3b82f6' : '#27272a';
-        }
+      currentNodes.push({
+        id: rId,
+        type: 'robotNode',
+        position: { x: getRobotX(index, robotKeys.length), y: 620 },
+        data: {
+          name: meta.name,
+          color: meta.color,
+          quadrant: meta.quadrant,
+          phase: rData?.phase,
+          target: rData?.target,
+          busyPct: rData?.busy_pct,
+          tasksCompleted: rData?.tasks_completed,
+          deny: deny,
+        },
+      });
+    });
 
-        if (e.id === 'e-r1-mutex') {
-          active = metrics?.center_occupied_by === 'FR3_1';
-          color = active ? '#f97316' : '#27272a';
-        }
-        if (e.id === 'e-r2-mutex') {
-          active = metrics?.center_occupied_by === 'FR3_2';
-          color = active ? '#f97316' : '#27272a';
-        }
-        if (e.id === 'e-r3-mutex') {
-          active = metrics?.center_occupied_by === 'FR3_3';
-          color = active ? '#f97316' : '#27272a';
-        }
+    currentNodes.push({
+      id: 'mutex',
+      type: 'mutexNode',
+      position: { x: 370, y: 810 },
+      data: { occupiedBy: metrics?.center_occupied_by },
+    });
 
-        if (e.id === 'e-mutex-const') {
-          active = Boolean(metrics?.center_occupied_by);
-          color = active ? '#38bdf8' : '#27272a';
-        }
+    currentNodes.push({
+      id: 'construction',
+      type: 'constructionNode',
+      position: { x: 370, y: 960 },
+      data: {
+        towerHeight: metrics?.tower_height,
+        placedCount: actions.length,
+        mode: mode,
+      },
+    });
 
-        return {
-          ...e,
-          type: 'default', // Organic Bezier curved flow
-          animated: active,
-          style: {
-            stroke: color,
-            strokeWidth: active ? 2.5 : 1.5,
-            filter: active ? `drop-shadow(0 0 6px ${color})` : 'none',
-            transition: 'stroke 0.3s ease, stroke-width 0.3s ease',
-          },
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            color: color,
-            width: 14,
-            height: 14,
-          },
-        };
-      })
-    );
-  }, [metrics, chatMessages, actions.length, userGoal, setNodes, setEdges]);
+    setNodes(currentNodes);
+
+    // Build adaptive edges
+    const currentEdges: Edge[] = [
+      {
+        id: 'e-goal-gen',
+        source: 'goal',
+        target: 'generator',
+        type: 'default',
+        animated: isGeneratorSpeaking || isVlaSpeaking,
+        style: {
+          stroke: isGeneratorSpeaking || isVlaSpeaking ? '#10b981' : '#27272a',
+          strokeWidth: isGeneratorSpeaking || isVlaSpeaking ? 2.5 : 1.5,
+          filter: isGeneratorSpeaking || isVlaSpeaking ? 'drop-shadow(0 0 6px #10b981)' : 'none',
+        },
+        markerEnd: { type: MarkerType.ArrowClosed, color: isGeneratorSpeaking || isVlaSpeaking ? '#10b981' : '#27272a', width: 14, height: 14 },
+      },
+      {
+        id: 'e-gen-vla',
+        source: 'generator',
+        target: 'orchestrator',
+        type: 'default',
+        animated: isVlaSpeaking,
+        style: {
+          stroke: isVlaSpeaking ? '#38bdf8' : '#27272a',
+          strokeWidth: isVlaSpeaking ? 2.5 : 1.5,
+          filter: isVlaSpeaking ? 'drop-shadow(0 0 6px #38bdf8)' : 'none',
+        },
+        markerEnd: { type: MarkerType.ArrowClosed, color: isVlaSpeaking ? '#38bdf8' : '#27272a', width: 14, height: 14 },
+      },
+      {
+        id: 'e-vla-verif',
+        source: 'orchestrator',
+        target: 'verifier',
+        type: 'default',
+        animated: Boolean(anyRobotActive),
+        style: {
+          stroke: anyRobotActive ? '#a855f7' : '#27272a',
+          strokeWidth: anyRobotActive ? 2.5 : 1.5,
+          filter: anyRobotActive ? 'drop-shadow(0 0 6px #a855f7)' : 'none',
+        },
+        markerEnd: { type: MarkerType.ArrowClosed, color: anyRobotActive ? '#a855f7' : '#27272a', width: 14, height: 14 },
+      },
+    ];
+
+    robotKeys.forEach((rKey) => {
+      const rId = getRobotId(rKey);
+      const meta = getRobotMeta(rKey, mode);
+      const isAct = isRobotActive(rKey);
+      const isMutexAct = metrics?.center_occupied_by === rKey;
+
+      currentEdges.push({
+        id: `e-verif-${rId}`,
+        source: 'verifier',
+        target: rId,
+        type: 'default',
+        animated: isAct,
+        style: {
+          stroke: isAct ? meta.color : '#27272a',
+          strokeWidth: isAct ? 2.5 : 1.5,
+          filter: isAct ? `drop-shadow(0 0 6px ${meta.color})` : 'none',
+        },
+        markerEnd: { type: MarkerType.ArrowClosed, color: isAct ? meta.color : '#27272a', width: 14, height: 14 },
+      });
+
+      currentEdges.push({
+        id: `e-${rId}-mutex`,
+        source: rId,
+        target: 'mutex',
+        type: 'default',
+        animated: isMutexAct,
+        style: {
+          stroke: isMutexAct ? '#f97316' : '#27272a',
+          strokeWidth: isMutexAct ? 2.5 : 1.5,
+          filter: isMutexAct ? 'drop-shadow(0 0 6px #f97316)' : 'none',
+        },
+        markerEnd: { type: MarkerType.ArrowClosed, color: isMutexAct ? '#f97316' : '#27272a', width: 14, height: 14 },
+      });
+    });
+
+    const isConstAct = Boolean(metrics?.center_occupied_by);
+    currentEdges.push({
+      id: 'e-mutex-const',
+      source: 'mutex',
+      target: 'construction',
+      type: 'default',
+      animated: isConstAct,
+      style: {
+        stroke: isConstAct ? '#38bdf8' : '#27272a',
+        strokeWidth: isConstAct ? 2.5 : 1.5,
+        filter: isConstAct ? 'drop-shadow(0 0 6px #38bdf8)' : 'none',
+      },
+      markerEnd: { type: MarkerType.ArrowClosed, color: isConstAct ? '#38bdf8' : '#27272a', width: 14, height: 14 },
+    });
+
+    setEdges(currentEdges);
+  }, [metrics, chatMessages, actions.length, userGoal, mode, robotKeys, setNodes, setEdges]);
 
   return (
     <div

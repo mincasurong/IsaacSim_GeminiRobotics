@@ -36,7 +36,7 @@ def get_robot_tools():
                         ),
                         "object_label": types.Schema(
                             type="STRING",
-                            description="Exact TF block name of the object to pick, as provided in the proximity summary (e.g., 'ConvItem0', 'LongBar', 'HeavyEnginePart'). Do NOT use color labels."
+                            description="Color and shape label of the object to pick, e.g. 'Red Cube', 'Blue Cylinder'"
                         ),
                         "speed": types.Schema(
                             type="STRING",
@@ -108,50 +108,6 @@ def get_robot_tools():
                         ),
                     },
                     required=["robot", "anchor_block", "relation"],
-                ),
-            ),
-            types.FunctionDeclaration(
-                name="dual_arm_pick",
-                description="Command BOTH robot arms (FR3_1 and FR3_2) to simultaneously approach and grasp a large object using spatially-aware affordance offsets (ATAMP).",
-                parameters=types.Schema(
-                    type="OBJECT",
-                    properties={
-                        "object_label": types.Schema(
-                            type="STRING",
-                            description="Exact TF block name of the oversized object to pick (e.g., 'LongBar')."
-                        ),
-                        "offset_1": types.Schema(
-                            type="NUMBER",
-                            description="Grasp offset for FR3_1 along the object's local X-axis (meters). E.g., -0.3 for left edge."
-                        ),
-                        "offset_2": types.Schema(
-                            type="NUMBER",
-                            description="Grasp offset for FR3_2 along the object's local X-axis (meters). E.g., 0.3 for right edge."
-                        ),
-                        "speed": types.Schema(
-                            type="STRING",
-                            enum=["fast", "normal", "slow"],
-                            description="Movement speed."
-                        ),
-                    },
-                    required=["object_label", "offset_1", "offset_2"],
-                ),
-            ),
-            types.FunctionDeclaration(
-                name="dual_arm_place",
-                description="Command BOTH robot arms to simultaneously place the currently held large object at the specified absolute world X, Y coordinates.",
-                parameters=types.Schema(
-                    type="OBJECT",
-                    properties={
-                        "x": types.Schema(type="NUMBER", description="Target X coordinate in world frame."),
-                        "y": types.Schema(type="NUMBER", description="Target Y coordinate in world frame."),
-                        "speed": types.Schema(
-                            type="STRING",
-                            enum=["fast", "normal", "slow"],
-                            description="Movement speed. Default is 'fast'."
-                        ),
-                    },
-                    required=["x", "y"],
                 ),
             ),
             types.FunctionDeclaration(

@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 from rclpy.duration import Duration
 import rclpy
 
@@ -13,7 +13,6 @@ except ImportError:
 class WorkspaceState:
     def __init__(self):
         self.block_status = {f'Block{i}': {'location': 'unknown', 'pos': None} for i in range(1, 10)}
-        self.block_status.update({f'ConvItem{i}': {'location': 'unknown', 'pos': None} for i in range(10)})
         self.robot_status = {r: 'idle' for r in WORKSPACE['robots']}
         self.tower_height = 0
         self.blocks_on_tower = []
@@ -28,7 +27,7 @@ class WorkspaceState:
         
         for block_name in self.block_status:
             try:
-                trans = tf_buffer.lookup_transform('world', block_name, rclpy.time.Time())
+                trans = tf_buffer.lookup_transform('world', block_name, rclpy.time.Time(), timeout=Duration(seconds=0.05))
                 x = trans.transform.translation.x
                 y = trans.transform.translation.y
                 z = trans.transform.translation.z

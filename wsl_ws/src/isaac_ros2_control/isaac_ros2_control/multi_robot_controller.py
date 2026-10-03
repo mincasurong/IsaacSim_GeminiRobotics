@@ -317,19 +317,35 @@ class MultiRobotController(Node):
             elif action == 'go_home':
                 if self.center_occupied_by == r_id:
                     self.center_occupied_by = None
-                curr_grip = getattr(self, f'end_gripper{r_id}', self.gripper_open)
-                self._initialize_joint_phase(r_id, self.q_home_fr3, curr_grip)
-                self._set_state(r_id, 'RETURN_HOME')
-                self._publish_result(True, f"Robot {r_id} returning home.", f"FR3_{r_id}")
+                self._send_home_cmd(r_id)
+                self._set_state(r_id, 'FINISHED')
+                self._publish_result(True, f"Robot {r_id} sent home.", f"FR3_{r_id}")
 
             elif action == 'verify_tower':
-                # Send all robots home for clear view, interpolating safely without dropping blocks
-                self.center_occupied_by = None
-                for i in [1, 2, 3]:
-                    curr_grip = getattr(self, f'end_gripper{i}', self.gripper_open)
-                    self._initialize_joint_phase(i, self.q_home_fr3, curr_grip)
-                    self._set_state(i, 'RETURN_HOME')
-                self._publish_result(True, "Robots moved out of the way.", "global")
+                # verify_tower is READ-ONLY — never changes gripper or robot state
+                # BUG FIX: Previously called _send_home_cmd() which opens ALL grippers,
+                # causing robots to drop blocks mid-task.
+                result_data = {
+                    'success': True,
+                    'action': 'verify_tower',
+                    'tower_height': self.tower_height,
+                    'center_occupied_by': (
+                        f'FR3_{self.center_occupied_by}' if self.center_occupied_by else None
+                    ),
+                    'robot_states': {
+                        'FR3_1': self.state1,
+                        'FR3_2': self.state2,
+                        'FR3_3': self.state3,
+                    },
+                    'message': f'Tower has {self.tower_height} blocks stacked.',
+                }
+                msg = String()
+                msg.data = json.dumps(result_data)
+                self.result_pub.publish(msg)
+                self.get_logger().info(
+                    f'[VERIFY_TOWER] Read-only check: tower_height={self.tower_height}'
+                )
+                return  # CRITICAL: early return — no state mutation
 
             else:
                 self._publish_result(False, f"Unknown action: {action}", f"FR3_{r_id}" if r_id != 'global' else "global")
@@ -677,19 +693,9 @@ class MultiRobotController(Node):
                 for i in range(7):
                     q_sol[i] = np.clip(q_sol[i], kinematics.FR3_JOINT_LIMITS[i][0], kinematics.FR3_JOINT_LIMITS[i][1])
             elif state in ['GRASP', 'RELEASE']:
-                q_sol = getattr(self, f'end_q{robot_id}')
+                q_sol = np.array(q_current)
             else:
                 # CARTESIAN SPACE INTERPOLATION
-                # DYNAMIC TRACKING: If picking, continuously update target position
-                if state in ['HOVER_PICK', 'DESCEND_PICK']:
-                    block_pos, _ = self.get_block_local_pose(robot_id)
-                    if block_pos is not None:
-                        if state == 'HOVER_PICK':
-                            end_pos = np.array([block_pos[0], block_pos[1], block_pos[2] + self.hover_height])
-                        else:
-                            end_pos = np.array([block_pos[0], block_pos[1], block_pos[2] - 0.02])
-                        setattr(self, f'end_pos{robot_id}', end_pos)
-
                 if start_pos is not None and end_pos is not None:
                     target_pos = start_pos + t_smooth * (end_pos - start_pos)
                 else:

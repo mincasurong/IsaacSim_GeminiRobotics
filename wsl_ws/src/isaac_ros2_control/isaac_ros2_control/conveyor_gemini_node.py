@@ -443,37 +443,52 @@ class GeminiRoboticsNode(Node):
 
         self.get_logger().info("\033[93m[MULTI-AGENT] Starting Brainstorming...\033[0m")
         try:
-            # Query TF for block proximity data
-            proximity_text = ""
+            # Query TF for active conveyor and workbench objects
+            conveyor_items_text = ""
+            workbench_objects_text = ""
             block_positions = self._query_block_positions()
             if block_positions:
-                lines = []
-                for robot_name, base_xy in self.robot_bases.items():
-                    dists = []
-                    for block_name, pos in block_positions.items():
-                        d = np.hypot(pos[0] - base_xy[0], pos[1] - base_xy[1])
-                        dists.append((block_name, pos, d))
-                    dists.sort(key=lambda x: x[2])
-                    ranked = ", ".join([f"{b}({round(d,2)}m)" for b, _, d in dists[:5]])
-                    lines.append(f"  {robot_name}: nearest blocks → {ranked}")
-                proximity_text = "\n".join(lines)
+                conv_lines = []
+                wb_lines = []
+                for b_name, (x, y, z) in block_positions.items():
+                    if 'ConvItem' in b_name:
+                        d1 = np.hypot(x - (-0.7), y - 0.0)
+                        d2 = np.hypot(x - 0.7, y - 0.0)
+                        near_arm = "FR3_1 (Left)" if d1 <= d2 else "FR3_2 (Right)"
+                        dist = min(d1, d2)
+                        conv_lines.append(f"  • {b_name}: pos=({x:.2f}, {y:.2f}, {z:.2f}) -> Nearest: {near_arm} ({dist:.2f}m)")
+                    else:
+                        wb_lines.append(f"  • {b_name}: pos=({x:.2f}, {y:.2f}, {z:.2f}) [Workbench object]")
+                if conv_lines:
+                    conveyor_items_text = "Active Conveyor Items (moving on belt at Y=0.50m):\n" + "\n".join(conv_lines)
+                if wb_lines:
+                    workbench_objects_text = "Workbench Dual-Arm Objects (on table at Y=-0.25m / Y=-0.50m):\n" + "\n".join(wb_lines)
 
             # --- Turn 1: Robotics VLA Drafts Initial Plan ---
             prompt_1 = f'''
-You are the Robotics VLA Orchestrator ({robotics_model}). The user wants to build: "{goal_text}".
+You are the Robotics VLA Orchestrator ({robotics_model}) controlling a dual-arm manufacturing cell:
+User Directive: "{goal_text}".
 
-Workspace layout:
-- FR3_1 (Bottom arm): operates on Source Table 1 ([0.0, -1.05]) and the Central Target Table ([0.0, 0.0])
-- FR3_2 (Top-right arm): operates on Source Table 2 ([0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
-- FR3_3 (Top-left arm): operates on Source Table 3 ([-0.909, 0.525]) and the Central Target Table ([0.0, 0.0])
+Physical Workstation Configuration:
+- FR3_1 (Left Arm): Mounted at [-0.70, 0.0, 0.20], facing conveyor (+Y). Covers left conveyor sector and left workbench.
+- FR3_2 (Right Arm): Mounted at [+0.70, 0.0, 0.20], facing conveyor (+Y). Covers right conveyor sector and right workbench.
+- Conveyor Belt: Horizontal belt at Y=+0.50m transporting items (ConvItem0..9) from left (X=-1.4m) to right (X=+1.4m) at 0.15 m/s.
+- Main Workbench: Behind robots at Y=-0.25m holding LongBar (length 0.80m) and HeavyEnginePart (length 1.0m).
 
-MEASURED block distances from each robot base (pick CLOSEST blocks first!):
-{proximity_text if proximity_text else "(TF data not yet available — use visual proximity from the camera image)"}
+Current Real-Time Detected Objects:
+{conveyor_items_text if conveyor_items_text else "  • Conveyor items streaming along belt."}
+{workbench_objects_text if workbench_objects_text else "  • LongBar and HeavyEnginePart on workbench."}
 
-Draft an initial plan assigning tasks to the robots to achieve the user's goal.
-1. Proximity Rule: ALWAYS pick the block with the SHORTEST distance from the robot base first. The distances above are measured in meters — lower = closer = pick first.
-2. Concurrency: Maximize MULTI-ROBOT CONCURRENCY so multiple arms can pick/place simultaneously.
-CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
+Operational Rules & Coordination:
+1. Conveyor Picking: To pick moving conveyor items, assign the nearest robot (FR3_1 for X < 0, FR3_2 for X >= 0):
+   `pick(robot="FR3_1" or "FR3_2", object_label="ConvItemX", speed="fast")`
+2. LongBar Dual-Arm Manipulation & Wave:
+   - For long bar requests: first call `dual_arm_pick(object_label="LongBar", offset_1=-0.25, offset_2=0.25, speed="fast")`.
+   - If circular motion or wave requested: immediately follow with `dual_arm_circle(radius=0.08, cycles=1, plane="XY", speed="fast")`.
+   - To place: `dual_arm_place(x=0.0, y=-0.25, speed="fast")`.
+3. HeavyEnginePart: Requires coordinated dual-arm pick: `dual_arm_pick(object_label="HeavyEnginePart", offset_1=-0.3, offset_2=0.3)`.
+
+Provide an immediate, crisp execution plan (under 2-3 sentences) detailing the required tool calls.
 '''
             req_1 = [
                 genai_types.Part.from_bytes(data=image_bytes, mime_type='image/png'),
@@ -486,25 +501,22 @@ CRITICAL: Keep your response EXTREMELY concise (under 2-3 sentences).
                 genai_types.GenerateContentConfig(temperature=0.2)
             )
             
-            is_complex = any(kw in goal_text.lower() for kw in ['tower', 'layer', 'stack', 'build', 'pattern', 'replan', 'arrange'])
+            is_complex = any(kw in goal_text.lower() for kw in ['circle', 'wave', 'bar', 'conveyor', 'dual', 'both', 'track'])
             
             if is_complex:
-                # --- Turn 2: Spatial Architect Corrects Geometry ---
+                # --- Turn 2: Dual-Arm Motion Architect Validates ---
                 prompt_2 = f'''
-You are the Spatial Architect ({architect_model}). The Robotics VLA has proposed the following schedule for building: "{goal_text}".
-
+You are the Dual-Arm Motion Architect ({architect_model}). Review the proposed dual-robot action plan for: "{goal_text}".
 {response_1}
 
-Your job is strictly GEOMETRIC and MATHEMATICAL CORRECTION.
-Do NOT try to guess raw absolute (X,Y) coordinates for complex shapes! Instead, use Relative Placement.
-1. First, draw an ASCII top-down grid of the desired shape using `[]` for blocks and `.` for empty space.
-2. Second, pick ONE block to be the central anchor placed at (0, 0).
-3. Third, map all other blocks relative to that anchor using the relation keywords: `on_top_of`, `left_of`, `right_of`, `front_of`, `back_of`.
-
-CRITICAL: Keep your response EXTREMELY concise. Draw the ASCII grid, then list the exact relative placement mappings.
+Validate coordination, grasp symmetry, and trajectory planes:
+1. For LongBar circular waves: ensure plane is specified ("XY", "YZ", or "XZ") and radius is compact (0.06m to 0.10m).
+2. For conveyor items: verify the arm closest to the object is assigned (FR3_1 for X < 0, FR3_2 for X >= 0).
+3. Recommend speed='fast' for snappy execution.
+Provide a concise 1-2 sentence execution blueprint.
 '''
                 response_2 = stream_chat(
-                    "Spatial Architect", "📐", "architect",
+                    "Motion Architect", "📐", "architect",
                     architect_model, prompt_2,
                     genai_types.GenerateContentConfig(temperature=0.1)
                 )
@@ -874,7 +886,7 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
         return detections
 
     def _query_block_positions(self) -> dict:
-        """Query TF for world-frame XY positions of all conveyor blocks."""
+        """Query TF for world-frame XYZ positions of active conveyor and workbench objects."""
         positions = {}
         target_names = [f"ConvItem{i}" for i in range(10)] + ["LongBar", "HeavyEnginePart"]
         for block_name in target_names:
@@ -883,7 +895,11 @@ Use this blueprint as a strong recommendation for your 'place' function X,Y coor
                     'world', block_name, rclpy.time.Time())
                 x = trans.transform.translation.x
                 y = trans.transform.translation.y
-                positions[block_name] = (x, y)
+                z = trans.transform.translation.z
+                # Exclude unspawned object pool items resting under the floor (Z < 0.15m)
+                if z < 0.15:
+                    continue
+                positions[block_name] = (x, y, z)
             except Exception:
                 pass  # Block may not exist or TF not yet available
         return positions

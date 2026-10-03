@@ -210,8 +210,9 @@ for i in range(num_conv_items):
     
     xform = UsdGeom.Xformable(block.GetPrim())
     xform.ClearXformOpOrder()
-    # Hide them initially by placing them far below the floor
-    xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, -2.0))
+    # Distribute items along the active conveyor belt surface (Y=0.50, Z=0.525)
+    init_x = -1.2 + (i * 0.28)
+    xform.AddTranslateOp().Set(Gf.Vec3d(init_x, 0.50, 0.525))
     xform.AddScaleOp().Set(scale)
     
     # Assign distinct colors
@@ -453,6 +454,9 @@ conv_rigid_prims = []
 for i in range(num_conv_items):
     rp = RigidPrim(f"/ConvItem{i}")
     rp.initialize()
+    init_x = -1.2 + (i * 0.28)
+    rp.set_world_poses(positions=np.array([[init_x, 0.50, 0.525]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
+    rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
     conv_rigid_prims.append(rp)
 
 # Initialize special static items (do not add to conv_rigid_prims)
@@ -484,10 +488,15 @@ def reset_simulation():
         robot2_art.set_joint_velocities(np.zeros(robot2_art.num_dof))
         robot2_art.set_world_poses(positions=np.array([[0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
         
-        # Put conveyor objects back under the floor
-        for rp in conv_rigid_prims:
-            rp.set_world_poses(positions=np.array([[0.0, 0.0, -2.0]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
-            rp.set_linear_velocities(np.zeros((1, 3)))
+        # Reset conveyor objects distributed along the active belt
+        for idx, rp in enumerate(conv_rigid_prims):
+            init_x = -1.2 + (idx * 0.28)
+            y_pos = 0.50 + np.random.uniform(-0.02, 0.02)
+            rp.set_world_poses(
+                positions=np.array([[init_x, y_pos, 0.525]]),
+                orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
+            )
+            rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
             rp.set_angular_velocities(np.zeros((1, 3)))
             
         # Reset static dual-arm objects to their original positions on the main table

@@ -125,11 +125,18 @@ class ConveyorDualController(MultiRobotController):
                 self.dual_circle_radius = radius
                 self.dual_circle_plane = plane
                 self.dual_circle_step = 0
+                self.dual_circle_steps_per_cycle = steps_per_cycle
                 self.dual_circle_total_steps = steps_per_cycle * cycles
                 
                 # Capture current Cartesian EE poses
                 p1_local = kinematics.forward_kinematics(self.q_current1)[:3, 3]
                 p2_local = kinematics.forward_kinematics(self.q_current2)[:3, 3]
+                
+                T1 = kinematics.forward_kinematics(self.q_current1)
+                self.dual_circle_start_quat1 = kinematics.rot_matrix_to_quat(T1[:3, :3])
+                
+                T2 = kinematics.forward_kinematics(self.q_current2)
+                self.dual_circle_start_quat2 = kinematics.rot_matrix_to_quat(T2[:3, :3])
                 
                 # Base orientation for FR3_1 and FR3_2 (base yaw = 90 deg)
                 # World = R_base * local + t_base
@@ -222,8 +229,9 @@ class ConveyorDualController(MultiRobotController):
             N = self.dual_circle_total_steps
             R = self.dual_circle_radius
 
-            # Progress angle theta from 0 to 2*pi*cycles
-            theta = 2.0 * np.pi * (float(k) / (N / max(1, int(round(N / 75.0)))))
+            # Progress angle theta from 0 to 2*pi per cycle
+            steps_per_cycle = getattr(self, 'dual_circle_steps_per_cycle', 75)
+            theta = 2.0 * np.pi * (float(k) / float(steps_per_cycle))
 
             # Smooth cyclic displacement (starts and finishes at [0, 0, 0])
             if self.dual_circle_plane == 'YZ':
@@ -242,8 +250,8 @@ class ConveyorDualController(MultiRobotController):
             target_p_w = start_p_w + delta_w
             target_p_local = R_base.T @ (target_p_w - t_base)
             
-            # Downward orientation
-            target_quat = [0.0, 1.0, 0.0, 0.0]
+            # Hold the exact grasp orientation that was holding the bar
+            target_quat = self.dual_circle_start_quat1 if robot_id == 1 else self.dual_circle_start_quat2
             q_cur = getattr(self, f'q_current{robot_id}')
             q_sol, _ = kinematics.inverse_kinematics(target_p_local, target_quat, q_cur)
 

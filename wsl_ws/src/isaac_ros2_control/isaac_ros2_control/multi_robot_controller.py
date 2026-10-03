@@ -889,11 +889,11 @@ class MultiRobotController(Node):
 
                 elif state == 'LIFT':
                     gripper_pos = getattr(self, f'current_gripper{robot_id}')
-                    # Physical grasp verification: finger stopped on 6cm block (contact at ~0.030m)
+                    # Physical grasp verification: finger stopped on object (contact between 8mm and 38mm)
                     # Fully closed on empty space: <= 0.005m (5mm). Wide open: >= 0.038m (38mm).
-                    pick_success = 0.015 < gripper_pos < 0.038
+                    pick_success = 0.008 < gripper_pos < 0.038
 
-                    if self.mode == 'gemini' and getattr(self, f'gemini_action{robot_id}') == 'pick':
+                    if self.mode == 'gemini' and getattr(self, f'gemini_action{robot_id}') in ['pick', 'dual_arm_pick']:
                         if pick_success:
                             self._set_state(robot_id, 'WAITING_FOR_PLACE_CMD')
                             self._publish_result(True, f"Pick completed by robot {robot_id}. Grasped object successfully.", f"FR3_{robot_id}")

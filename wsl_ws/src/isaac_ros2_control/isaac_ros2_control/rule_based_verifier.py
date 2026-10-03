@@ -25,6 +25,22 @@ ROBOT_OWNED_BLOCKS = {
     'FR3_3': ['Block7', 'Block8', 'Block9'],
 }
 
+ROBOT_BASES = {
+    'FR3_1': np.array([0.0, -0.45]),
+    'FR3_2': np.array([0.3897, 0.225]),
+    'FR3_3': np.array([-0.3897, 0.225]),
+}
+
+TABLE_ZONES = {
+    'central_table': {'center': np.array([0.0, 0.0]), 'radius': 0.22},
+    'table_1': {'center': np.array([0.0, -1.05]), 'radius': 0.35},
+    'table_2': {'center': np.array([0.909, 0.525]), 'radius': 0.35},
+    'table_3': {'center': np.array([-0.909, 0.525]), 'radius': 0.35},
+}
+
+MAX_ARM_REACH = 0.85
+MIN_ARM_REACH = 0.15
+
 BLOCK_TO_ROBOT = {b: r for r, blocks in ROBOT_OWNED_BLOCKS.items() for b in blocks}
 
 BLOCK_DESCRIPTIONS = {
@@ -65,11 +81,11 @@ def normalize_robot_id(robot_str: str) -> str:
 
 
 class RuleBasedTaskGenerator:
-    """Deterministic task and sequence planner for multi-robot tower construction."""
+    """Deterministic task and sequence planner for multi-robot tasks (tower or custom transfer/relay)."""
 
     @staticmethod
-    def generate_blueprint(workspace_state) -> tuple[dict, str]:
-        """Generate a grounded task blueprint based on physical workspace state."""
+    def generate_blueprint(workspace_state, goal_text: str = "") -> tuple[dict, str]:
+        """Generate a grounded task blueprint based on physical workspace state and user goal."""
         if workspace_state is None:
             blocks_on_tower = []
         else:
@@ -82,65 +98,102 @@ class RuleBasedTaskGenerator:
             unstacked = [b for b in owned_blocks if b not in blocks_on_tower]
             available_per_robot[r_id] = unstacked
 
-        # Optimal round-robin stacking plan (FR3_1 -> FR3_2 -> FR3_3 ...)
-        canonical_order = [
-            ('FR3_1', 'Block1'),
-            ('FR3_2', 'Block4'),
-            ('FR3_3', 'Block7'),
-            ('FR3_1', 'Block2'),
-            ('FR3_2', 'Block5'),
-            ('FR3_3', 'Block8'),
-            ('FR3_1', 'Block3'),
-            ('FR3_2', 'Block6'),
-            ('FR3_3', 'Block9'),
-        ]
+        goal_lower = goal_text.lower() if goal_text else ""
+        is_tower_task = any(k in goal_lower for k in ['tower', 'stack', 'layer', 'pyramid']) if goal_lower else True
 
-        next_actions = []
-        for robot, block in canonical_order:
-            if block not in blocks_on_tower:
-                next_actions.append({
-                    'step': len(next_actions) + 1,
-                    'target_layer': tower_height + len(next_actions) + 1,
-                    'robot': robot,
-                    'block': block,
-                    'description': BLOCK_DESCRIPTIONS.get(block, block),
-                    'source_table': 'Table 1' if robot == 'FR3_1' else ('Table 2' if robot == 'FR3_2' else 'Table 3'),
-                })
+        if is_tower_task:
+            # Optimal round-robin stacking plan (FR3_1 -> FR3_2 -> FR3_3 ...)
+            canonical_order = [
+                ('FR3_1', 'Block1'),
+                ('FR3_2', 'Block4'),
+                ('FR3_3', 'Block7'),
+                ('FR3_1', 'Block2'),
+                ('FR3_2', 'Block5'),
+                ('FR3_3', 'Block8'),
+                ('FR3_1', 'Block3'),
+                ('FR3_2', 'Block6'),
+                ('FR3_3', 'Block9'),
+            ]
 
-        # Structured dict
+            next_actions = []
+            for robot, block in canonical_order:
+                if block not in blocks_on_tower:
+                    next_actions.append({
+                        'step': len(next_actions) + 1,
+                        'target_layer': tower_height + len(next_actions) + 1,
+                        'robot': robot,
+                        'block': block,
+                        'description': BLOCK_DESCRIPTIONS.get(block, block),
+                        'source_table': 'Table 1' if robot == 'FR3_1' else ('Table 2' if robot == 'FR3_2' else 'Table 3'),
+                    })
+
+            blueprint_data = {
+                'task_type': 'tower_stacking',
+                'current_tower_height': tower_height,
+                'blocks_on_tower': blocks_on_tower,
+                'available_per_robot': available_per_robot,
+                'recommended_next_steps': next_actions[:4],
+            }
+
+            lines = [
+                "================================================================",
+                "📋 DETERMINISTIC RULE-BASED BLUEPRINT (Grounded Workspace State)",
+                "================================================================",
+                f"Current Tower Height: {tower_height}/9 stacked blocks: {blocks_on_tower}",
+                "Robot Workstation & Table Assignment (Physical Constraints):",
+                f"  - FR3_1 (Bottom): Operates Source Table 1. Available: {available_per_robot['FR3_1']}",
+                f"  - FR3_2 (Top-Right): Operates Source Table 2. Available: {available_per_robot['FR3_2']}",
+                f"  - FR3_3 (Top-Left): Operates Source Table 3. Available: {available_per_robot['FR3_3']}",
+                "",
+                "Recommended Agile Multi-Robot Execution Schedule:",
+            ]
+            if next_actions:
+                for act in next_actions[:3]:
+                    lines.append(
+                        f"  * Layer {act['target_layer']}: Dispatch {act['robot']} -> Pick {act['block']} "
+                        f"({act['description']}) from {act['source_table']} -> Place on Central Target Table [0,0]"
+                    )
+            else:
+                lines.append("  * All 9 blocks have been successfully stacked into the tower!")
+            lines.append("================================================================")
+            return blueprint_data, "\n".join(lines)
+
+        # ── General Table Transfer / Relay Task Blueprint ────────────────────
         blueprint_data = {
-            'current_tower_height': tower_height,
-            'blocks_on_tower': blocks_on_tower,
+            'task_type': 'transfer_relay',
+            'user_goal': goal_text,
             'available_per_robot': available_per_robot,
-            'recommended_next_steps': next_actions[:4],  # next immediate steps
+            'table_centers': {
+                'Table 1': [0.0, -1.05],
+                'Table 2': [0.909, 0.525],
+                'Table 3': [-0.909, 0.525],
+                'Central Table': [0.0, 0.0]
+            }
         }
 
-        # Human-readable prompt text for Gemini Robotics-ER-2
         lines = [
             "================================================================",
-            "📋 DETERMINISTIC RULE-BASED BLUEPRINT (Grounded Workspace State)",
+            "📋 MULTI-ROBOT TRANSFER & RELAY BLUEPRINT",
             "================================================================",
-            f"Current Tower Height: {tower_height}/9 stacked blocks: {blocks_on_tower}",
-            "Robot Workstation & Table Assignment (Physical Constraints):",
-            f"  - FR3_1 (Bottom): Operates Source Table 1. Available: {available_per_robot['FR3_1']}",
-            f"  - FR3_2 (Top-Right): Operates Source Table 2. Available: {available_per_robot['FR3_2']}",
-            f"  - FR3_3 (Top-Left): Operates Source Table 3. Available: {available_per_robot['FR3_3']}",
+            f"User Goal: \"{goal_text}\"",
+            "Workspace Geometry & Physical Reach Constraints:",
+            "  - FR3_1: Reaches Table 1 [0.0, -1.05] & Central Table [0.0, 0.0]. CANNOT reach Table 3 directly (1.33m > 0.85m reach).",
+            "  - FR3_2: Reaches Table 2 [0.909, 0.525] & Central Table [0.0, 0.0]. CANNOT reach Table 1 or 3 directly.",
+            "  - FR3_3: Reaches Table 3 [-0.909, 0.525] & Central Table [0.0, 0.0]. CANNOT reach Table 1 directly.",
+            "  - Central Staging Table [0.0, 0.0]: Shared handoff/relay zone reachable by ALL 3 arms.",
             "",
-            "Recommended Agile Multi-Robot Execution Schedule:",
+            "MANDATORY MULTI-ROBOT RELAY PROCEDURE FOR TABLE 1 -> TABLE 3:",
+            "  Because FR3_1 cannot physically reach Table 3, execute a cooperative relay:",
+            "  1. [FR3_1 Stage 1]: pick(robot='FR3_1', object_label=block) from Table 1.",
+            "  2. [FR3_1 Stage 1]: place(robot='FR3_1', x=0.0, y=0.0, speed='fast') on Central Table.",
+            "  3. [FR3_1 Retreat]: go_home(robot='FR3_1') to release central table mutual exclusion.",
+            "  4. [FR3_3 Stage 2]: pick(robot='FR3_3', object_label=block) from Central Table [0.0, 0.0].",
+            "  5. [FR3_3 Stage 2]: place(robot='FR3_3', x=-0.909, y=0.525, speed='fast') on Table 3.",
+            "  6. [FR3_3 Retreat]: go_home(robot='FR3_3').",
+            "  Repeat sequentially for all required blocks.",
+            "================================================================",
         ]
-
-        if next_actions:
-            for act in next_actions[:3]:
-                lines.append(
-                    f"  * Layer {act['target_layer']}: Dispatch {act['robot']} -> Pick {act['block']} "
-                    f"({act['description']}) from {act['source_table']} -> Place on Central Target Table [0,0]"
-                )
-        else:
-            lines.append("  * All 9 blocks have been successfully stacked into the tower!")
-
-        lines.append("================================================================")
-        blueprint_text = "\n".join(lines)
-        return blueprint_data, blueprint_text
+        return blueprint_data, "\n".join(lines)
 
 
 class RuleBasedTaskVerifier:
@@ -153,7 +206,7 @@ class RuleBasedTaskVerifier:
         self.verified_count = 0
         self.intercepted_count = 0
 
-    def verify_action(self, action_name: str, args: dict, workspace_state) -> tuple[bool, dict, str]:
+    def verify_action(self, action_name: str, args: dict, workspace_state, goal_text: str = "") -> tuple[bool, dict, str]:
         """Validate and sanitize a VLA tool call before execution.
 
         Returns:
@@ -185,54 +238,63 @@ class RuleBasedTaskVerifier:
                 self.intercepted_count += 1
                 return False, sanitized, f"Cannot resolve pick target '{target_raw}'."
 
-            # Check if block is already on tower
-            blocks_on_tower = getattr(workspace_state, 'blocks_on_tower', [])
-            if block_name in blocks_on_tower:
-                self.intercepted_count += 1
-                # Auto-correction: pick next available block for this robot
-                unstacked = [b for b in ROBOT_OWNED_BLOCKS[robot] if b not in blocks_on_tower]
-                if unstacked:
-                    corrected_block = unstacked[0]
-                    sanitized['target'] = corrected_block
-                    sanitized['object_label'] = corrected_block
-                    msg = (f"[INTERCEPT] {block_name} is already in tower. "
-                           f"Auto-corrected to unstacked block {corrected_block} for {robot}.")
-                    self._log_warn(msg)
-                    block_name = corrected_block
-                else:
-                    return False, sanitized, f"{block_name} is already stacked on the tower."
-
-            # Check physical reachability and robot ownership
-            expected_robot = BLOCK_TO_ROBOT.get(block_name)
-            if expected_robot and expected_robot != robot:
-                # The VLA assigned a block to the wrong robot! (e.g. FR3_1 asked to pick Block5 on Table 2)
-                self.intercepted_count += 1
-                if self.robot_holding.get(expected_robot) is None:
-                    # Auto-reroute to the legitimate owner robot!
-                    sanitized['robot'] = expected_robot
-                    msg = (f"[INTERCEPT] {block_name} belongs to {expected_robot} (Table {expected_robot[-1]}). "
-                           f"Auto-rerouted assignment from {robot} to {expected_robot}.")
-                    self._log_warn(msg)
-                    robot = expected_robot
-                else:
-                    # Expected robot is busy; switch block to one owned by this robot
-                    unstacked = [b for b in ROBOT_OWNED_BLOCKS[robot] if b not in blocks_on_tower]
-                    if unstacked:
-                        corrected_block = unstacked[0]
-                        sanitized['target'] = corrected_block
-                        sanitized['object_label'] = corrected_block
-                        msg = (f"[INTERCEPT] {block_name} out of reach for {robot}. "
-                               f"Auto-selected reachable {corrected_block} from its table.")
-                        self._log_warn(msg)
-                        block_name = corrected_block
-                    else:
-                        return False, sanitized, f"{block_name} is on {expected_robot}'s table. {robot} cannot reach it."
-
             # Check holding precondition: robot must not already hold a block
             if self.robot_holding.get(robot) is not None:
                 held = self.robot_holding[robot]
                 self.intercepted_count += 1
                 return False, sanitized, f"Robot {robot} is already holding {held}. It must place it before picking another."
+
+            goal_lower = goal_text.lower() if goal_text else ""
+            is_tower = any(k in goal_lower for k in ['tower', 'stack', 'layer', 'pyramid']) if goal_lower else True
+
+            # If tower task, check if block is already stacked in the tower
+            if is_tower:
+                blocks_on_tower = getattr(workspace_state, 'blocks_on_tower', [])
+                if block_name in blocks_on_tower:
+                    self.intercepted_count += 1
+                    unstacked = [b for b in ROBOT_OWNED_BLOCKS[robot] if b not in blocks_on_tower]
+                    if unstacked:
+                        corrected_block = unstacked[0]
+                        sanitized['target'] = corrected_block
+                        sanitized['object_label'] = corrected_block
+                        msg = (f"[INTERCEPT] {block_name} is already in tower. "
+                               f"Auto-corrected to unstacked block {corrected_block} for {robot}.")
+                        self._log_warn(msg)
+                        block_name = corrected_block
+                    else:
+                        return False, sanitized, f"{block_name} is already stacked on the tower."
+
+            # Dynamic Physical Reachability check based on actual TF coordinates
+            block_info = getattr(workspace_state, 'block_status', {}).get(block_name, {}) if workspace_state else {}
+            block_pos = block_info.get('pos')
+
+            if block_pos is not None:
+                bx, by, bz = block_pos
+                dist_to_robot = np.hypot(bx - ROBOT_BASES[robot][0], by - ROBOT_BASES[robot][1])
+                if dist_to_robot > MAX_ARM_REACH:
+                    self.intercepted_count += 1
+                    reachable_robots = [
+                        r for r, base in ROBOT_BASES.items()
+                        if np.hypot(bx - base[0], by - base[1]) <= MAX_ARM_REACH
+                    ]
+                    rec = f"Dispatch {reachable_robots[0]} instead" if reachable_robots else "Block is out of reach"
+                    return False, sanitized, (
+                        f"Block '{block_name}' is currently at ({bx:.2f}, {by:.2f}), which is {dist_to_robot:.2f}m from {robot} "
+                        f"(max reach {MAX_ARM_REACH}m). {rec} to pick and place it on Central Table [0.0, 0.0] for relay."
+                    )
+            else:
+                # TF position not yet queried: check initial ownership only if it's a tower task
+                expected_robot = BLOCK_TO_ROBOT.get(block_name)
+                if is_tower and expected_robot and expected_robot != robot:
+                    self.intercepted_count += 1
+                    if self.robot_holding.get(expected_robot) is None:
+                        sanitized['robot'] = expected_robot
+                        msg = (f"[INTERCEPT] {block_name} initially belongs to {expected_robot} (Table {expected_robot[-1]}). "
+                               f"Auto-rerouted assignment from {robot} to {expected_robot}.")
+                        self._log_warn(msg)
+                        robot = expected_robot
+                    else:
+                        return False, sanitized, f"{block_name} is on {expected_robot}'s table. {robot} cannot reach it."
 
             # Set speed and approach parameters safely
             sanitized['speed'] = sanitized.get('speed', 'fast')
@@ -249,17 +311,40 @@ class RuleBasedTaskVerifier:
             target_x = float(sanitized.get('x', 0.0))
             target_y = float(sanitized.get('y', 0.0))
 
-            # Bound checking: Central staging table is at [0.0, 0.0], radius 0.16m
-            dist_from_center = np.hypot(target_x, target_y)
-            if dist_from_center > 0.16:
-                self.intercepted_count += 1
-                sanitized['x'] = 0.0
-                sanitized['y'] = 0.0
-                msg = (f"[INTERCEPT] Target place coords ({target_x:.2f}, {target_y:.2f}) "
-                       f"exceed Central Table bounds ({dist_from_center:.2f}m > 0.16m). Auto-clamped to [0.0, 0.0].")
-                self._log_warn(msg)
+            # Validate target location is on ANY valid workspace table surface
+            on_table = False
+            target_table_name = "unknown"
+            for t_name, t_info in TABLE_ZONES.items():
+                dist_to_t = np.hypot(target_x - t_info['center'][0], target_y - t_info['center'][1])
+                if dist_to_t <= t_info['radius']:
+                    on_table = True
+                    target_table_name = t_name
+                    break
 
-            # Check holding state (warn if state tracker thought robot was empty)
+            if not on_table:
+                self.intercepted_count += 1
+                return False, sanitized, (
+                    f"Target place coordinates ({target_x:.2f}, {target_y:.2f}) do not lie on any valid table "
+                    f"(Central Table [0,0], Table 1 [0,-1.05], Table 2 [0.91,0.53], Table 3 [-0.91,0.53])."
+                )
+
+            # Check kinematic reachability from this robot's base
+            dist_from_robot = np.hypot(target_x - ROBOT_BASES[robot][0], target_y - ROBOT_BASES[robot][1])
+            if dist_from_robot > MAX_ARM_REACH:
+                self.intercepted_count += 1
+                return False, sanitized, (
+                    f"Target ({target_x:.2f}, {target_y:.2f}) on {target_table_name} is {dist_from_robot:.2f}m from {robot} base "
+                    f"(max reach {MAX_ARM_REACH}m). {robot} cannot place directly here. "
+                    f"Place on the Central Table [0.0, 0.0] first so the destination robot can relay it."
+                )
+
+            if dist_from_robot < MIN_ARM_REACH:
+                self.intercepted_count += 1
+                return False, sanitized, (
+                    f"Target ({target_x:.2f}, {target_y:.2f}) is too close to {robot} base column "
+                    f"({dist_from_robot:.2f}m < {MIN_ARM_REACH}m)."
+                )
+
             if self.robot_holding.get(robot) is None:
                 self._log_warn(f"[VERIFIER] Note: {robot} placing without tracked hold; proceeding with controller state.")
 
@@ -268,7 +353,7 @@ class RuleBasedTaskVerifier:
             sanitized['approach_height'] = float(sanitized.get('approach_height', 0.12))
 
             self.verified_count += 1
-            return True, sanitized, f"Verified {action} for {robot} on Central Target Table."
+            return True, sanitized, f"Verified {action} for {robot} on {target_table_name} at ({target_x:.2f}, {target_y:.2f})."
 
         # ── 3. Verification for GO_HOME ───────────────────────────────────────
         elif action == 'go_home':

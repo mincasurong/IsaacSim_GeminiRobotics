@@ -468,11 +468,11 @@ class GeminiRoboticsNode(Node):
 
             return full_text
 
-        self.get_logger().info("\033[93m[RULE-BASED TASK GENERATOR] Formulating Deterministic Stacking Blueprint...\033[0m")
+        self.get_logger().info("\033[93m[RULE-BASED TASK GENERATOR] Formulating Grounded Task Blueprint...\033[0m")
         try:
             # 1. Update real-time TF state and generate deterministic blueprint
             self.workspace_state.update_from_tf(self.tf_buffer)
-            blueprint_data, blueprint_text = RuleBasedTaskGenerator.generate_blueprint(self.workspace_state)
+            blueprint_data, blueprint_text = RuleBasedTaskGenerator.generate_blueprint(self.workspace_state, goal_text=goal_text)
 
             # Publish the deterministic blueprint directly to the chat stream so the user sees it in the GUI
             blueprint_msg_id = str(uuid.uuid4())
@@ -494,12 +494,10 @@ You are the Robotics VLA Orchestrator ({robotics_model}). The user's goal is: "{
 {blueprint_text}
 
 Instructions:
-1. Physical Workspace Assignment: Review the camera image and the Grounded Rule-Based Blueprint above.
-   - FR3_1 must pick exclusively from Table 1 (Block1, Block2, Block3).
-   - FR3_2 must pick exclusively from Table 2 (Block4, Block5, Block6).
-   - FR3_3 must pick exclusively from Table 3 (Block7, Block8, Block9).
-   - All robots place on the Central Target Table [0.0, 0.0] (|x| <= 0.15m, |y| <= 0.15m).
-2. Concurrency: Maximize concurrent picks across independent robots.
+1. Physical Workspace Assignment: Review the camera image and the Grounded Blueprint above.
+   - Follow the specific sequence in the blueprint (Tower Stacking or Multi-Robot Relay/Transfer).
+   - For multi-robot relays between outer tables (e.g. Table 1 to Table 3): use the Central Table [0.0, 0.0] as the intermediate staging handoff!
+2. Concurrency: Maximize concurrent picks across independent robots where safe.
 3. Pre-execution Safety: All actions are validated by the Rule-Based Task Verifier before dispatch to FR3 arms.
 
 Provide a crisp, 2-3 sentence executive summary of your VLA task strategy.
@@ -621,7 +619,7 @@ All actions are strictly intercepted and verified by the Rule-Based Task Verifie
 
                         # ── PRE-EXECUTION RULE-BASED SAFETY INTERCEPTION ──
                         is_valid, sanitized_args, verif_msg = self.verifier.verify_action(
-                            fc.name, raw_args, self.workspace_state
+                            fc.name, raw_args, self.workspace_state, goal_text=self.user_goal
                         )
 
                         if not is_valid:

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Zap,
+  Copy,
 } from 'lucide-react';
 import { C, monoFont } from './theme';
 
@@ -64,6 +65,29 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
         return n;
       })
     );
+  };
+
+  const handleDuplicate = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newId = `${Date.now()}`;
+    setNodes((nds) => {
+      const curr = nds.find((n) => n.id === id);
+      if (!curr) return nds;
+      const dupNode: Node = {
+        id: newId,
+        type: 'taskAction',
+        position: {
+          x: curr.position.x + 35,
+          y: curr.position.y + 35,
+        },
+        data: {
+          ...curr.data,
+          id: newId,
+          status: 'idle',
+        },
+      };
+      return [...nds, dupNode];
+    });
   };
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -160,6 +184,25 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
           {data.status === 'running' && <Zap size={14} color="#fbbf24" className="animate-spin" />}
           {data.status === 'success' && <CheckCircle2 size={14} color="#10b981" />}
           {data.status === 'failed' && <AlertTriangle size={14} color="#ef4444" />}
+          
+          <button
+            onClick={handleDuplicate}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: C.textMuted,
+              padding: 2,
+              display: 'flex',
+              alignItems: 'center',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#38bdf8')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = C.textMuted)}
+            title="Duplicate step (Copy block)"
+          >
+            <Copy size={13} />
+          </button>
+
           <button
             onClick={handleDelete}
             style={{
@@ -181,7 +224,7 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
       </div>
 
       {/* Interactive Form Controls */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
+      <div className="nodrag nopan" style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
         {/* Robot Selector */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ color: C.textDim, fontWeight: 600 }}>Robot:</span>
@@ -603,6 +646,47 @@ export default function VisualWorkflowBuilder({
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const isExecutingRef = useRef(false);
+  const copiedNodesRef = useRef<Node[]>([]);
+
+  // Keyboard Copy & Paste (Ctrl+C / Ctrl+V)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        const selected = nodes.filter((n) => n.selected);
+        if (selected.length > 0) {
+          copiedNodesRef.current = selected;
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        if (copiedNodesRef.current.length > 0) {
+          const newNodes: Node[] = copiedNodesRef.current.map((n, i) => {
+            const newId = `${Date.now()}-${i}`;
+            return {
+              ...n,
+              id: newId,
+              selected: true,
+              position: { x: n.position.x + 35, y: n.position.y + 35 },
+              data: {
+                ...n.data,
+                id: newId,
+                status: 'idle',
+              },
+            };
+          });
+
+          setNodes((prev) => [
+            ...prev.map((n) => ({ ...n, selected: false })),
+            ...newNodes,
+          ]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [nodes, setNodes]);
 
   // Connect handles
   const onConnect = useCallback(
@@ -877,26 +961,52 @@ export default function VisualWorkflowBuilder({
       >
         {/* Left: Execution & Palette Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* Run Button */}
           <button
-            onClick={isRunning ? handleStopWorkflow : handleExecuteWorkflow}
+            onClick={handleExecuteWorkflow}
+            disabled={isRunning}
             style={{
               padding: '6px 14px',
               borderRadius: 8,
-              background: isRunning ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #10b981, #059669)',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer',
+              background: isRunning ? 'rgba(16, 185, 129, 0.2)' : 'linear-gradient(135deg, #10b981, #059669)',
+              color: isRunning ? '#34d399' : '#fff',
+              border: isRunning ? '1px solid rgba(16, 185, 129, 0.4)' : 'none',
+              cursor: isRunning ? 'not-allowed' : 'pointer',
               fontWeight: 700,
               fontSize: 12,
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              boxShadow: isRunning ? '0 4px 12px rgba(239, 68, 68, 0.4)' : '0 4px 12px rgba(16, 185, 129, 0.4)',
+              boxShadow: isRunning ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.4)',
             }}
           >
-            {isRunning ? <Square size={13} fill="#fff" /> : <Play size={13} fill="#fff" />}
-            {isRunning ? 'Abort Run' : '▶ Run Workflow (Zero-Token)'}
+            {isRunning ? <Zap size={13} className="animate-spin" /> : <Play size={13} fill="#fff" />}
+            {isRunning ? 'Running...' : '▶ Run Workflow'}
           </button>
+
+          {/* Dedicated Stop Button (Only active while running) */}
+          {isRunning && (
+            <button
+              onClick={handleStopWorkflow}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                color: '#fff',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: 12,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)',
+              }}
+              title="Stop workflow execution"
+            >
+              <Square size={12} fill="#fff" /> Stop
+            </button>
+          )}
 
           <div style={{ width: 1, height: 20, background: C.border }} />
 
@@ -1040,7 +1150,9 @@ export default function VisualWorkflowBuilder({
           defaultEdgeOptions={{ type: 'removable', animated: true }}
           connectionRadius={40}
           deleteKeyCode={['Backspace', 'Delete']}
-          onEdgeClick={(_e, edge) => setEdges((eds) => eds.filter((ed) => ed.id !== edge.id))}
+          nodesDraggable={true}
+          nodesConnectable={true}
+          elementsSelectable={true}
           fitView
           minZoom={0.2}
           maxZoom={2.0}

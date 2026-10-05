@@ -42,11 +42,11 @@ function App() {
   const [rightPanelWidth, setRightPanelWidth] = useState(55);
   const [activeRightTab, setActiveRightTab] = useState<'builder' | 'graph' | 'map' | 'gantt' | 'telemetry' | 'monitor'>('builder');
   const [executionMode, setExecutionMode] = useState<'flow' | 'vla'>('flow');
-  const [showChatPane, setShowChatPane] = useState(false);
   const isDragging = useRef(false);
+  const isVla = executionMode === 'vla';
   
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 0, role: 'system', text: 'Welcome to Gemini Robotics ER. Click **▶ Start** to launch the robot workspace, then type or speak a goal to begin.', ts: new Date() },
+    { id: 0, role: 'system', text: 'Welcome to Physical AI with Isaac / Gemini. Click **▶ Start** to launch the robot workspace, then choose User-Defined Flow or Autonomous VLA.', ts: new Date() },
   ]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [actions, setActions] = useState<RobotAction[]>([]);
@@ -302,7 +302,7 @@ function App() {
           <div style={{ width: 28, height: 28, borderRadius: 7, background: isDark ? 'linear-gradient(135deg, #a855f7, #6366f1)' : '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
             <Bot size={15} color="#fff" />
           </div>
-          <span style={{ fontWeight: 800, color: C.white, fontSize: 13.5, letterSpacing: '-0.02em' }}>Gemini Robotics ER</span>
+          <span style={{ fontWeight: 800, color: C.white, fontSize: 13.5, letterSpacing: '-0.02em' }}>Physical AI with Isaac / Gemini</span>
         </div>
 
         {/* Gemini Robotics Official Link */}
@@ -333,7 +333,7 @@ function App() {
         {/* Execution Mode Selector */}
         <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', borderRadius: 7, border: `1px solid ${C.border}`, padding: 2, marginLeft: 4 }}>
           <button
-            onClick={() => { setExecutionMode('flow'); setActiveRightTab('builder'); setShowChatPane(false); }}
+            onClick={() => { setExecutionMode('flow'); setActiveRightTab('builder'); }}
             style={{
               padding: '3px 9px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 700,
               background: executionMode === 'flow' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
@@ -341,10 +341,10 @@ function App() {
               transition: 'all 0.15s',
             }}
           >
-            🧩 Visual Flow
+            🧩 User-Defined Flow
           </button>
           <button
-            onClick={() => { setExecutionMode('vla'); setActiveRightTab('graph'); setShowChatPane(true); }}
+            onClick={() => { setExecutionMode('vla'); setActiveRightTab('graph'); }}
             style={{
               padding: '3px 9px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 700,
               background: executionMode === 'vla' ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
@@ -355,28 +355,6 @@ function App() {
             🧠 Autonomous VLA
           </button>
         </div>
-
-        {/* Chat / CoT Toggle Button */}
-        <button
-          onClick={() => setShowChatPane(!showChatPane)}
-          style={{
-            ...btnSmall,
-            height: 26,
-            padding: '0 8px',
-            background: showChatPane ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
-            color: showChatPane ? '#c084fc' : C.textDim,
-            border: showChatPane ? '1px solid rgba(168, 85, 247, 0.35)' : `1px solid ${C.border}`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            fontSize: 10.5,
-            fontWeight: 600,
-          }}
-          title={showChatPane ? 'Hide Chat Pane' : 'Show Chat & VLA CoT'}
-        >
-          <Bot size={12} />
-          <span>{showChatPane ? 'Hide Chat' : 'Chat'}</span>
-        </button>
 
         <div style={{ flex: 1 }} />
 
@@ -499,7 +477,7 @@ function App() {
         {/* ── Chat Area (center) ──────────────────────── */}
         <div style={{
           flex: 1,
-          display: showChatPane ? 'flex' : 'none',
+          display: isVla ? 'flex' : 'none',
           flexDirection: 'column',
           minWidth: 0,
           background: C.bgChat
@@ -568,7 +546,7 @@ function App() {
               })}
               {messages.length === 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.textMuted, gap: 16 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: C.white, marginTop: 40 }}>Welcome to Gemini Robotics ER</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: C.white, marginTop: 40 }}>Welcome to Physical AI with Isaac / Gemini</div>
                   <div style={{ fontSize: 13, maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
                     Multi-Agent Vision-Language-Action platform for 3 Franka FR3 manipulators.
                   </div>
@@ -649,7 +627,7 @@ function App() {
         </div>
 
         {/* ── Right Dashboard Panel & Divider ─────────────────── */}
-        {sideOpen && showChatPane && (
+        {sideOpen && isVla && (
           <div
             onMouseDown={() => {
               isDragging.current = true;
@@ -670,8 +648,8 @@ function App() {
         )}
         {sideOpen && (
           <div style={{
-            width: showChatPane ? `${rightPanelWidth}%` : '100%',
-            flex: showChatPane ? undefined : 1,
+            width: isVla ? `${rightPanelWidth}%` : '100%',
+            flex: isVla ? undefined : 1,
             background: C.bgSide,
             display: 'flex',
             flexDirection: 'column',
@@ -681,33 +659,35 @@ function App() {
             {/* Header with high-tech tab switcher */}
             <div style={{ padding: '8px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.glassBg, backdropFilter: 'blur(10px)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <button
-                  onClick={() => setActiveRightTab('builder')}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
-                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                    background: activeRightTab === 'builder' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-                    color: activeRightTab === 'builder' ? '#38bdf8' : C.textDim,
-                    border: activeRightTab === 'builder' ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid transparent',
-                  }}
-                >
-                  <Layers size={12} />
-                  <span>Task Blocks (Flow)</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveRightTab('graph')}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
-                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                    background: activeRightTab === 'graph' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                    color: activeRightTab === 'graph' ? '#d46a43' : C.textDim,
-                    border: activeRightTab === 'graph' ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
-                  }}
-                >
-                  <Network size={12} />
-                  <span>Workflow Graph</span>
-                </button>
+                {executionMode === 'flow' ? (
+                  <button
+                    onClick={() => setActiveRightTab('builder')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                      fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      background: activeRightTab === 'builder' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+                      color: activeRightTab === 'builder' ? '#38bdf8' : C.textDim,
+                      border: activeRightTab === 'builder' ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid transparent',
+                    }}
+                  >
+                    <Layers size={12} />
+                    <span>Task Blocks</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setActiveRightTab('graph')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                      fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      background: activeRightTab === 'graph' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                      color: activeRightTab === 'graph' ? '#d46a43' : C.textDim,
+                      border: activeRightTab === 'graph' ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
+                    }}
+                  >
+                    <Network size={12} />
+                    <span>Workflow Graph</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => setActiveRightTab('map')}

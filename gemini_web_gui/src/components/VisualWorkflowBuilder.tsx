@@ -715,6 +715,10 @@ export default function VisualWorkflowBuilder({
       // Publish to ROS 2 and await genuine physical execution completion
       try {
         const res = await onPublishAction(payload);
+        if (res.success) {
+          // 400ms settle delay for physical grasp & state transition stability
+          await new Promise((r) => setTimeout(r, 400));
+        }
         return Boolean(res.success);
       } catch (err) {
         console.error(`[WORKFLOW] Execution error on node ${node.id}:`, err);

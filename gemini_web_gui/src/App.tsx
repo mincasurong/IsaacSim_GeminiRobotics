@@ -62,6 +62,11 @@ function App() {
   const resetTopic = useRef<any>(null);
   const summarizeClient = useRef<any>(null);
   const recognition = useRef<any>(null);
+  const actionListenersRef = useRef<Array<{
+    expectedRobot: string;
+    expectedAction?: string;
+    resolve: (res: { success: boolean; message: string }) => void;
+  }>>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const termEndRef = useRef<HTMLDivElement>(null);
@@ -135,7 +140,35 @@ function App() {
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action', messageType: 'std_msgs/String' })
           .subscribe((m: any) => { setActions(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action_result', messageType: 'std_msgs/String' })
-          .subscribe((m: any) => { setActionResults(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
+          .subscribe((m: any) => {
+            try {
+              const resObj = JSON.parse(m.data);
+              const resRobot = String(resObj.robot_id || 'global');
+
+              // Dispatch to matching active workflow listener
+              const matchIdx = actionListenersRef.current.findIndex(l => {
+                const exp = l.expectedRobot.toUpperCase();
+                const res = resRobot.toUpperCase();
+                if (exp === 'GLOBAL' || res === 'GLOBAL') return true;
+                if ((exp.includes('1') || exp.includes('FR3_1')) && (res.includes('1') || res.includes('FR3_1'))) return true;
+                if ((exp.includes('2') || exp.includes('FR3_2')) && (res.includes('2') || res.includes('FR3_2'))) return true;
+                if ((exp.includes('3') || exp.includes('FR3_3')) && (res.includes('3') || res.includes('FR3_3'))) return true;
+                return false;
+              });
+
+              if (matchIdx >= 0) {
+                const [listener] = actionListenersRef.current.splice(matchIdx, 1);
+                listener.resolve({
+                  success: Boolean(resObj.success),
+                  message: resObj.message || (resObj.success ? 'Success' : 'Execution failed'),
+                });
+              }
+            } catch (e) {
+              console.warn('[ROS] Error parsing action_result:', e);
+            }
+
+            setActionResults(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; });
+          });
 
         // Subscribe to chat replies from the VLA agent
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/chat_reply', messageType: 'std_msgs/String' })
@@ -234,50 +267,29 @@ function App() {
         return;
       }
 
-      const robotRaw = String(actionMsg.robot || 'global');
-      let expectedId = 'global';
-      if (robotRaw.includes('1') && !robotRaw.includes('2')) expectedId = '1';
-      else if (robotRaw.includes('2') && !robotRaw.includes('1')) expectedId = '2';
-      else if (robotRaw.includes('3')) expectedId = '3';
-      else expectedId = 'global';
+      const robotKey = String(actionMsg.robot || 'global');
+      let timeoutTimer: any = null;
 
-      let resolved = false;
+      const listenerEntry = {
+        expectedRobot: robotKey,
+        expectedAction: actionMsg.action,
+        resolve: (val: any) => {
+          if (timeoutTimer) clearTimeout(timeoutTimer);
+          resolve(val);
+        },
+      };
 
-      // Timeout safety: 40s max
-      const timer = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          try { resSub.unsubscribe(); } catch {}
-          resolve({ success: false, message: 'Action execution timed out (40s)' });
-        }
+      // 40-second safety timeout
+      timeoutTimer = setTimeout(() => {
+        const idx = actionListenersRef.current.indexOf(listenerEntry);
+        if (idx >= 0) actionListenersRef.current.splice(idx, 1);
+        console.warn(`[WORKFLOW] Action timed out for robot ${robotKey}`);
+        resolve({ success: false, message: 'Action execution timed out (40s)' });
       }, 40000);
 
-      const resSub = new ROSLIB.Topic({
-        ros: ros.current,
-        name: '/gemini/action_result',
-        messageType: 'std_msgs/String',
-      });
+      actionListenersRef.current.push(listenerEntry);
 
-      resSub.subscribe((m: any) => {
-        try {
-          const res = JSON.parse(m.data);
-          const resRobot = String(res.robot_id || 'global');
-          const match = (expectedId === 'global') || (resRobot === expectedId) || (resRobot === 'global');
-          if (match && !resolved) {
-            resolved = true;
-            clearTimeout(timer);
-            try { resSub.unsubscribe(); } catch {}
-            resolve({
-              success: Boolean(res.success),
-              message: res.message || (res.success ? 'Success' : 'Execution failed'),
-            });
-          }
-        } catch (e) {
-          // Keep waiting
-        }
-      });
-
-      // Publish action command
+      // Publish action command to ROS 2
       if (actionTopic.current) {
         actionTopic.current.publish(new ROSLIB.Message({ data: JSON.stringify(actionMsg) }));
       } else {

@@ -1,0 +1,820 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Mic, MicOff, Send, Bot, Wifi, WifiOff, Trash2,
+  Terminal, ChevronDown, ChevronUp,
+  Play, Square, RotateCcw, Plus, Minus, Wrench,
+  PanelRightOpen, PanelRightClose, User,
+  BarChart3, Network, Map, Clock, Sparkles, Moon, Sun, Activity, Layers,
+} from 'lucide-react';
+import { C, C_light, C_dark, btnSmall, btnCtrl, monoFont, stripAnsi, fmt, LOG_COLORS, LOG_LABELS,
+  type ChatMessage, type LogEntry, type RobotAction, type MetricsData, type MonitoringSummary } from './components/theme';
+import KpiDashboard from './components/KpiDashboard';
+import GanttChart from './components/GanttChart';
+import SceneMap from './components/SceneMap';
+import EventTrace from './components/EventTrace';
+import { AgentWorkflowGraph } from './components/AgentWorkflowGraph';
+import SystemMonitor from './components/SystemMonitor';
+import VisualWorkflowBuilder from './components/VisualWorkflowBuilder';
+
+const ROSLIB = (window as any).ROSLIB;
+const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+const API = 'http://localhost:3001';
+
+
+/* ── Main App ───────────────────────────────────────────── */
+function App() {
+  // Theme state
+  const [isDark, setIsDark] = useState(true);
+  useEffect(() => {
+    const t = isDark ? C_dark : C_light;
+    for (const [k, v] of Object.entries(t)) {
+      document.documentElement.style.setProperty(`--${k}`, v as string);
+    }
+  }, [isDark]);
+
+  const [connected, setConnected] = useState(false);
+  const [text, setText] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [bringupRunning, setBringupRunning] = useState(false);
+  const [termLines, setTermLines] = useState<string[]>([]);
+  const [fontSize, setFontSize] = useState(14);
+  const [sideOpen, setSideOpen] = useState(true);
+  const [bottomOpen, setBottomOpen] = useState(true);
+  const [rightPanelWidth, setRightPanelWidth] = useState(55);
+  const [activeRightTab, setActiveRightTab] = useState<'builder' | 'graph' | 'map' | 'gantt' | 'telemetry' | 'monitor'>('builder');
+  const [executionMode, setExecutionMode] = useState<'flow' | 'vla'>('flow');
+  const [showChatPane, setShowChatPane] = useState(false);
+  const isDragging = useRef(false);
+  
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: 0, role: 'system', text: 'Welcome to Gemini Robotics ER. Click **▶ Start** to launch the robot workspace, then type or speak a goal to begin.', ts: new Date() },
+  ]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [actions, setActions] = useState<RobotAction[]>([]);
+  const [actionResults, setActionResults] = useState<RobotAction[]>([]);
+  const [metrics, setMetrics] = useState<MetricsData | null>(null);
+  const [monitoringSummary, setMonitoringSummary] = useState<MonitoringSummary | null>(null);
+  const [logAutoScroll, setLogAutoScroll] = useState(true);
+  const [minLogLevel, setMinLogLevel] = useState(20);
+
+  const ros = useRef<any>(null);
+  const goalTopic = useRef<any>(null);
+  const actionTopic = useRef<any>(null);
+  const resetTopic = useRef<any>(null);
+  const summarizeClient = useRef<any>(null);
+  const recognition = useRef<any>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const termEndRef = useRef<HTMLDivElement>(null);
+  const seqRef = useRef(1);
+
+  const addMsg = useCallback((role: 'user'|'system'|'architect'|'vla', text: string, idOverride?: string | number, senderName?: string, emoji?: string) => {
+    setMessages(p => {
+      if (idOverride !== undefined) {
+        const idx = p.findIndex(m => m.id === idOverride);
+        if (idx >= 0) {
+          const n = [...p];
+          n[idx] = { ...n[idx], text: n[idx].text + text };
+          if (senderName) n[idx].senderName = senderName;
+          if (emoji) n[idx].emoji = emoji;
+          if (role !== 'system') n[idx].role = role;
+          return n;
+        }
+      }
+      return [...p, { id: idOverride ?? seqRef.current++, role, text, ts: new Date(), senderName, emoji }];
+    });
+  }, []);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => { if (logAutoScroll) logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs, logAutoScroll]);
+  useEffect(() => { termEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [termLines]);
+
+  /* ── Drag to Resize ───────────────────────────────────── */
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const newWidth = 100 - (e.clientX / window.innerWidth) * 100;
+      setRightPanelWidth(Math.max(30, Math.min(newWidth, 70)));
+    };
+    const handleMouseUp = () => {
+      isDragging.current = false;
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  /* ── SSE ──────────────────────────────────────────────── */
+  useEffect(() => {
+    let es: EventSource | null = null;
+    const connectSSE = () => {
+      es = new EventSource(`${API}/api/logs`);
+      es.onmessage = (e) => { try { const d = JSON.parse(e.data); if (d.type === 'log') setTermLines(p => { const n = [...p, d.line]; return n.length > 500 ? n.slice(-500) : n; }); else if (d.type === 'status') setBringupRunning(d.running); } catch {} };
+      es.onerror = () => { es?.close(); setTimeout(connectSSE, 3000); };
+    };
+    fetch(`${API}/api/status`).then(r => r.json()).then(d => setBringupRunning(d.running)).catch(() => {});
+    connectSSE();
+    return () => { es?.close(); };
+  }, []);
+
+  /* ── ROS + Speech ─────────────────────────────────────── */
+  useEffect(() => {
+    const initROS = () => {
+      if (!ROSLIB) return;
+      ros.current = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
+      ros.current.on('connection', () => {
+        setConnected(true);
+        goalTopic.current = new ROSLIB.Topic({ ros: ros.current, name: '/gemini/custom_goal', messageType: 'std_msgs/String' });
+        actionTopic.current = new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action', messageType: 'std_msgs/String' });
+        resetTopic.current = new ROSLIB.Topic({ ros: ros.current, name: '/reset_simulation', messageType: 'std_msgs/Empty' });
+        new ROSLIB.Topic({ ros: ros.current, name: '/rosout', messageType: 'rcl_interfaces/Log' })
+          .subscribe((m: any) => { setLogs(p => { const n = [...p, { id: seqRef.current++, level: m.level, name: m.name, msg: m.msg, ts: new Date() }]; return n.length > 500 ? n.slice(-500) : n; }); });
+        new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action', messageType: 'std_msgs/String' })
+          .subscribe((m: any) => { setActions(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
+        new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action_result', messageType: 'std_msgs/String' })
+          .subscribe((m: any) => { setActionResults(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
+
+        // Subscribe to chat replies from the VLA agent
+        new ROSLIB.Topic({ ros: ros.current, name: '/gemini/chat_reply', messageType: 'std_msgs/String' })
+          .subscribe((m: any) => {
+            try {
+              const obj = JSON.parse(m.data);
+              if (obj.id && obj.text !== undefined) {
+                addMsg(obj.role || 'system', obj.text, obj.id, obj.senderName, obj.emoji);
+                return;
+              }
+            } catch (e) {}
+            addMsg('system', m.data);
+          });
+
+        // Subscribe to robot metrics topic
+        new ROSLIB.Topic({ ros: ros.current, name: '/multi_robot/robot_metrics', messageType: 'std_msgs/String' })
+          .subscribe((m: any) => {
+            try { setMetrics(JSON.parse(m.data)); } catch {}
+          });
+
+        // Subscribe to monitoring summary
+        new ROSLIB.Topic({ ros: ros.current, name: '/gemini/monitoring_summary', messageType: 'std_msgs/String' })
+          .subscribe((m: any) => {
+            try { setMonitoringSummary(JSON.parse(m.data)); } catch {}
+          });
+
+        summarizeClient.current = new ROSLIB.Service({
+          ros: ros.current,
+          name: '/gemini/summarize_logs',
+          serviceType: 'std_srvs/Trigger'
+        });
+      });
+      ros.current.on('error', () => setConnected(false));
+      ros.current.on('close', () => { setConnected(false); setTimeout(initROS, 3000); });
+    };
+    initROS();
+    if (SpeechRecognition) {
+      recognition.current = new SpeechRecognition();
+      recognition.current.continuous = true;
+      recognition.current.interimResults = true;
+      recognition.current.onresult = (e: any) => { let t = ''; for (let i = e.resultIndex; i < e.results.length; ++i) if (e.results[i].isFinal) t += e.results[i][0].transcript; if (t) setText(prev => prev ? prev + ' ' + t : t); };
+      recognition.current.onerror = () => setIsRecording(false);
+      recognition.current.onend = () => setIsRecording(false);
+    }
+    return () => { ros.current?.close(); recognition.current?.stop(); };
+  }, []);
+
+  const quickPromptsByMode: Record<number, Array<{ label: string; prompt: string }>> = {
+    1: [
+      { label: '⚡ Fast 9-Layer Tower', prompt: 'Build a 9-layer tower on the central target table using all blocks with maximum speed and concurrency.' },
+      { label: '📐 3x3 Coplanar Grid', prompt: 'Arrange all 9 blocks into a 3x3 coplanar grid on the central target table centered at (0, 0).' },
+      { label: '🔺 Triangle Pyramid', prompt: 'Arrange 6 blocks into a flat triangular formation on the central target table (3 in base, 2 in middle, 1 on top).' },
+      { label: '🔄 Table 1 to 3 Relay', prompt: 'Transfer 2 blocks from Table 1 to Table 3 using the Central Target Table as a staging relay.' },
+    ],
+    5: [
+      { label: '🌊 Dual-Arm Pick & Wave Circle', prompt: 'Pick the LongBar with both arms, lift it, and execute a synchronized circular wave in the XY plane.' },
+      { label: '🎯 Conveyor Dynamic Intercept', prompt: 'Track and pick moving items from the conveyor belt with the nearest arm and place them onto the workbench.' },
+      { label: '🔄 Dual-Arm Circle (YZ Plane)', prompt: 'Pick the LongBar and synchronously draw a vertical circle in the YZ plane with 2 complete cycles.' },
+      { label: '🤝 Asymmetric Engine Pick', prompt: 'Coordinate FR3_1 and FR3_2 to pick the HeavyEnginePart using asymmetric grasp offsets and place it on the workbench.' },
+    ],
+    6: [
+      { label: '🛠️ Sub-Assembly Sequence', prompt: 'Perform cooperative assembly: FR3_1 holds the LongBar while FR3_2 fastens the HeavyEnginePart at the central station.' },
+      { label: '📐 Precision Bar Insertion', prompt: 'Grasp the LongBar jointly and perform high-precision compliance insertion at the target jig coordinates.' },
+      { label: '🔄 Dual-Arm Handoff & Tool Swap', prompt: 'Pick the bar with FR3_1, transfer it to FR3_2 at the handoff station, then return FR3_1 to home.' },
+      { label: '⚡ Agile Bi-Manual Sort', prompt: 'Sort all components on the assembly table by assigning heavy parts to dual-arm grasp and standard blocks to single arms.' },
+    ],
+  };
+
+  /* ── Handlers ─────────────────────────────────────────── */
+  const toggleMic = () => { if (!recognition.current) { alert('Chrome/Edge only'); return; } if (isRecording) { recognition.current.stop(); setIsRecording(false); } else { setText(''); recognition.current.start(); setIsRecording(true); } };
+  const sendGoal = () => {
+    if (!text.trim()) return;
+    if (!connected || !goalTopic.current) { addMsg('system', '⚠️ Not connected to ROS 2. Start the backend first.'); return; }
+    addMsg('user', text.trim());
+    goalTopic.current.publish(new ROSLIB.Message({ data: text.trim() }));
+    addMsg('system', '✅ Goal sent to Gemini agent.');
+    setText('');
+  };
+  const [bringupMode, setBringupMode] = useState(1);
+  const startBringup = async () => { try { await fetch(`${API}/api/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: bringupMode }) }); setBringupRunning(true); } catch { addMsg('system', '❌ Backend unreachable.'); } };
+  const stopBringup = async () => { try { await fetch(`${API}/api/stop`, { method: 'POST' }); setBringupRunning(false); } catch {} };
+  const triggerBuild = async () => { try { await fetch(`${API}/api/build`, { method: 'POST' }); addMsg('system', '🔧 Build triggered. Check WSL terminal.'); } catch { addMsg('system', '❌ Backend unreachable.'); } };
+  const resetSim = () => { if (!connected || !resetTopic.current) { addMsg('system', '⚠️ Not connected.'); return; } resetTopic.current.publish(new ROSLIB.Message({})); addMsg('system', '🔄 Simulation reset sent.'); };
+  const triggerAudit = () => {
+    if (!connected || !summarizeClient.current) { addMsg('system', '⚠️ Not connected.'); return; }
+    addMsg('system', '⚡ Requesting AI Diagnostic Audit...');
+    summarizeClient.current.callService(new ROSLIB.ServiceRequest({}), (res: any) => {
+      if (res.success) addMsg('system', `✅ Audit complete: ${res.message}`);
+      else addMsg('system', `❌ Audit failed: ${res.message}`);
+    });
+  };
+
+  const executeWorkflowActionAsync = useCallback((actionMsg: any): Promise<{ success: boolean; message: string }> => {
+    return new Promise((resolve) => {
+      if (!ros.current || !connected) {
+        resolve({ success: false, message: 'ROS 2 Bridge offline' });
+        return;
+      }
+
+      const robotRaw = String(actionMsg.robot || 'global');
+      let expectedId = 'global';
+      if (robotRaw.includes('1') && !robotRaw.includes('2')) expectedId = '1';
+      else if (robotRaw.includes('2') && !robotRaw.includes('1')) expectedId = '2';
+      else if (robotRaw.includes('3')) expectedId = '3';
+      else expectedId = 'global';
+
+      let resolved = false;
+
+      // Timeout safety: 40s max
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          try { resSub.unsubscribe(); } catch {}
+          resolve({ success: false, message: 'Action execution timed out (40s)' });
+        }
+      }, 40000);
+
+      const resSub = new ROSLIB.Topic({
+        ros: ros.current,
+        name: '/gemini/action_result',
+        messageType: 'std_msgs/String',
+      });
+
+      resSub.subscribe((m: any) => {
+        try {
+          const res = JSON.parse(m.data);
+          const resRobot = String(res.robot_id || 'global');
+          const match = (expectedId === 'global') || (resRobot === expectedId) || (resRobot === 'global');
+          if (match && !resolved) {
+            resolved = true;
+            clearTimeout(timer);
+            try { resSub.unsubscribe(); } catch {}
+            resolve({
+              success: Boolean(res.success),
+              message: res.message || (res.success ? 'Success' : 'Execution failed'),
+            });
+          }
+        } catch (e) {
+          // Keep waiting
+        }
+      });
+
+      // Publish action command
+      if (actionTopic.current) {
+        actionTopic.current.publish(new ROSLIB.Message({ data: JSON.stringify(actionMsg) }));
+      } else {
+        const topic = new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action', messageType: 'std_msgs/String' });
+        topic.publish(new ROSLIB.Message({ data: JSON.stringify(actionMsg) }));
+      }
+    });
+  }, [connected]);
+
+  const filteredLogs = logs.filter(l => l.level >= minLogLevel);
+  const renderMarkdown = (t: string) => t.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+
+  /* ── Render ───────────────────────────────────────────── */
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: isDark ? 'radial-gradient(ellipse at 50% -20%, #18181b, #09090b 80%)' : C.bg, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: C.text, fontSize }}>
+
+      {/* ════ Top Bar ════ */}
+      <div style={{ height: 50, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : C.border}`, background: C.glassBg, backdropFilter: 'blur(24px) saturate(150%)', flexShrink: 0, zIndex: 10 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 8, background: isDark ? 'linear-gradient(135deg, #a855f7, #6366f1)' : '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: isDark ? '0 0 16px rgba(99, 102, 241, 0.4)' : '0 4px 6px rgba(0,0,0,0.1)' }}><Bot size={17} color="#fff" /></div>
+        <div>
+          <span style={{ fontWeight: 800, color: C.white, fontSize: 14, letterSpacing: '-0.02em' }}>Gemini Robotics ER</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -2 }}>
+            <span style={{ fontSize: 9.5, color: '#d46a43', fontWeight: 600, fontFamily: monoFont }}>VLA × FRANKA MULTI-ARM</span>
+          </div>
+        </div>
+        <div style={{ width: 1, height: 22, background: C.border, margin: '0 4px' }} />
+        <a href="https://antigravity.google/" target="_blank" rel="noreferrer" title="Powered by Google Antigravity" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, transition: 'all 0.2s' }}>
+          <img src="/antigravity.svg" alt="Antigravity" style={{ width: 18, height: 18 }} />
+          <span style={{ fontSize: 10.5, color: C.textDim, fontWeight: 600 }}>Antigravity</span>
+        </a>
+
+        {/* Model Indicator Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', color: '#34d399', fontSize: 10.5, fontWeight: 700 }}>
+          <Sparkles size={12} />
+          <span>Gemini 3.5-Flash-Lite (4M TPM ⚡)</span>
+        </div>
+
+        {/* Execution Mode Selector */}
+        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', borderRadius: 7, border: `1px solid ${C.border}`, padding: 2 }}>
+          <button
+            onClick={() => { setExecutionMode('flow'); setActiveRightTab('builder'); setShowChatPane(false); }}
+            style={{
+              padding: '3px 9px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 700,
+              background: executionMode === 'flow' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+              color: executionMode === 'flow' ? '#38bdf8' : C.textDim,
+              transition: 'all 0.15s',
+            }}
+          >
+            🧩 Visual Flow (Zero-Token)
+          </button>
+          <button
+            onClick={() => { setExecutionMode('vla'); setActiveRightTab('graph'); setShowChatPane(true); }}
+            style={{
+              padding: '3px 9px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 700,
+              background: executionMode === 'vla' ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
+              color: executionMode === 'vla' ? '#a855f7' : C.textDim,
+              transition: 'all 0.15s',
+            }}
+          >
+            🧠 Autonomous VLA
+          </button>
+        </div>
+
+        {/* Chat / CoT Toggle Button */}
+        <button
+          onClick={() => setShowChatPane(!showChatPane)}
+          style={{
+            ...btnCtrl,
+            background: showChatPane ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.04)',
+            color: showChatPane ? '#c084fc' : C.textDim,
+            border: showChatPane ? '1px solid rgba(168, 85, 247, 0.35)' : `1px solid ${C.border}`,
+          }}
+          title={showChatPane ? 'Hide Chat Pane' : 'Show Chat & VLA CoT'}
+        >
+          <Bot size={13} />
+          <span>{showChatPane ? 'Hide Chat' : 'Chat & CoT'}</span>
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Theme Toggle */}
+        <button onClick={() => setIsDark(!isDark)} style={{ ...btnSmall, border: `1px solid ${C.border}`, width: 28, height: 28 }}>
+          {isDark ? <Sun size={14} color={C.yellow} /> : <Moon size={14} color={C.textDim} />}
+        </button>
+
+        {/* Font size */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'transparent', padding: '2px 4px', borderRadius: 6, border: `1px solid ${C.border}` }}>
+          <button onClick={() => setFontSize(s => Math.max(10, s-1))} style={btnSmall}><Minus size={11} /></button>
+          <span style={{ fontSize: 10, color: C.textMuted, width: 20, textAlign: 'center', fontFamily: monoFont }}>{fontSize}</span>
+          <button onClick={() => setFontSize(s => Math.min(20, s+1))} style={btnSmall}><Plus size={11} /></button>
+        </div>
+
+        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
+
+        {/* Controls */}
+        <button onClick={triggerBuild} style={{ ...btnCtrl, color: C.blue, background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.2)' }}><Wrench size={13} /> Build</button>
+        <select value={bringupMode} onChange={(e) => setBringupMode(parseInt(e.target.value))} style={{ ...btnCtrl, background: 'transparent', color: C.text, width: 160 }}>
+          <option value={1}>Mode 1: 3-Robot Tower</option>
+          <option value={5}>Mode 5: Conveyor Dual</option>
+          <option value={6}>Mode 6: Assembly</option>
+        </select>
+        {!bringupRunning
+          ? <button onClick={startBringup} style={{ ...btnCtrl, background: '#000', color: '#fff', border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}><Play size={13} /> Start</button>
+          : <button onClick={stopBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(239, 68, 68, 0.35)' }}><Square size={13} /> Stop</button>
+        }
+        <button onClick={resetSim} style={{ ...btnCtrl, color: C.yellow, background: 'rgba(250, 204, 21, 0.08)', borderColor: 'rgba(250, 204, 21, 0.2)' }}><RotateCcw size={13} /> Reset</button>
+
+        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
+
+        {/* Tower height badge */}
+        {metrics && metrics.tower_height > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.3)', fontSize: 11, color: '#d46a43', fontWeight: 700 }}>
+            🏗️ {metrics.tower_height}/9
+          </div>
+        )}
+
+        {/* ROS Connection Status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 6, background: connected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: connected ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)', fontSize: 11, color: connected ? C.green : C.red }}>
+          {connected ? <Wifi size={12} color={C.green} /> : <WifiOff size={12} color={C.red} />}
+          <span style={{ fontWeight: 600 }}>{connected ? 'ROS 2 Live' : 'Offline'}</span>
+        </div>
+
+        {/* Toggle side */}
+        <button onClick={() => setSideOpen(!sideOpen)} style={{ ...btnSmall, marginLeft: 2 }}>
+          {sideOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+        </button>
+      </div>
+
+      {/* ════ Main Body ════ */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+
+        {/* ── Chat Area (center) ──────────────────────── */}
+        <div style={{
+          flex: 1,
+          display: showChatPane ? 'flex' : 'none',
+          flexDirection: 'column',
+          minWidth: 0,
+          background: C.bgChat
+        }}>
+
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ maxWidth: 760, width: '100%', margin: '0 auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {messages.map(m => {
+                const isOrch = m.role === 'vla';
+                const isGen = m.role === 'generator' || m.senderName?.includes('Generator') || m.emoji === '📋';
+                const isVerif = m.role === 'verifier' || m.senderName?.includes('Verifier') || m.emoji === '🛡️';
+                const isArch = m.role === 'architect' && (m.senderName?.includes('Spatial') || m.emoji === '📐');
+                const isOpt = m.role === 'architect' && (m.senderName?.includes('Performance') || m.emoji === '⚡');
+                const isUser = m.role === 'user';
+                
+                const borderColor = isOrch ? '#38bdf8' : (isGen ? '#10b981' : (isVerif ? '#a855f7' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? 'rgba(148, 163, 184, 0.3)' : 'rgba(34, 197, 94, 0.3)')))));
+                const badgeBg = isOrch ? 'rgba(56, 189, 248, 0.15)' : (isGen ? 'rgba(16, 185, 129, 0.15)' : (isVerif ? 'rgba(168, 85, 247, 0.15)' : (isArch ? 'rgba(167, 139, 250, 0.15)' : (isOpt ? 'rgba(251, 191, 36, 0.15)' : (isUser ? 'rgba(255,255,255,0.06)' : 'rgba(34, 197, 94, 0.15)')))));
+                const badgeColor = isOrch ? '#38bdf8' : (isGen ? '#10b981' : (isVerif ? '#a855f7' : (isArch ? '#a78bfa' : (isOpt ? '#fbbf24' : (isUser ? '#94a3b8' : '#22c55e')))));
+
+                return (
+                  <div key={m.id} style={{
+                    padding: '14px 16px',
+                    borderRadius: 12,
+                    background: C.glassBg,
+                    backdropFilter: 'blur(8px)',
+                    border: `1px solid ${C.border}`,
+                    borderLeft: `3px solid ${borderColor}`,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                    display: 'flex', gap: 12, alignItems: 'flex-start',
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                      background: badgeBg,
+                      border: `1px solid ${borderColor}55`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {m.role === 'user' ? <User size={15} color="#94a3b8" /> : (m.emoji ? <span style={{ fontSize: 16, lineHeight: 1 }}>{m.emoji}</span> : <Bot size={15} color="#d46a43" />)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 700, color: C.white }}>
+                            {m.role === 'user' ? 'Human Operator' : (m.senderName || 'Gemini Robotics')}
+                          </span>
+                          <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: badgeBg, color: badgeColor, fontWeight: 600, fontFamily: monoFont }}>
+                            {isUser ? 'USER' : (isOrch ? 'VLA BRAIN' : (isGen ? 'TASK GENERATOR' : (isVerif ? 'SAFETY VERIFIER' : (isArch ? 'SPATIAL ARCHITECT' : (isOpt ? 'PERFORMANCE OPTIMIZER' : 'SYSTEM')))))}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 10, color: C.textMuted }}>{fmt(m.ts)}</span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: fontSize,
+                          lineHeight: 1.6,
+                          color: C.text,
+                          wordBreak: 'break-word',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: (m.role === 'architect' && m.text.includes('[')) ? monoFont : 'inherit',
+                        }}
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(m.text) }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {messages.length === 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.textMuted, gap: 16 }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: C.white, marginTop: 40 }}>Welcome to Gemini Robotics ER</div>
+                  <div style={{ fontSize: 13, maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
+                    Multi-Agent Vision-Language-Action platform for 3 Franka FR3 manipulators.
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+          </div>
+
+          {/* Quick Prompts Bar (Dynamically adapts to Mode 1, 5, or 6) */}
+          <div style={{ padding: '6px 24px 0', display: 'flex', gap: 8, overflowX: 'auto', maxWidth: 760, width: '100%', margin: '0 auto' }}>
+            {(quickPromptsByMode[bringupMode] || quickPromptsByMode[1]).map((qp, idx) => (
+              <button
+                key={idx}
+                onClick={() => setText(qp.prompt)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 20,
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  color: C.textDim,
+                  background: C.bgInput,
+                  border: `1px solid ${C.border}`,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.color = C.text;
+                  e.currentTarget.style.borderColor = C.borderHi;
+                  e.currentTarget.style.background = C.bgHover;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.color = C.textDim;
+                  e.currentTarget.style.borderColor = C.border;
+                  e.currentTarget.style.background = C.bgInput;
+                }}
+              >
+                {qp.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Input Bar */}
+          <div style={{ borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : C.border}`, background: isDark ? 'rgba(9, 9, 11, 0.75)' : C.glassBg, backdropFilter: 'blur(24px) saturate(180%)', padding: '16px 24px', zIndex: 10 }}>
+            <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', gap: 10, alignItems: 'center', background: isDark ? 'rgba(255, 255, 255, 0.03)' : C.bgInput, borderRadius: 16, padding: '6px 8px 6px 18px', border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : C.borderHi}`, boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)' : '0 4px 20px rgba(0,0,0,0.1)' }}>
+              <button onClick={toggleMic} style={{
+                width: 32, height: 32, borderRadius: '50%', border: 'none', cursor: 'pointer', flexShrink: 0,
+                background: isRecording ? C.red : 'transparent', color: isRecording ? '#fff' : C.textMuted,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: isRecording ? `0 0 12px ${C.redGlow}` : 'none',
+              }}>{isRecording ? <MicOff size={15} /> : <Mic size={15} />}</button>
+
+              <input type="text" value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendGoal()}
+                placeholder={isRecording ? 'Listening...' : (bringupMode === 5 ? 'Send dual-arm conveyor or circular wave directive...' : (bringupMode === 6 ? 'Send cooperative assembly directive...' : 'Send task directive to Gemini Robotics-ER-2 VLA...'))}
+                style={{ flex: 1, height: 38, border: 'none', background: 'transparent', color: C.white, fontSize: fontSize, outline: 'none' }}
+              />
+
+              <button onClick={sendGoal} disabled={!text.trim()} style={{
+                width: 34, height: 34, borderRadius: 8, border: 'none', cursor: text.trim() ? 'pointer' : 'default', flexShrink: 0,
+                background: text.trim() ? C.text : 'transparent', color: text.trim() ? C.bg : C.textMuted,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: 'none',
+                transition: 'all 0.15s',
+              }}><Send size={14} /></button>
+            </div>
+            <div style={{ maxWidth: 760, margin: '6px auto 0', fontSize: 10.5, color: C.textMuted, textAlign: 'center' }}>
+              Rule-Based Task Generator × Gemini Robotics-ER-2 VLA Brain × Rule-Based Safety Verifier
+              {' · '}
+              <a href="https://mincasurong.ai.studio/" target="_blank" rel="noreferrer" style={{ color: C.blue, textDecoration: 'none' }}>m9g</a>
+              {' · '}
+              <a href="https://antigravity.google/" target="_blank" rel="noreferrer" style={{ color: C.textMuted, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}>
+                <img src="/antigravity.svg" alt="" style={{ width: 12, height: 12, verticalAlign: 'middle' }} />
+                Powered by Antigravity
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Right Dashboard Panel & Divider ─────────────────── */}
+        {sideOpen && showChatPane && (
+          <div
+            onMouseDown={() => {
+              isDragging.current = true;
+              document.body.style.cursor = 'col-resize';
+              document.body.style.userSelect = 'none';
+            }}
+            style={{
+              width: 5,
+              cursor: 'col-resize',
+              background: C.border,
+              flexShrink: 0,
+              zIndex: 10,
+              transition: 'background 0.2s'
+            }}
+            onMouseOver={e => e.currentTarget.style.background = C.accent}
+            onMouseOut={e => e.currentTarget.style.background = C.border}
+          />
+        )}
+        {sideOpen && (
+          <div style={{
+            width: showChatPane ? `${rightPanelWidth}%` : '100%',
+            flex: showChatPane ? undefined : 1,
+            background: C.bgSide,
+            display: 'flex',
+            flexDirection: 'column',
+            flexShrink: 0,
+            position: 'relative'
+          }}>
+            {/* Header with high-tech tab switcher */}
+            <div style={{ padding: '8px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.glassBg, backdropFilter: 'blur(10px)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button
+                  onClick={() => setActiveRightTab('builder')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'builder' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+                    color: activeRightTab === 'builder' ? '#38bdf8' : C.textDim,
+                    border: activeRightTab === 'builder' ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid transparent',
+                  }}
+                >
+                  <Layers size={12} />
+                  <span>Task Blocks (Flow)</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveRightTab('graph')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'graph' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                    color: activeRightTab === 'graph' ? '#d46a43' : C.textDim,
+                    border: activeRightTab === 'graph' ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
+                  }}
+                >
+                  <Network size={12} />
+                  <span>Workflow Graph</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveRightTab('map')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'map' ? 'rgba(167, 139, 250, 0.15)' : 'transparent',
+                    color: activeRightTab === 'map' ? '#a78bfa' : C.textDim,
+                    border: activeRightTab === 'map' ? '1px solid rgba(167, 139, 250, 0.35)' : '1px solid transparent',
+                  }}
+                >
+                  <Map size={12} />
+                  <span>2D Workspace</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveRightTab('gantt')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'gantt' ? 'rgba(34, 197, 94, 0.15)' : 'transparent',
+                    color: activeRightTab === 'gantt' ? '#22c55e' : C.textDim,
+                    border: activeRightTab === 'gantt' ? '1px solid rgba(34, 197, 94, 0.35)' : '1px solid transparent',
+                  }}
+                >
+                  <Clock size={12} />
+                  <span>Gantt</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveRightTab('telemetry')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'telemetry' ? 'rgba(251, 191, 36, 0.15)' : 'transparent',
+                    color: activeRightTab === 'telemetry' ? '#fbbf24' : C.textDim,
+                    border: activeRightTab === 'telemetry' ? '1px solid rgba(251, 191, 36, 0.35)' : '1px solid transparent',
+                  }}
+                >
+                  <BarChart3 size={12} />
+                  <span>KPIs & Trace</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveRightTab('monitor')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: activeRightTab === 'monitor' ? 'rgba(236, 72, 153, 0.15)' : 'transparent',
+                    color: activeRightTab === 'monitor' ? '#ec4899' : C.textDim,
+                    border: activeRightTab === 'monitor' ? '1px solid rgba(236, 72, 153, 0.35)' : '1px solid transparent',
+                  }}
+                >
+                  <Activity size={12} />
+                  <span>AI Monitor</span>
+                </button>
+              </div>
+
+              {/* Status pill on right of tab bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: C.textMuted }}>
+                {metrics?.center_occupied_by ? (
+                  <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(249, 115, 22, 0.15)', color: '#f97316', border: '1px solid rgba(249, 115, 22, 0.3)', fontWeight: 700 }}>
+                    🔒 Mutex: {metrics.center_occupied_by}
+                  </span>
+                ) : (
+                  <span style={{ padding: '2px 7px', borderRadius: 5, background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.25)', fontWeight: 600 }}>
+                    🔓 Center Clear
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Tab content */}
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              {/* Task Blocks (Flow) - Kept mounted to preserve user graph and node edits across tab switches */}
+              <div style={{ flex: 1, minHeight: 0, display: activeRightTab === 'builder' ? 'flex' : 'none', flexDirection: 'column' }}>
+                <VisualWorkflowBuilder
+                  onPublishAction={executeWorkflowActionAsync}
+                  mode={bringupMode}
+                />
+              </div>
+
+              {activeRightTab === 'graph' && (
+                <AgentWorkflowGraph
+                  metrics={metrics}
+                  chatMessages={messages}
+                  actions={actions}
+                  results={actionResults}
+                  userGoal={messages.filter(m => m.role === 'user').slice(-1)[0]?.text || (bringupMode === 5 ? 'Pick items from conveyor' : (bringupMode === 6 ? 'Assemble components' : 'Build a 9-layer tower on the central target table'))}
+                  mode={bringupMode}
+                />
+              )}
+
+              {activeRightTab === 'map' && (
+                <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+                  <SceneMap actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
+                </div>
+              )}
+
+              {activeRightTab === 'gantt' && (
+                <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+                  <GanttChart actions={actions} results={actionResults} metrics={metrics} fontSize={fontSize} />
+                </div>
+              )}
+
+              {activeRightTab === 'telemetry' && (
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                  <KpiDashboard metrics={metrics} fontSize={fontSize} />
+                  <div style={{ borderTop: `1px solid ${C.border}`, flex: 1, minHeight: 320 }}>
+                    <EventTrace actions={actions} results={actionResults} fontSize={fontSize} />
+                  </div>
+                </div>
+              )}
+
+              {activeRightTab === 'monitor' && (
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  <SystemMonitor summary={monitoringSummary} onTriggerAudit={triggerAudit} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ════ Bottom Panel (Logs + Terminal) ════ */}
+      <div style={{ borderTop: `1px solid ${C.border}`, background: C.bgSide }}>
+        {/* Toggle bar */}
+        <div onClick={() => setBottomOpen(!bottomOpen)} style={{
+          padding: '5px 16px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none',
+        }}>
+          {bottomOpen ? <ChevronDown size={12} color={C.textMuted} /> : <ChevronUp size={12} color={C.textMuted} />}
+          <Terminal size={12} color={C.textDim} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: C.textDim }}>Logs & Terminal</span>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: bringupRunning ? C.green : C.textMuted, marginLeft: 4 }} />
+          <div style={{ flex: 1 }} />
+          {bottomOpen && (
+            <>
+              <select value={minLogLevel} onChange={e => { e.stopPropagation(); setMinLogLevel(Number(e.target.value)); }}
+                onClick={e => e.stopPropagation()}
+                style={{ background: C.bgInput, color: C.textDim, border: `1px solid ${C.border}`, borderRadius: 4, padding: '1px 4px', fontSize: 10, outline: 'none', cursor: 'pointer' }}>
+                <option value={10}>DEBUG+</option><option value={20}>INFO+</option><option value={30}>WARN+</option><option value={40}>ERR+</option>
+              </select>
+              <button onClick={(e) => { e.stopPropagation(); setLogAutoScroll(!logAutoScroll); }} style={{ ...btnSmall, background: logAutoScroll ? 'rgba(34,197,94,0.1)' : 'transparent', color: logAutoScroll ? C.green : C.textMuted, fontSize: 10, gap: 2 }}>
+                {logAutoScroll ? <ChevronDown size={9} /> : <ChevronUp size={9} />}Auto
+              </button>
+            </>
+          )}
+        </div>
+
+        {bottomOpen && (
+          <div style={{ display: 'flex', height: 180, borderTop: `1px solid ${C.border}` }}>
+            {/* ROS 2 Logs */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px', fontFamily: monoFont, fontSize: fontSize - 2 }}>
+              {filteredLogs.length === 0 && <div style={{ color: C.textMuted, padding: 12, textAlign: 'center', fontSize: 11 }}>Waiting for ROS 2 logs...</div>}
+              {filteredLogs.map(l => (
+                <div key={l.id} style={{ padding: '1px 0', display: 'flex', gap: 6, alignItems: 'flex-start', borderBottom: `1px solid ${C.border}22` }}>
+                  <span style={{ color: C.textMuted, flexShrink: 0, width: 56, fontSize: 10 }}>{fmt(l.ts)}</span>
+                  <span style={{ flexShrink: 0, width: 26, fontWeight: 700, fontSize: 10, color: LOG_COLORS[l.level] || C.textMuted }}>{LOG_LABELS[l.level] || '?'}</span>
+                  <span style={{ flexShrink: 0, color: C.accent, width: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10 }}>{l.name}</span>
+                  <span style={{ color: l.level >= 30 ? LOG_COLORS[l.level] : C.text, wordBreak: 'break-word', fontSize: 11 }}>{stripAnsi(l.msg)}</span>
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: 1, background: C.border }} />
+
+            {/* WSL Terminal */}
+            <div style={{ width: '40%', overflowY: 'auto', padding: '4px 12px', fontFamily: monoFont, fontSize: 11, color: C.textDim }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: C.yellow, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Terminal size={10} /> WSL2 Terminal
+                <div style={{ flex: 1 }} />
+                <button onClick={() => setTermLines([])} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.textMuted, padding: 0, display: 'flex' }}><Trash2 size={10} /></button>
+              </div>
+              {termLines.map((line, i) => (
+                <div key={i} style={{
+                  color: line.includes('[ERROR]') || line.includes('[stderr]') ? C.red :
+                         line.includes('[WARN') ? C.yellow :
+                         line.includes('[GUI]') || line.includes('[OK]') || line.includes('[LAUNCH]') ? C.green : C.textDim,
+                }}>{stripAnsi(line)}</div>
+              ))}
+              <div ref={termEndRef} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <style>{`::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#333;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#555}input::placeholder{color:${C.textMuted}}`}</style>
+    </div>
+  );
+}
+
+export default App;

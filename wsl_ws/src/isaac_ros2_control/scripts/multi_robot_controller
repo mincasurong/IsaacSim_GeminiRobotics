@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from isaac_ros2_control.multi_robot_controller import main
+
+if __name__ == '__main__':
+    main()

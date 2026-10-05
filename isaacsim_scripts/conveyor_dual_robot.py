@@ -126,6 +126,23 @@ if rb_conv.IsValid(): rb_conv.Set(False)
 kin_conv = conveyor_table.GetPrim().GetAttribute("physics:kinematicEnabled")
 if kin_conv.IsValid(): kin_conv.Set(True)
 
+# 3.5 Add Front Assembly Buffer Table (Staging for LongBar & Assembly)
+print("Creating Front Assembly Buffer Table...")
+buffer_table = UsdGeom.Cube.Define(stage, "/BufferTable")
+buffer_table.GetSizeAttr().Set(1.0)
+xform_buf = UsdGeom.Xformable(buffer_table.GetPrim())
+xform_buf.ClearXformOpOrder()
+xform_buf.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.16)) # Top surface at Z=0.32m
+xform_buf.AddScaleOp().Set(Gf.Vec3f(1.6, 0.18, 0.32)) # Bridges between MainTable and ConveyorTable
+buffer_table.CreateDisplayColorAttr().Set([Gf.Vec3f(0.28, 0.30, 0.34)])
+
+UsdPhysics.RigidBodyAPI.Apply(buffer_table.GetPrim())
+UsdPhysics.CollisionAPI.Apply(buffer_table.GetPrim())
+rb_buf = buffer_table.GetPrim().GetAttribute("physics:rigidBodyEnabled")
+if rb_buf.IsValid(): rb_buf.Set(False)
+kin_buf = buffer_table.GetPrim().GetAttribute("physics:kinematicEnabled")
+if kin_buf.IsValid(): kin_buf.Set(True)
+
 # 4. Add 2 Robots (FR3_1 and FR3_2) side-by-side facing the conveyor
 FR3_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaFR3/fr3.usd"
 
@@ -229,7 +246,7 @@ bar = UsdGeom.Cube.Define(stage, bar_path)
 bar.GetSizeAttr().Set(1.0)
 xform = UsdGeom.Xformable(bar.GetPrim())
 xform.ClearXformOpOrder()
-xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.35))
+xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.345))
 xform.AddScaleOp().Set(Gf.Vec3f(0.8, 0.045, 0.045)) # 80cm long
 bar.CreateDisplayColorAttr().Set([Gf.Vec3f(0.1, 0.1, 0.9)]) # Blue
 
@@ -457,7 +474,7 @@ for i in range(num_conv_items):
     rp.initialize()
     init_x = -1.2 + (i * 0.28)
     rp.set_world_poses(positions=np.array([[init_x, 0.50, 0.525]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
-    rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
+    rp.set_linear_velocities(np.array([[0.05, 0.0, 0.0]]))
     conv_rigid_prims.append(rp)
 
 # Initialize special static items (do not add to conv_rigid_prims)
@@ -497,11 +514,11 @@ def reset_simulation():
                 positions=np.array([[init_x, y_pos, 0.525]]),
                 orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
             )
-            rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
+            rp.set_linear_velocities(np.array([[0.05, 0.0, 0.0]]))
             rp.set_angular_velocities(np.zeros((1, 3)))
             
         # Reset static dual-arm objects to their original positions
-        bar_rp.set_world_poses(positions=np.array([[0.0, 0.25, 0.35]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
+        bar_rp.set_world_poses(positions=np.array([[0.0, 0.25, 0.345]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
         bar_rp.set_linear_velocities(np.zeros((1, 3)))
         bar_rp.set_angular_velocities(np.zeros((1, 3)))
         
@@ -553,7 +570,7 @@ while simulation_app.is_running():
                 positions=np.array([[-1.4, y_pos, 0.525]]),
                 orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
             )
-            rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
+            rp.set_linear_velocities(np.array([[0.05, 0.0, 0.0]]))
             rp.set_angular_velocities(np.array([[0.0, 0.0, 0.0]]))
             
             last_spawn_time = now
@@ -570,8 +587,8 @@ while simulation_app.is_running():
                 if vel is not None and len(vel) > 0:
                     v = vel[0]
                     # Enforce constant conveyor transport velocity
-                    if v[0] < 0.15:
-                        rp.set_linear_velocities(np.array([[0.15, v[1], v[2]]]))
+                    if v[0] < 0.05:
+                        rp.set_linear_velocities(np.array([[0.05, v[1], v[2]]]))
             # Recycle items that reached the conveyor end back to the start
             elif p[0] >= 1.45 and 0.30 < p[1] < 0.70 and p[2] < 0.56:
                 y_pos = np.random.uniform(0.45, 0.55)
@@ -579,7 +596,7 @@ while simulation_app.is_running():
                     positions=np.array([[-1.4, y_pos, 0.525]]),
                     orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
                 )
-                rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
+                rp.set_linear_velocities(np.array([[0.05, 0.0, 0.0]]))
                 rp.set_angular_velocities(np.array([[0.0, 0.0, 0.0]]))
         
     simulation_app.update()

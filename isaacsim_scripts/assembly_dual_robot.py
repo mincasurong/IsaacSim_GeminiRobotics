@@ -127,6 +127,23 @@ if rb_conv.IsValid(): rb_conv.Set(False)
 kin_conv = conveyor_table.GetPrim().GetAttribute("physics:kinematicEnabled")
 if kin_conv.IsValid(): kin_conv.Set(True)
 
+# 3.5 Add Front Assembly Buffer Table (Staging for LongBar & Assembly)
+print("Creating Front Assembly Buffer Table...")
+buffer_table = UsdGeom.Cube.Define(stage, "/BufferTable")
+buffer_table.GetSizeAttr().Set(1.0)
+xform_buf = UsdGeom.Xformable(buffer_table.GetPrim())
+xform_buf.ClearXformOpOrder()
+xform_buf.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.16)) # Top surface at Z=0.32m
+xform_buf.AddScaleOp().Set(Gf.Vec3f(1.6, 0.18, 0.32)) # Bridges between MainTable and ConveyorTable
+buffer_table.CreateDisplayColorAttr().Set([Gf.Vec3f(0.28, 0.30, 0.34)])
+
+UsdPhysics.RigidBodyAPI.Apply(buffer_table.GetPrim())
+UsdPhysics.CollisionAPI.Apply(buffer_table.GetPrim())
+rb_buf = buffer_table.GetPrim().GetAttribute("physics:rigidBodyEnabled")
+if rb_buf.IsValid(): rb_buf.Set(False)
+kin_buf = buffer_table.GetPrim().GetAttribute("physics:kinematicEnabled")
+if kin_buf.IsValid(): kin_buf.Set(True)
+
 # 4. Add 2 Robots (FR3_1 and FR3_2) side-by-side facing the conveyor
 FR3_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaFR3/fr3.usd"
 
@@ -210,7 +227,7 @@ bar = UsdGeom.Cube.Define(stage, bar_path)
 bar.GetSizeAttr().Set(1.0)
 xform = UsdGeom.Xformable(bar.GetPrim())
 xform.ClearXformOpOrder()
-xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.35))
+xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.345))
 xform.AddScaleOp().Set(Gf.Vec3f(0.8, 0.045, 0.045)) # 80cm long
 bar.CreateDisplayColorAttr().Set([Gf.Vec3f(0.1, 0.1, 0.9)]) # Blue
 

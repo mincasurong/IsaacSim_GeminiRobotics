@@ -205,7 +205,7 @@ class ConveyorDualController(MultiRobotController):
         super().__init__(node_name='conveyor_dual_controller')
         self.active_robot_ids = [1, 2]
         self.conveyor_tracking = True
-        self.conveyor_speed = 0.15
+        self.conveyor_speed = 0.05
 
         # Active Trajectory Strategies
         self.circle_strategy: Optional[DualArmCircleTrajectory] = None
@@ -411,8 +411,12 @@ class ConveyorDualController(MultiRobotController):
         if self.conveyor_tracking and state in ['HOVER_PICK', 'DESCEND_PICK']:
             block_pos, _ = self.get_block_local_pose(robot_id)
             if block_pos is not None:
-                lookahead_t = 0.15 if state == 'HOVER_PICK' else 0.08
-                predicted_y = block_pos[1] - (self.conveyor_speed * lookahead_t)
+                step_counter = getattr(self, f'step_counter{robot_id}', 0)
+                total_steps = getattr(self, f'steps_per_phase{robot_id}', 20)
+                rem_steps = max(total_steps - step_counter, 0)
+                # Dynamic lead time: remaining descent time + 0.12s gripper close latency
+                lead_t = (rem_steps / 50.0) + (0.12 if state == 'DESCEND_PICK' else 0.25)
+                predicted_y = block_pos[1] - (self.conveyor_speed * lead_t)
 
                 if state == 'HOVER_PICK':
                     end_pos = np.array([block_pos[0], predicted_y, block_pos[2] + self.hover_height])

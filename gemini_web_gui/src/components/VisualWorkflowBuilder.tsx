@@ -89,14 +89,14 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
     if (data.status === 'running') return '2px solid #fbbf24';
     if (data.status === 'success') return '2px solid #10b981';
     if (data.status === 'failed') return '2px solid #ef4444';
-    return `1px solid ${C.borderHi}`;
+    return `1px solid ${C.nodeBorderHi}`;
   };
 
   const getStatusGlow = () => {
     if (data.status === 'running') return '0 0 16px rgba(251, 191, 36, 0.4)';
     if (data.status === 'success') return '0 0 16px rgba(16, 185, 129, 0.4)';
     if (data.status === 'failed') return '0 0 16px rgba(239, 68, 68, 0.4)';
-    return '0 8px 24px rgba(0,0,0,0.5)';
+    return C.nodeShadow;
   };
 
   const color = getActionColor();
@@ -105,7 +105,7 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
   return (
     <div
       style={{
-        background: 'linear-gradient(145deg, rgba(28, 28, 35, 0.96) 0%, rgba(15, 15, 20, 0.98) 100%)',
+        background: C.nodeBg,
         border: getStatusBorder(),
         boxShadow: getStatusGlow(),
         borderRadius: 14,
@@ -126,10 +126,10 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
           height: 8,
           top: -4,
           borderRadius: '16px 16px 0 0',
-          background: 'rgba(255, 255, 255, 0.12)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
+          background: C.nodeBorderHi,
+          border: `1px solid ${C.borderHi}`,
           backdropFilter: 'blur(8px)',
-          boxShadow: '0 -2px 6px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
+          boxShadow: '0 -2px 6px rgba(0, 0, 0, 0.15)',
           cursor: 'crosshair',
           transition: 'all 0.15s ease',
         }}
@@ -184,16 +184,16 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
         {/* Robot Selector */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ color: C.textMuted, fontWeight: 600 }}>Robot:</span>
+          <span style={{ color: C.textDim, fontWeight: 600 }}>Robot:</span>
           {isDual ? (
             <select
               value={data.robot}
               onChange={(e) => updateField('robot', e.target.value)}
               style={{
-                background: 'rgba(0,0,0,0.5)',
-                border: `1px solid ${C.borderHi}`,
+                background: C.inputBg,
+                border: `1px solid ${C.inputBorder}`,
                 borderRadius: 5,
-                color: '#a78bfa',
+                color: C.inputText,
                 fontSize: 11,
                 fontWeight: 700,
                 padding: '2px 6px',
@@ -208,10 +208,10 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
               value={data.robot}
               onChange={(e) => updateField('robot', e.target.value)}
               style={{
-                background: 'rgba(0,0,0,0.5)',
-                border: `1px solid ${C.borderHi}`,
+                background: C.inputBg,
+                border: `1px solid ${C.inputBorder}`,
                 borderRadius: 5,
-                color: '#38bdf8',
+                color: C.inputText,
                 fontSize: 11,
                 fontWeight: 700,
                 padding: '2px 6px',
@@ -229,15 +229,15 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
         {/* Target Selector (for pick actions) */}
         {data.action === 'pick' && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ color: C.textMuted, fontWeight: 600 }}>Target:</span>
+            <span style={{ color: C.textDim, fontWeight: 600 }}>Target:</span>
             <select
               value={data.target || 'Block1'}
               onChange={(e) => updateField('target', e.target.value)}
               style={{
-                background: 'rgba(0,0,0,0.5)',
-                border: `1px solid ${C.borderHi}`,
+                background: C.inputBg,
+                border: `1px solid ${C.inputBorder}`,
                 borderRadius: 5,
-                color: '#facc15',
+                color: C.inputText,
                 fontSize: 11,
                 fontWeight: 600,
                 padding: '2px 6px',
@@ -269,15 +269,15 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
 
         {data.action === 'dual_arm_pick' && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ color: C.textMuted, fontWeight: 600 }}>Object:</span>
+            <span style={{ color: C.textDim, fontWeight: 600 }}>Object:</span>
             <select
               value={data.target || 'LongBar'}
               onChange={(e) => updateField('target', e.target.value)}
               style={{
-                background: 'rgba(0,0,0,0.5)',
-                border: `1px solid ${C.borderHi}`,
+                background: C.inputBg,
+                border: `1px solid ${C.inputBorder}`,
                 borderRadius: 5,
-                color: '#a78bfa',
+                color: C.inputText,
                 fontSize: 11,
                 fontWeight: 600,
                 padding: '2px 6px',
@@ -295,7 +295,7 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
         {/* Coordinate Targets (for place & dual_arm_place) */}
         {(data.action === 'place' || data.action === 'dual_arm_place') && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ color: C.textMuted, fontWeight: 600 }}>Pos [X, Y]:</span>
+            <span style={{ color: C.textDim, fontWeight: 600 }}>Pos [X, Y]:</span>
             <div style={{ display: 'flex', gap: 4 }}>
               <input
                 type="number"
@@ -304,10 +304,10 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
                 onChange={(e) => updateField('x', parseFloat(e.target.value) || 0)}
                 style={{
                   width: 52,
-                  background: 'rgba(0,0,0,0.5)',
-                  border: `1px solid ${C.borderHi}`,
+                  background: C.inputBg,
+                  border: `1px solid ${C.inputBorder}`,
                   borderRadius: 4,
-                  color: '#fff',
+                  color: C.inputText,
                   fontSize: 11,
                   textAlign: 'center',
                   padding: '2px 3px',
@@ -323,10 +323,10 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
                 onChange={(e) => updateField('y', parseFloat(e.target.value) || 0)}
                 style={{
                   width: 52,
-                  background: 'rgba(0,0,0,0.5)',
-                  border: `1px solid ${C.borderHi}`,
+                  background: C.inputBg,
+                  border: `1px solid ${C.inputBorder}`,
                   borderRadius: 4,
-                  color: '#fff',
+                  color: C.inputText,
                   fontSize: 11,
                   textAlign: 'center',
                   padding: '2px 3px',
@@ -342,16 +342,16 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
         {/* Circular Wave Trajectory Parameters */}
         {data.action === 'dual_arm_circle' && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ color: C.textMuted, fontWeight: 600 }}>Plane/Rad:</span>
+            <span style={{ color: C.textDim, fontWeight: 600 }}>Plane/Rad:</span>
             <div style={{ display: 'flex', gap: 4 }}>
               <select
                 value={data.plane || 'XY'}
                 onChange={(e) => updateField('plane', e.target.value)}
                 style={{
-                  background: 'rgba(0,0,0,0.5)',
-                  border: `1px solid ${C.borderHi}`,
+                  background: C.inputBg,
+                  border: `1px solid ${C.inputBorder}`,
                   borderRadius: 4,
-                  color: '#f472b6',
+                  color: C.inputText,
                   fontSize: 10.5,
                   padding: '2px 4px',
                   outline: 'none',
@@ -365,10 +365,10 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
                 value={data.radius ?? 0.08}
                 onChange={(e) => updateField('radius', parseFloat(e.target.value))}
                 style={{
-                  background: 'rgba(0,0,0,0.5)',
-                  border: `1px solid ${C.borderHi}`,
+                  background: C.inputBg,
+                  border: `1px solid ${C.inputBorder}`,
                   borderRadius: 4,
-                  color: '#f472b6',
+                  color: C.inputText,
                   fontSize: 10.5,
                   padding: '2px 4px',
                   outline: 'none',
@@ -384,15 +384,15 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
 
         {/* Speed Option */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ color: C.textMuted, fontWeight: 600 }}>Speed:</span>
+          <span style={{ color: C.textDim, fontWeight: 600 }}>Speed:</span>
           <select
             value={data.speed || 'fast'}
             onChange={(e) => updateField('speed', e.target.value)}
             style={{
-              background: 'rgba(0,0,0,0.5)',
-              border: `1px solid ${C.borderHi}`,
+              background: C.inputBg,
+              border: `1px solid ${C.inputBorder}`,
               borderRadius: 4,
-              color: '#34d399',
+              color: C.inputText,
               fontSize: 10.5,
               fontWeight: 600,
               padding: '2px 6px',
@@ -416,10 +416,9 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
           height: 8,
           bottom: -4,
           borderRadius: '0 0 16px 16px',
-          background: 'rgba(255, 255, 255, 0.12)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
-          backdropFilter: 'blur(8px)',
-          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.25)',
+          background: color,
+          border: `1px solid ${color}`,
+          boxShadow: `0 2px 8px ${color}60`,
           cursor: 'crosshair',
           transition: 'all 0.15s ease',
         }}
@@ -481,7 +480,7 @@ const RemovableEdge = ({
             style={{
               width: 20,
               height: 20,
-              background: 'rgba(24, 24, 27, 0.95)',
+              background: C.hudBg,
               border: '1.5px solid rgba(239, 68, 68, 0.7)',
               color: '#ef4444',
               borderRadius: '50%',
@@ -502,7 +501,7 @@ const RemovableEdge = ({
               e.currentTarget.style.transform = 'scale(1.25)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(24, 24, 27, 0.95)';
+              e.currentTarget.style.background = 'var(--hudBg, #18181b)';
               e.currentTarget.style.color = '#ef4444';
               e.currentTarget.style.transform = 'scale(1)';
             }}
@@ -589,11 +588,13 @@ const TEMPLATES: Record<string, { nodes: Node[]; edges: Edge[] }> = {
 interface VisualWorkflowBuilderProps {
   onPublishAction: (actionMsg: any) => Promise<{ success: boolean; message: string }>;
   mode: number;
+  isDark?: boolean;
 }
 
 export default function VisualWorkflowBuilder({
   onPublishAction,
   mode,
+  isDark = true,
 }: VisualWorkflowBuilderProps) {
   const initialTemplate = mode === 5 ? TEMPLATES.mode5_dual : TEMPLATES.parallel_tower;
   const [nodes, setNodes, onNodesChange] = useNodesState(initialTemplate.nodes);
@@ -980,7 +981,7 @@ export default function VisualWorkflowBuilder({
       <div
         style={{
           padding: '8px 14px',
-          background: 'rgba(0,0,0,0.3)',
+          background: C.subCardBg,
           borderBottom: `1px solid ${C.border}`,
           display: 'flex',
           alignItems: 'center',
@@ -1023,7 +1024,7 @@ export default function VisualWorkflowBuilder({
       </div>
 
       {/* Visual Canvas */}
-      <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
+      <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%', background: C.canvasBg }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -1040,12 +1041,12 @@ export default function VisualWorkflowBuilder({
           minZoom={0.2}
           maxZoom={2.0}
         >
-          <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="rgba(255,255,255,0.06)" />
-          <Controls style={{ background: C.cardBg, borderColor: C.border }} />
+          <Background variant={BackgroundVariant.Dots} gap={16} size={1} color={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)'} />
+          <Controls style={{ background: C.controlsBg, borderColor: C.controlsBorder, color: C.text }} />
           <MiniMap
-            style={{ background: 'rgba(10,10,12,0.85)', borderRadius: 8, border: `1px solid ${C.border}` }}
+            style={{ background: C.miniMapBg, borderRadius: 8, border: `1px solid ${C.miniMapBorder}` }}
             nodeColor="#3b82f6"
-            maskColor="rgba(0,0,0,0.6)"
+            maskColor={C.miniMapMask}
           />
         </ReactFlow>
       </div>

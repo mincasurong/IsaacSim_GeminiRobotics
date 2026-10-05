@@ -3,45 +3,94 @@
 /* ── Shared Theme, Types & Helpers ────────────────────────── */
 
 export const C_light = {
-  // E-Commerce Minimalist Light Theme (Default)
-  bg:       '#fafafa', 
+  // Modern Clean Light Theme
+  bg:       '#f8fafc', 
   bgChat:   '#ffffff', 
-  bgSide:   '#f4f4f4', 
+  bgSide:   '#f1f5f9', 
   bgInput:  '#ffffff', 
-  bgHover:  '#e5e5e5', 
-  border:   '#e0e0e0', 
-  borderHi: '#cccccc',
+  bgHover:  '#e2e8f0', 
+  border:   '#e2e8f0', 
+  borderHi: '#cbd5e1',
   
   // Status Colors
   green:    '#10b981',
   greenDim: '#059669',
   greenGlow:'rgba(16, 185, 129, 0.15)',
-  yellow:   '#f59e0b',
+  yellow:   '#d97706',
   
   // Text Colors
-  white:    '#111111', // Changed to dark for contrast in light mode
-  text:     '#111111', 
-  textDim:  '#555555',
-  textMuted:'#888888',
+  white:    '#ffffff',
+  text:     '#0f172a', 
+  textDim:  '#475569',
+  textMuted:'#94a3b8',
   
   red:      '#ef4444',
   redGlow:  'rgba(239, 68, 68, 0.15)',
   
-  blue:     '#111111', 
-  blueGlow: 'rgba(17, 17, 17, 0.1)',
-  accent:   '#000000', 
-  accentDim:'#333333',
-  accentGlow:'rgba(0, 0, 0, 0.15)',
+  blue:     '#2563eb', 
+  blueGlow: 'rgba(37, 99, 235, 0.15)',
+  accent:   '#7c3aed', 
+  accentDim:'#6d28d9',
+  accentGlow:'rgba(124, 58, 237, 0.15)',
   
-  orange:   '#f97316',
-  purple:   '#8b5cf6',
-  purpleGlow:'rgba(139, 92, 246, 0.15)',
-  cyan:     '#06b6d4',
-  magenta:  '#ec4899',
-  lime:     '#84cc16',
+  orange:   '#ea580c',
+  purple:   '#9333ea',
+  purpleGlow:'rgba(147, 51, 234, 0.15)',
+  cyan:     '#0891b2',
+  magenta:  '#db2777',
+  lime:     '#65a30d',
   
-  glassBg:  'rgba(255, 255, 255, 0.85)',
-  cardBg:   'linear-gradient(135deg, #ffffff, #f4f4f4)',
+  glassBg:  'rgba(255, 255, 255, 0.88)',
+  cardBg:   'linear-gradient(135deg, #ffffff, #f1f5f9)',
+
+  // Node & Flow Cards
+  nodeBg: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
+  nodeBorder: 'rgba(0, 0, 0, 0.12)',
+  nodeBorderHi: 'rgba(0, 0, 0, 0.24)',
+  nodeShadow: '0 10px 25px -4px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04)',
+  subCardBg: 'rgba(241, 245, 249, 0.9)',
+  subCardBorder: 'rgba(0, 0, 0, 0.08)',
+  subCardText: '#1e293b',
+  
+  // Canvas & React Flow
+  canvasBg: '#f8fafc',
+  canvasGrid: 'rgba(0, 0, 0, 0.06)',
+  canvasGridLines: '#e2e8f0',
+  canvasGridDots: '#cbd5e1',
+  edgeColor: '#94a3b8',
+  
+  // HUD Floating Bar
+  hudBg: 'rgba(255, 255, 255, 0.94)',
+  hudBorder: 'rgba(0, 0, 0, 0.1)',
+  hudText: '#0f172a',
+  hudTextDim: '#64748b',
+  hudShadow: '0 6px 20px rgba(0, 0, 0, 0.06)',
+  
+  // Form Controls & Inputs
+  inputBg: '#ffffff',
+  inputBorder: '#cbd5e1',
+  inputText: '#0f172a',
+  selectBg: '#ffffff',
+  
+  // Minimap & Controls
+  controlsBg: 'rgba(255, 255, 255, 0.95)',
+  controlsBorder: 'rgba(0, 0, 0, 0.12)',
+  miniMapBg: 'rgba(255, 255, 255, 0.95)',
+  miniMapBorder: 'rgba(0, 0, 0, 0.12)',
+  miniMapMask: 'rgba(0, 0, 0, 0.06)',
+  
+  // 2D Workspace Elements
+  tableCenterBg: 'linear-gradient(145deg, #f1f5f9, #e2e8f0)',
+  tableSourceBg: 'linear-gradient(145deg, #f8fafc, #f1f5f9)',
+  tableBorder: 'rgba(0, 0, 0, 0.2)',
+  tableText: '#1e293b',
+  tableTextDim: '#64748b',
+  robotBaseBg: 'linear-gradient(145deg, #ffffff, #f8fafc)',
+  robotBaseBorder: '#cbd5e1',
+  blockText: '#0f172a',
+  elevationBadgeBg: '#ffffff',
+  elevationBadgeText: '#b45309',
+  elevationBadgeBorder: 'rgba(0, 0, 0, 0.15)',
 };
 
 export const C_dark = {
@@ -83,6 +132,55 @@ export const C_dark = {
   
   glassBg: 'rgba(9, 9, 11, 0.7)',
   cardBg: 'linear-gradient(145deg, rgba(24, 24, 27, 0.95), rgba(9, 9, 11, 0.95))',
+
+  // Node & Flow Cards
+  nodeBg: 'linear-gradient(145deg, rgba(28, 28, 35, 0.96) 0%, rgba(15, 15, 20, 0.98) 100%)',
+  nodeBorder: 'rgba(255, 255, 255, 0.08)',
+  nodeBorderHi: 'rgba(255, 255, 255, 0.2)',
+  nodeShadow: '0 14px 32px -4px rgba(0, 0, 0, 0.6), 0 0 1px 1px rgba(255, 255, 255, 0.05)',
+  subCardBg: 'rgba(24, 24, 27, 0.65)',
+  subCardBorder: 'rgba(255, 255, 255, 0.05)',
+  subCardText: '#e4e4e7',
+  
+  // Canvas & React Flow
+  canvasBg: '#09090b',
+  canvasGrid: 'rgba(255, 255, 255, 0.06)',
+  canvasGridLines: '#18181b',
+  canvasGridDots: '#27272a',
+  edgeColor: '#27272a',
+  
+  // HUD Floating Bar
+  hudBg: 'rgba(18, 18, 22, 0.85)',
+  hudBorder: 'rgba(255, 255, 255, 0.08)',
+  hudText: '#f4f4f5',
+  hudTextDim: '#94a3b8',
+  hudShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+  
+  // Form Controls & Inputs
+  inputBg: 'rgba(0, 0, 0, 0.45)',
+  inputBorder: '#3f3f46',
+  inputText: '#f4f4f5',
+  selectBg: '#18181b',
+  
+  // Minimap & Controls
+  controlsBg: 'rgba(18, 18, 22, 0.85)',
+  controlsBorder: 'rgba(255, 255, 255, 0.08)',
+  miniMapBg: 'rgba(9, 9, 11, 0.85)',
+  miniMapBorder: 'rgba(255, 255, 255, 0.08)',
+  miniMapMask: 'rgba(0, 0, 0, 0.6)',
+  
+  // 2D Workspace Elements
+  tableCenterBg: 'linear-gradient(145deg, rgba(24, 24, 27, 0.85), rgba(9, 9, 11, 0.95))',
+  tableSourceBg: 'linear-gradient(145deg, rgba(18, 18, 22, 0.75), rgba(9, 9, 12, 0.9))',
+  tableBorder: 'rgba(255, 255, 255, 0.18)',
+  tableText: '#f4f4f5',
+  tableTextDim: '#a1a1aa',
+  robotBaseBg: 'linear-gradient(145deg, rgba(24, 24, 30, 0.95), rgba(12, 12, 16, 0.98))',
+  robotBaseBorder: '#3f3f46',
+  blockText: '#ffffff',
+  elevationBadgeBg: 'rgba(0, 0, 0, 0.85)',
+  elevationBadgeText: '#fbbf24',
+  elevationBadgeBorder: 'rgba(255, 255, 255, 0.1)',
 };
 
 // Map CSS variables to C so existing inline styles work unmodified!
@@ -199,14 +297,16 @@ export const PHASE_COLORS: Record<string, string> = {
 
 export const btnSmall: React.CSSProperties = {
   width: 24, height: 24, borderRadius: 6, border: 'none',
-  background: 'transparent', color: '#9ca3af', cursor: 'pointer',
+  background: 'transparent', color: C.textDim, cursor: 'pointer',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
+  transition: 'all 0.15s ease',
 };
 
 export const btnCtrl: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px',
-  borderRadius: 8, cursor: 'pointer', border: '1px solid #2e2e2e',
-  background: 'transparent', color: '#9ca3af', fontSize: 12, fontWeight: 600,
+  borderRadius: 8, cursor: 'pointer', border: `1px solid ${C.border}`,
+  background: C.inputBg, color: C.text, fontSize: 12, fontWeight: 600,
+  transition: 'all 0.15s ease',
 };
 
 export const parseAction = (raw: string) => {

@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Mic, MicOff, Send, Bot, Wifi, WifiOff, Trash2,
+  Mic, MicOff, Send, Bot, Trash2,
   Terminal, ChevronDown, ChevronUp,
-  Play, Square, RotateCcw, Plus, Minus, Wrench,
-  PanelRightOpen, PanelRightClose, User,
+  Play, Square, RotateCcw, User,
   BarChart3, Network, Map, Clock, Sparkles, Moon, Sun, Activity, Layers,
 } from 'lucide-react';
 import { C, C_light, C_dark, btnSmall, btnCtrl, monoFont, stripAnsi, fmt, LOG_COLORS, LOG_LABELS,
@@ -37,9 +36,9 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [bringupRunning, setBringupRunning] = useState(false);
   const [termLines, setTermLines] = useState<string[]>([]);
-  const [fontSize, setFontSize] = useState(14);
-  const [sideOpen, setSideOpen] = useState(true);
   const [bottomOpen, setBottomOpen] = useState(true);
+  const fontSize = 14;
+  const sideOpen = true;
   const [rightPanelWidth, setRightPanelWidth] = useState(55);
   const [activeRightTab, setActiveRightTab] = useState<'builder' | 'graph' | 'map' | 'gantt' | 'telemetry' | 'monitor'>('builder');
   const [executionMode, setExecutionMode] = useState<'flow' | 'vla'>('flow');
@@ -218,7 +217,6 @@ function App() {
   const [bringupMode, setBringupMode] = useState(1);
   const startBringup = async () => { try { await fetch(`${API}/api/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: bringupMode }) }); setBringupRunning(true); } catch { addMsg('system', '❌ Backend unreachable.'); } };
   const stopBringup = async () => { try { await fetch(`${API}/api/stop`, { method: 'POST' }); setBringupRunning(false); } catch {} };
-  const triggerBuild = async () => { try { await fetch(`${API}/api/build`, { method: 'POST' }); addMsg('system', '🔧 Build triggered. Check WSL terminal.'); } catch { addMsg('system', '❌ Backend unreachable.'); } };
   const resetSim = () => { if (!connected || !resetTopic.current) { addMsg('system', '⚠️ Not connected.'); return; } resetTopic.current.publish(new ROSLIB.Message({})); addMsg('system', '🔄 Simulation reset sent.'); };
   const triggerAudit = () => {
     if (!connected || !summarizeClient.current) { addMsg('system', '⚠️ Not connected.'); return; }
@@ -297,29 +295,43 @@ function App() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: isDark ? 'radial-gradient(ellipse at 50% -20%, #18181b, #09090b 80%)' : C.bg, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: C.text, fontSize }}>
 
-      {/* ════ Top Bar ════ */}
-      <div style={{ height: 50, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : C.border}`, background: C.glassBg, backdropFilter: 'blur(24px) saturate(150%)', flexShrink: 0, zIndex: 10 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: isDark ? 'linear-gradient(135deg, #a855f7, #6366f1)' : '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: isDark ? '0 0 16px rgba(99, 102, 241, 0.4)' : '0 4px 6px rgba(0,0,0,0.1)' }}><Bot size={17} color="#fff" /></div>
-        <div>
-          <span style={{ fontWeight: 800, color: C.white, fontSize: 14, letterSpacing: '-0.02em' }}>Gemini Robotics ER</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -2 }}>
-            <span style={{ fontSize: 9.5, color: '#d46a43', fontWeight: 600, fontFamily: monoFont }}>VLA × FRANKA MULTI-ARM</span>
+      {/* ════ Top Bar (Concise & Clean) ════ */}
+      <div style={{ height: 46, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : C.border}`, background: C.glassBg, backdropFilter: 'blur(20px)', flexShrink: 0, zIndex: 10 }}>
+        {/* Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 7, background: isDark ? 'linear-gradient(135deg, #a855f7, #6366f1)' : '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+            <Bot size={15} color="#fff" />
           </div>
+          <span style={{ fontWeight: 800, color: C.white, fontSize: 13.5, letterSpacing: '-0.02em' }}>Gemini Robotics ER</span>
         </div>
-        <div style={{ width: 1, height: 22, background: C.border, margin: '0 4px' }} />
-        <a href="https://antigravity.google/" target="_blank" rel="noreferrer" title="Powered by Google Antigravity" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, transition: 'all 0.2s' }}>
-          <img src="/antigravity.svg" alt="Antigravity" style={{ width: 18, height: 18 }} />
-          <span style={{ fontSize: 10.5, color: C.textDim, fontWeight: 600 }}>Antigravity</span>
+
+        {/* Gemini Robotics Official Link */}
+        <a
+          href="https://deepmind.google/models/gemini-robotics/"
+          target="_blank"
+          rel="noreferrer"
+          title="Google DeepMind Gemini Robotics"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            textDecoration: 'none',
+            padding: '3px 8px',
+            borderRadius: 6,
+            background: 'rgba(59, 130, 246, 0.1)',
+            border: '1px solid rgba(59, 130, 246, 0.25)',
+            color: '#60a5fa',
+            fontSize: 10.5,
+            fontWeight: 600,
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <Sparkles size={11} color="#60a5fa" />
+          <span>Gemini Robotics</span>
         </a>
 
-        {/* Model Indicator Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', color: '#34d399', fontSize: 10.5, fontWeight: 700 }}>
-          <Sparkles size={12} />
-          <span>Gemini 3.5-Flash-Lite (4M TPM ⚡)</span>
-        </div>
-
         {/* Execution Mode Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', borderRadius: 7, border: `1px solid ${C.border}`, padding: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', borderRadius: 7, border: `1px solid ${C.border}`, padding: 2, marginLeft: 4 }}>
           <button
             onClick={() => { setExecutionMode('flow'); setActiveRightTab('builder'); setShowChatPane(false); }}
             style={{
@@ -329,7 +341,7 @@ function App() {
               transition: 'all 0.15s',
             }}
           >
-            🧩 Visual Flow (Zero-Token)
+            🧩 Visual Flow
           </button>
           <button
             onClick={() => { setExecutionMode('vla'); setActiveRightTab('graph'); setShowChatPane(true); }}
@@ -348,64 +360,136 @@ function App() {
         <button
           onClick={() => setShowChatPane(!showChatPane)}
           style={{
-            ...btnCtrl,
-            background: showChatPane ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.04)',
+            ...btnSmall,
+            height: 26,
+            padding: '0 8px',
+            background: showChatPane ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
             color: showChatPane ? '#c084fc' : C.textDim,
             border: showChatPane ? '1px solid rgba(168, 85, 247, 0.35)' : `1px solid ${C.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 10.5,
+            fontWeight: 600,
           }}
           title={showChatPane ? 'Hide Chat Pane' : 'Show Chat & VLA CoT'}
         >
-          <Bot size={13} />
-          <span>{showChatPane ? 'Hide Chat' : 'Chat & CoT'}</span>
+          <Bot size={12} />
+          <span>{showChatPane ? 'Hide Chat' : 'Chat'}</span>
         </button>
 
         <div style={{ flex: 1 }} />
 
-        {/* Theme Toggle */}
-        <button onClick={() => setIsDark(!isDark)} style={{ ...btnSmall, border: `1px solid ${C.border}`, width: 28, height: 28 }}>
-          {isDark ? <Sun size={14} color={C.yellow} /> : <Moon size={14} color={C.textDim} />}
-        </button>
-
-        {/* Font size */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'transparent', padding: '2px 4px', borderRadius: 6, border: `1px solid ${C.border}` }}>
-          <button onClick={() => setFontSize(s => Math.max(10, s-1))} style={btnSmall}><Minus size={11} /></button>
-          <span style={{ fontSize: 10, color: C.textMuted, width: 20, textAlign: 'center', fontFamily: monoFont }}>{fontSize}</span>
-          <button onClick={() => setFontSize(s => Math.min(20, s+1))} style={btnSmall}><Plus size={11} /></button>
-        </div>
-
-        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
-
-        {/* Controls */}
-        <button onClick={triggerBuild} style={{ ...btnCtrl, color: C.blue, background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.2)' }}><Wrench size={13} /> Build</button>
-        <select value={bringupMode} onChange={(e) => setBringupMode(parseInt(e.target.value))} style={{ ...btnCtrl, background: 'transparent', color: C.text, width: 160 }}>
-          <option value={1}>Mode 1: 3-Robot Tower</option>
-          <option value={5}>Mode 5: Conveyor Dual</option>
+        {/* Workcell Mode Selector */}
+        <select
+          value={bringupMode}
+          onChange={(e) => setBringupMode(parseInt(e.target.value))}
+          style={{
+            ...btnCtrl,
+            background: 'rgba(0,0,0,0.25)',
+            color: C.text,
+            width: 140,
+            height: 28,
+            fontSize: 11,
+            borderRadius: 6,
+            border: `1px solid ${C.border}`,
+          }}
+        >
+          <option value={1}>Mode 1: Tower</option>
+          <option value={5}>Mode 5: Conveyor</option>
           <option value={6}>Mode 6: Assembly</option>
         </select>
-        {!bringupRunning
-          ? <button onClick={startBringup} style={{ ...btnCtrl, background: '#000', color: '#fff', border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}><Play size={13} /> Start</button>
-          : <button onClick={stopBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(239, 68, 68, 0.35)' }}><Square size={13} /> Stop</button>
-        }
-        <button onClick={resetSim} style={{ ...btnCtrl, color: C.yellow, background: 'rgba(250, 204, 21, 0.08)', borderColor: 'rgba(250, 204, 21, 0.2)' }}><RotateCcw size={13} /> Reset</button>
 
-        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
+        {/* Start / Stop Bringup */}
+        {!bringupRunning ? (
+          <button
+            onClick={startBringup}
+            style={{
+              ...btnCtrl,
+              height: 28,
+              padding: '0 12px',
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: 11,
+              borderRadius: 6,
+              boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+            }}
+          >
+            <Play size={12} fill="#fff" /> Start
+          </button>
+        ) : (
+          <button
+            onClick={stopBringup}
+            style={{
+              ...btnCtrl,
+              height: 28,
+              padding: '0 12px',
+              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: 11,
+              borderRadius: 6,
+              boxShadow: '0 2px 6px rgba(239, 68, 68, 0.3)',
+            }}
+          >
+            <Square size={12} fill="#fff" /> Stop
+          </button>
+        )}
 
-        {/* Tower height badge */}
+        {/* Reset Sim Button */}
+        <button
+          onClick={resetSim}
+          style={{
+            ...btnCtrl,
+            height: 28,
+            padding: '0 9px',
+            color: C.yellow,
+            background: 'rgba(250, 204, 21, 0.08)',
+            borderColor: 'rgba(250, 204, 21, 0.25)',
+            fontSize: 11,
+            borderRadius: 6,
+          }}
+          title="Reset simulation objects"
+        >
+          <RotateCcw size={12} /> Reset
+        </button>
+
+        {/* Tower Height Badge (if applicable) */}
         {metrics && metrics.tower_height > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.3)', fontSize: 11, color: '#d46a43', fontWeight: 700 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 7px', borderRadius: 6, background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.3)', fontSize: 10.5, color: '#38bdf8', fontWeight: 700 }}>
             🏗️ {metrics.tower_height}/9
           </div>
         )}
 
-        {/* ROS Connection Status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 6, background: connected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: connected ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)', fontSize: 11, color: connected ? C.green : C.red }}>
-          {connected ? <Wifi size={12} color={C.green} /> : <WifiOff size={12} color={C.red} />}
-          <span style={{ fontWeight: 600 }}>{connected ? 'ROS 2 Live' : 'Offline'}</span>
+        {/* ROS 2 Status Badge */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '3px 8px',
+            borderRadius: 6,
+            background: connected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+            border: connected ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
+            fontSize: 10.5,
+            color: connected ? C.green : C.red,
+            fontWeight: 600,
+          }}
+        >
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? C.green : C.red }} />
+          <span>{connected ? 'ROS 2' : 'Offline'}</span>
         </div>
 
-        {/* Toggle side */}
-        <button onClick={() => setSideOpen(!sideOpen)} style={{ ...btnSmall, marginLeft: 2 }}>
-          {sideOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+        {/* Theme Toggle */}
+        <button
+          onClick={() => setIsDark(!isDark)}
+          style={{ ...btnSmall, border: `1px solid ${C.border}`, width: 28, height: 28, borderRadius: 6 }}
+          title="Toggle light/dark theme"
+        >
+          {isDark ? <Sun size={13} color={C.yellow} /> : <Moon size={13} color={C.textDim} />}
         </button>
       </div>
 

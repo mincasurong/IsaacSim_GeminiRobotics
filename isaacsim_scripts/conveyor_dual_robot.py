@@ -8,7 +8,13 @@ import sys
 import os
 import numpy as np
 
-from isaacsim import SimulationApp
+try:
+    from isaacsim import SimulationApp
+except ImportError:
+    try:
+        from isaacsim.simulation_app import SimulationApp
+    except ImportError:
+        from omni.isaac.kit import SimulationApp
 
 # Parse arguments
 parser = argparse.ArgumentParser()
@@ -474,7 +480,7 @@ for i in range(num_conv_items):
     rp.initialize()
     init_x = -1.2 + (i * 0.28)
     rp.set_world_poses(positions=np.array([[init_x, 0.50, 0.525]]), orientations=np.array([[1.0, 0.0, 0.0, 0.0]]))
-    rp.set_linear_velocities(np.array([[0.05, 0.0, 0.0]]))
+    rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
     conv_rigid_prims.append(rp)
 
 # Initialize special static items (do not add to conv_rigid_prims)
@@ -514,7 +520,7 @@ def reset_simulation():
                 positions=np.array([[init_x, y_pos, 0.525]]),
                 orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
             )
-            rp.set_linear_velocities(np.array([[0.05, 0.0, 0.0]]))
+            rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
             rp.set_angular_velocities(np.zeros((1, 3)))
             
         # Reset static dual-arm objects to their original positions
@@ -570,7 +576,7 @@ while simulation_app.is_running():
                 positions=np.array([[-1.4, y_pos, 0.525]]),
                 orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
             )
-            rp.set_linear_velocities(np.array([[0.05, 0.0, 0.0]]))
+            rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
             rp.set_angular_velocities(np.array([[0.0, 0.0, 0.0]]))
             
             last_spawn_time = now
@@ -587,8 +593,8 @@ while simulation_app.is_running():
                 if vel is not None and len(vel) > 0:
                     v = vel[0]
                     # Enforce constant conveyor transport velocity
-                    if v[0] < 0.05:
-                        rp.set_linear_velocities(np.array([[0.05, v[1], v[2]]]))
+                    if v[0] < 0.15:
+                        rp.set_linear_velocities(np.array([[0.15, v[1], v[2]]]))
             # Recycle items that reached the conveyor end back to the start
             elif p[0] >= 1.45 and 0.30 < p[1] < 0.70 and p[2] < 0.56:
                 y_pos = np.random.uniform(0.45, 0.55)
@@ -596,7 +602,7 @@ while simulation_app.is_running():
                     positions=np.array([[-1.4, y_pos, 0.525]]),
                     orientations=np.array([[1.0, 0.0, 0.0, 0.0]])
                 )
-                rp.set_linear_velocities(np.array([[0.05, 0.0, 0.0]]))
+                rp.set_linear_velocities(np.array([[0.15, 0.0, 0.0]]))
                 rp.set_angular_velocities(np.array([[0.0, 0.0, 0.0]]))
         
     simulation_app.update()

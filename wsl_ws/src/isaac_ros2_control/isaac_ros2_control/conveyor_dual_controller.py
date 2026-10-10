@@ -104,6 +104,123 @@ class DualArmCircleTrajectory:
         return q_sol, is_finished
 
 
+class DualArmPickTrajectory:
+    """Computes synchronized bimanual pick with lockstep descent, contact dwell, and zero-strain lift."""
+
+    def __init__(self, bar_pos_w: np.ndarray, off1: float = -0.25, off2: float = 0.25, hover_height: float = 0.12, steps: int = 25):
+        self.bar_pos_w = np.array(bar_pos_w, dtype=float)
+        self.off1 = off1
+        self.off2 = off2
+        self.hover_height = hover_height
+        self.steps = steps
+
+        # Symmetric grasp targets in world frame
+        self.grasp_p1_w = np.array([self.bar_pos_w[0] + off1, self.bar_pos_w[1], self.bar_pos_w[2]], dtype=float)
+        self.grasp_p2_w = np.array([self.bar_pos_w[0] + off2, self.bar_pos_w[1], self.bar_pos_w[2]], dtype=float)
+
+        self.hover_p1_w = self.grasp_p1_w + np.array([0.0, 0.0, hover_height])
+        self.hover_p2_w = self.grasp_p2_w + np.array([0.0, 0.0, hover_height])
+
+        self.lift_p1_w = self.grasp_p1_w + np.array([0.0, 0.0, hover_height])
+        self.lift_p2_w = self.grasp_p2_w + np.array([0.0, 0.0, hover_height])
+
+        self.step1 = 0
+        self.step2 = 0
+        self.phase = 'HOVER'  # 'HOVER' -> 'DESCEND' -> 'GRASP' -> 'LIFT'
+
+        self.start_p1_w: Optional[np.ndarray] = None
+        self.start_p2_w: Optional[np.ndarray] = None
+        self.grasp_quat1: Optional[np.ndarray] = None
+        self.grasp_quat2: Optional[np.ndarray] = None
+
+    def initialize(self, q1: list, q2: list, quat1: np.ndarray, quat2: np.ndarray):
+        p1_local = kinematics.forward_kinematics(q1)[:3, 3]
+        p2_local = kinematics.forward_kinematics(q2)[:3, 3]
+
+        self.start_p1_w = R_BASE_90 @ p1_local + T_BASE1
+        self.start_p2_w = R_BASE_90 @ p2_local + T_BASE2
+
+        self.grasp_quat1 = np.array(quat1, dtype=float)
+        self.grasp_quat2 = np.array(quat2, dtype=float)
+
+        self.step1 = 0
+        self.step2 = 0
+        self.phase = 'HOVER'
+
+    def step(self, robot_id: int, q_current: list, gripper_open: float, gripper_close: float) -> Tuple[np.ndarray, float, bool]:
+        t_base = T_BASE1 if robot_id == 1 else T_BASE2
+        grasp_quat = self.grasp_quat1 if robot_id == 1 else self.grasp_quat2
+
+        if robot_id == 1:
+            self.step1 += 1
+            k = self.step1
+        else:
+            self.step2 += 1
+            k = self.step2
+
+        if self.phase == 'HOVER':
+            t = min(float(k) / float(self.steps), 1.0)
+            t_smooth = 10 * (t ** 3) - 15 * (t ** 4) + 6 * (t ** 5)
+
+            p_start = self.start_p1_w if robot_id == 1 else self.start_p2_w
+            p_target = self.hover_p1_w if robot_id == 1 else self.hover_p2_w
+
+            target_p_w = p_start + t_smooth * (p_target - p_start)
+            target_p_local = R_BASE_90.T @ (target_p_w - t_base)
+            q_sol, _ = kinematics.inverse_kinematics(target_p_local, grasp_quat, q_current)
+
+            if self.step1 >= self.steps and self.step2 >= self.steps:
+                self.phase = 'DESCEND'
+                self.step1 = 0
+                self.step2 = 0
+
+            return q_sol, gripper_open, False
+
+        elif self.phase == 'DESCEND':
+            t = min(float(k) / float(self.steps), 1.0)
+            t_smooth = 10 * (t ** 3) - 15 * (t ** 4) + 6 * (t ** 5)
+
+            p_start = self.hover_p1_w if robot_id == 1 else self.hover_p2_w
+            p_target = self.grasp_p1_w if robot_id == 1 else self.grasp_p2_w
+
+            target_p_w = p_start + t_smooth * (p_target - p_start)
+            target_p_local = R_BASE_90.T @ (target_p_w - t_base)
+            q_sol, _ = kinematics.inverse_kinematics(target_p_local, grasp_quat, q_current)
+
+            if self.step1 >= self.steps and self.step2 >= self.steps:
+                self.phase = 'GRASP'
+                self.step1 = 0
+                self.step2 = 0
+
+            return q_sol, gripper_open, False
+
+        elif self.phase == 'GRASP':
+            q_sol = np.array(q_current)
+            # Synchronized stiction dwell (20 steps = 400ms) before lift
+            if self.step1 >= 20 and self.step2 >= 20:
+                self.phase = 'LIFT'
+                self.step1 = 0
+                self.step2 = 0
+
+            return q_sol, gripper_close, False
+
+        elif self.phase == 'LIFT':
+            t = min(float(k) / float(self.steps), 1.0)
+            t_smooth = 10 * (t ** 3) - 15 * (t ** 4) + 6 * (t ** 5)
+
+            p_start = self.grasp_p1_w if robot_id == 1 else self.grasp_p2_w
+            p_target = self.lift_p1_w if robot_id == 1 else self.lift_p2_w
+
+            target_p_w = p_start + t_smooth * (p_target - p_start)
+            target_p_local = R_BASE_90.T @ (target_p_w - t_base)
+            q_sol, _ = kinematics.inverse_kinematics(target_p_local, grasp_quat, q_current)
+
+            is_finished = (self.step1 >= self.steps and self.step2 >= self.steps)
+            return q_sol, gripper_close, is_finished
+
+        return np.array(q_current), gripper_close, True
+
+
 class DualArmPlaceTrajectory:
     """Computes synchronized quintic polynomial placement with release & retract phases."""
 
@@ -205,9 +322,10 @@ class ConveyorDualController(MultiRobotController):
         super().__init__(node_name='conveyor_dual_controller')
         self.active_robot_ids = [1, 2]
         self.conveyor_tracking = True
-        self.conveyor_speed = 0.05
+        self.conveyor_speed = 0.15
 
         # Active Trajectory Strategies
+        self.pick_strategy: Optional[DualArmPickTrajectory] = None
         self.circle_strategy: Optional[DualArmCircleTrajectory] = None
         self.place_strategy: Optional[DualArmPlaceTrajectory] = None
 
@@ -239,21 +357,37 @@ class ConveyorDualController(MultiRobotController):
                     return
 
                 speed = cmd.get('speed', 'fast')
-                steps = 25 if speed == 'fast' else (70 if speed == 'slow' else 40)
+                steps = 25 if speed == 'fast' else (60 if speed == 'slow' else 35)
                 self._action_start_time['global'] = time.monotonic()
 
                 off1 = float(cmd.get('offset_1', -0.25))
                 off2 = float(cmd.get('offset_2', 0.25))
 
-                for rid, offset_val in [(1, off1), (2, off2)]:
+                bar_pos_w = np.array([0.0, 0.25, 0.345], dtype=float)
+                try:
+                    trans = self.tf_buffer.lookup_transform('world', block_name, rclpy.time.Time())
+                    bar_pos_w = np.array([
+                        trans.transform.translation.x,
+                        trans.transform.translation.y,
+                        trans.transform.translation.z
+                    ])
+                except Exception:
+                    pass
+
+                quat1 = kinematics.compute_symmetric_grasp_quat(np.pi / 2.0, np.arctan2(bar_pos_w[1] - T_BASE1[1], bar_pos_w[0] + off1 - T_BASE1[0]))
+                quat2 = kinematics.compute_symmetric_grasp_quat(np.pi / 2.0, np.arctan2(bar_pos_w[1] - T_BASE2[1], bar_pos_w[0] + off2 - T_BASE2[0]))
+
+                self.pick_strategy = DualArmPickTrajectory(
+                    bar_pos_w=bar_pos_w, off1=off1, off2=off2, hover_height=0.12, steps=steps
+                )
+                self.pick_strategy.initialize(self.q_current1, self.q_current2, quat1, quat2)
+
+                for rid in [1, 2]:
                     self._action_start_time[rid] = time.monotonic()
                     setattr(self, f'gemini_action{rid}', 'dual_arm_pick')
                     setattr(self, f'active_target{rid}', block_name)
-                    setattr(self, f'grasp_offset{rid}', offset_val)
-                    setattr(self, f'steps_per_phase{rid}', steps)
-                    setattr(self, f'hover_height{rid}', 0.12)
-                    self._set_state(rid, 'INIT')
-                self.get_logger().info(f"[DUAL-ARM PICK] Dispatched FR3_1 (off={off1}) and FR3_2 (off={off2}) for '{block_name}'")
+                    self._set_state(rid, 'DUAL_ARM_PICK')
+                self.get_logger().info(f"[DUAL-ARM PICK] Dispatched coordinated DualArmPickTrajectory for '{block_name}'")
                 return
 
             # ── 2. DUAL ARM DRAW CIRCLE ───────────────────────────────────────
@@ -355,6 +489,34 @@ class ConveyorDualController(MultiRobotController):
         """Process robot state with dynamic visual servoing and strategy execution."""
         state = getattr(self, f'state{robot_id}')
 
+        # ── 0. Bimanual Pick Trajectory Strategy Execution ────────────────────
+        if state == 'DUAL_ARM_PICK' and self.pick_strategy is not None:
+            q_cur = getattr(self, f'q_current{robot_id}')
+            q_sol, grip_val, is_finished = self.pick_strategy.step(
+                robot_id, q_cur, self.gripper_open, self.gripper_close
+            )
+
+            cmd = JointState()
+            cmd.header.stamp = self.get_clock().now().to_msg()
+            cmd.name = self.joint_names_fr3
+            cmd.position = list(q_sol) + [grip_val, grip_val]
+            (self.cmd_pub1 if robot_id == 1 else self.cmd_pub2).publish(cmd)
+
+            if robot_id == 1:
+                for i in range(7): self.q_current1[i] = q_sol[i]
+            else:
+                for i in range(7): self.q_current2[i] = q_sol[i]
+
+            if is_finished:
+                self.pick_strategy = None
+                self._set_state(1, 'WAITING_FOR_PLACE_CMD')
+                self._set_state(2, 'WAITING_FOR_PLACE_CMD')
+                self._publish_result(True, "Coordinated dual-arm pick completed successfully.", 1)
+                self._publish_result(True, "Coordinated dual-arm pick completed successfully.", 2)
+                self._publish_result(True, "Coordinated dual-arm pick completed successfully.", "global")
+                self.get_logger().info("[DUAL-ARM PICK] Bimanual grasp & lift completed with zero torque strain.")
+            return
+
         # ── 1. Circular Trajectory Strategy Execution ─────────────────────────
         if state == 'DUAL_ARM_CIRCLE' and self.circle_strategy is not None:
             q_cur = getattr(self, f'q_current{robot_id}')
@@ -407,22 +569,39 @@ class ConveyorDualController(MultiRobotController):
                 self.get_logger().info("[DUAL-ARM PLACE] Placement completed with zero bar stress.")
             return
 
-        # ── 3. Dynamic Conveyor Visual Servoing ────────────────────────────────
-        if self.conveyor_tracking and state in ['HOVER_PICK', 'DESCEND_PICK']:
+        # ── 3. Dynamic Conveyor Flying Grasp & Visual Servoing ───────────────
+        if self.conveyor_tracking and state in ['HOVER_PICK', 'DESCEND_PICK', 'GRASP']:
             block_pos, _ = self.get_block_local_pose(robot_id)
             if block_pos is not None:
                 step_counter = getattr(self, f'step_counter{robot_id}', 0)
                 total_steps = getattr(self, f'steps_per_phase{robot_id}', 20)
                 rem_steps = max(total_steps - step_counter, 0)
-                # Dynamic lead time: remaining descent time + 0.12s gripper close latency
-                lead_t = (rem_steps / 50.0) + (0.12 if state == 'DESCEND_PICK' else 0.25)
-                predicted_y = block_pos[1] - (self.conveyor_speed * lead_t)
 
                 if state == 'HOVER_PICK':
+                    lead_t = (rem_steps / 50.0) + 0.35
+                    predicted_y = block_pos[1] - (self.conveyor_speed * lead_t)
                     end_pos = np.array([block_pos[0], predicted_y, block_pos[2] + self.hover_height])
-                else:
+                    setattr(self, f'end_pos{robot_id}', end_pos)
+                elif state == 'DESCEND_PICK':
+                    lead_t = (rem_steps / 50.0) + 0.15
+                    predicted_y = block_pos[1] - (self.conveyor_speed * lead_t)
                     end_pos = np.array([block_pos[0], predicted_y, block_pos[2]])
-                setattr(self, f'end_pos{robot_id}', end_pos)
+                    setattr(self, f'end_pos{robot_id}', end_pos)
+                elif state == 'GRASP':
+                    # Flying grasp: advance end-effector along conveyor axis (-Y) at conveyor velocity during finger closure!
+                    curr_end = getattr(self, f'end_pos{robot_id}', block_pos)
+                    flying_y = curr_end[1] - (self.conveyor_speed * 0.02)
+                    end_pos = np.array([curr_end[0], flying_y, block_pos[2]])
+                    setattr(self, f'end_pos{robot_id}', end_pos)
+
+                    # Update local joint position command to match moving target while gripper closes
+                    target_quat = kinematics.compute_symmetric_grasp_quat(0.0, np.arctan2(end_pos[1], end_pos[0]))
+                    q_cur = getattr(self, f'q_current{robot_id}')
+                    q_sol, _ = kinematics.inverse_kinematics(end_pos, target_quat, q_cur)
+                    if robot_id == 1:
+                        for i in range(7): self.q_current1[i] = q_sol[i]
+                    else:
+                        for i in range(7): self.q_current2[i] = q_sol[i]
 
         super()._process_robot(robot_id)
 

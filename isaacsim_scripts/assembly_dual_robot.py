@@ -8,7 +8,13 @@ import sys
 import os
 import numpy as np
 
-from isaacsim import SimulationApp
+try:
+    from isaacsim import SimulationApp
+except ImportError:
+    try:
+        from isaacsim.simulation_app import SimulationApp
+    except ImportError:
+        from omni.isaac.kit import SimulationApp
 
 # Parse arguments
 parser = argparse.ArgumentParser()

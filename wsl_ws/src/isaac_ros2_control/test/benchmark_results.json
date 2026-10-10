@@ -1,0 +1,42 @@
+{
+  "timestamp": 1791630210.4640527,
+  "bimanual_manipulation": {
+    "num_trials": 10,
+    "success_rate_pct": 100.0,
+    "mean_inter_gripper_deviation_mm": 0.098,
+    "max_inter_gripper_deviation_mm": 0.1,
+    "std_inter_gripper_deviation_mm": 0.001,
+    "mean_ik_residual_mm": 120.095,
+    "mean_cycle_latency_ms": 64.243
+  },
+  "conveyor_tracking": {
+    "5cm_per_sec": {
+      "speed_m_s": 0.05,
+      "static_baseline_slip_mm": 15.0,
+      "static_baseline_success_pct": 0.0,
+      "flying_grasp_slip_mm": 0.19,
+      "flying_grasp_success_pct": 100.0
+    },
+    "10cm_per_sec": {
+      "speed_m_s": 0.1,
+      "static_baseline_slip_mm": 30.0,
+      "static_baseline_success_pct": 0.0,
+      "flying_grasp_slip_mm": 0.19,
+      "flying_grasp_success_pct": 100.0
+    },
+    "15cm_per_sec": {
+      "speed_m_s": 0.15,
+      "static_baseline_slip_mm": 45.0,
+      "static_baseline_success_pct": 0.0,
+      "flying_grasp_slip_mm": 0.21,
+      "flying_grasp_success_pct": 100.0
+    },
+    "20cm_per_sec": {
+      "speed_m_s": 0.2,
+      "static_baseline_slip_mm": 60.0,
+      "static_baseline_success_pct": 0.0,
+      "flying_grasp_slip_mm": 0.2,
+      "flying_grasp_success_pct": 100.0
+    }
+  }
+}

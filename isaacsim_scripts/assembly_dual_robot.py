@@ -3,9 +3,18 @@
 
 """Dual-robot manufacturing conveyor scene with ROS 2 bridge integration."""
 
-import argparse
 import sys
 import os
+
+# Auto-configure Python 3.12 site-packages if not in sys.path
+for _py_site in [
+    os.path.expandvars(r"%LOCALAPPDATA%\Programs\Python\Python312\Lib\site-packages"),
+    os.path.expandvars(r"%APPDATA%\Python\Python312\site-packages"),
+]:
+    if os.path.exists(_py_site) and _py_site not in sys.path:
+        sys.path.insert(0, _py_site)
+
+import argparse
 import numpy as np
 
 try:

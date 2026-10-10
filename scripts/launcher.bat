@@ -68,6 +68,18 @@ goto :ask_path
 
 :path_found
 echo [INFO] Using Isaac Sim path: %ISAAC_SIM_RELEASE_PATH%
+
+REM Configure Python 3.12 site-packages into PYTHONPATH
+if exist "%LOCALAPPDATA%\Programs\Python\Python312\Lib\site-packages" (
+    set "PYTHONPATH=%LOCALAPPDATA%\Programs\Python\Python312\Lib\site-packages;!PYTHONPATH!"
+)
+if exist "%APPDATA%\Python\Python312\site-packages" (
+    set "PYTHONPATH=%APPDATA%\Python\Python312\site-packages;!PYTHONPATH!"
+)
+if exist "%ISAAC_SIM_RELEASE_PATH%\python_packages" (
+    set "PYTHONPATH=%ISAAC_SIM_RELEASE_PATH%\python_packages;!PYTHONPATH!"
+)
+echo [INFO] Configured Python 3.12 site-packages for Isaac Sim runtime.
 echo.
 
 :menu

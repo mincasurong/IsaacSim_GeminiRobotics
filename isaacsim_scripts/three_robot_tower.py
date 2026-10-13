@@ -516,12 +516,16 @@ SimulationManager.setup_simulation(dt=1.0 / 240.0, device="cpu")  # python CPU A
 app_utils.play()
 simulation_app.update()
 
-# Initialize Overhead Camera
-try:
-    setup_overhead_camera(freq=10)
-    print("Overhead camera initialized and publishing to ROS 2.")
-except Exception as e:
-    print(f"Warning: Overhead camera setup failed: {e}")
+# Initialize Overhead Camera (opt-in via --enable-camera; skipped by default:
+# render-product + ROS2 writer attach triggers native access violation on RTX 2080 Ti)
+if "--enable-camera" in sys.argv:
+    try:
+        setup_overhead_camera(freq=10)
+        print("Overhead camera initialized and publishing to ROS 2.")
+    except Exception as e:
+        print(f"Warning: Overhead camera setup failed: {e}")
+else:
+    print("[INFO] Overhead camera render product skipped (use --enable-camera to opt in).")
 
 simulation_app.update()
 

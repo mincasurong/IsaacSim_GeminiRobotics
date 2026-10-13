@@ -323,42 +323,56 @@ simulation_app.update()
 
 # 6. Overhead Camera for Gemini Robotics VLM
 print("Adding overhead camera for Gemini Robotics integration...")
-overhead_camera = Camera(
-    prim_path="/OverheadCamera",
-    position=np.array([0.0, 0.0, 1.8]),
-    frequency=10,
-    resolution=(640, 480),
-    orientation=transform_utils.euler_angles_to_quaternion(
-        np.array([0, 90, 0]), degrees=True
-    ).numpy()
-)
+camera_prim = UsdGeom.Camera.Define(stage, "/OverheadCamera")
+camera_prim.CreateFocalLengthAttr().Set(24.0)
+camera_prim.CreateHorizontalApertureAttr().Set(20.955)
+camera_prim.CreateVerticalApertureAttr().Set(15.29)
+camera_prim.CreateClippingRangeAttr().Set(Gf.Vec2f(0.1, 1000.0))
+xform_cam = UsdGeom.Xformable(camera_prim.GetPrim())
+xform_cam.ClearXformOpOrder()
+xform_cam.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 1.8))
+xform_cam.AddRotateXYZOp().Set(Gf.Vec3f(0.0, 90.0, 0.0))
 
-def publish_overhead_rgb(camera, freq=10):
-    render_product = camera._render_product_path
-    step_size = int(60 / freq)
-    rv = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.Rgb.name)
-    writer = rep.writers.get(rv + "ROS2PublishImage")
-    writer.initialize(frameId="overhead_camera", topicName="/overhead_camera/rgb")
-    writer.attach([render_product])
-    gate_path = omni.syntheticdata.SyntheticData._get_node_path(rv + "IsaacSimulationGate", render_product)
-    og.Controller.attribute(gate_path + ".inputs:step").set(step_size)
+def setup_overhead_camera(freq=10):
+    """Initializes render product and ROS 2 camera publishing AFTER timeline starts playing."""
+    try:
+        render_product = rep.create.render_product("/OverheadCamera", (640, 480))
+        step_size = max(1, int(60 / freq))
 
-def publish_overhead_depth(camera, freq=10):
-    render_product = camera._render_product_path
-    step_size = int(60 / freq)
-    rv = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.DistanceToImagePlane.name)
-    writer = rep.writers.get(rv + "ROS2PublishImage")
-    writer.initialize(frameId="overhead_camera", topicName="/overhead_camera/depth")
-    writer.attach([render_product])
-    gate_path = omni.syntheticdata.SyntheticData._get_node_path(rv + "IsaacSimulationGate", render_product)
-    og.Controller.attribute(gate_path + ".inputs:step").set(step_size)
+        try:
+            rv_rgb = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.Rgb.name)
+            writer_rgb = rep.writers.get(rv_rgb + "ROS2PublishImage")
+            writer_rgb.initialize(frameId="overhead_camera", topicName="/overhead_camera/rgb")
+            writer_rgb.attach([render_product])
+            gate_rgb = omni.syntheticdata.SyntheticData._get_node_path(rv_rgb + "IsaacSimulationGate", render_product)
+            if gate_rgb:
+                og.Controller.attribute(gate_rgb + ".inputs:step").set(step_size)
+        except Exception as e:
+            print(f"[WARN] Overhead RGB camera stream skipped: {e}")
 
-def publish_camera_info(camera, freq=10):
-    render_product = camera._render_product_path
-    step_size = int(60 / freq)
-    writer = rep.writers.get("ROS2PublishCameraInfo")
-    writer.initialize(frameId="overhead_camera", topicName="/overhead_camera/camera_info")
-    writer.attach([render_product])
+        try:
+            rv_depth = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.DistanceToImagePlane.name)
+            writer_depth = rep.writers.get(rv_depth + "ROS2PublishImage")
+            writer_depth.initialize(frameId="overhead_camera", topicName="/overhead_camera/depth")
+            writer_depth.attach([render_product])
+            gate_depth = omni.syntheticdata.SyntheticData._get_node_path(rv_depth + "IsaacSimulationGate", render_product)
+            if gate_depth:
+                og.Controller.attribute(gate_depth + ".inputs:step").set(step_size)
+        except Exception as e:
+            print(f"[WARN] Overhead depth camera stream skipped: {e}")
+
+        try:
+            writer_info = rep.writers.get("ROS2PublishCameraInfo")
+            writer_info.initialize(frameId="overhead_camera", topicName="/overhead_camera/camera_info")
+            writer_info.attach([render_product])
+        except Exception as e:
+            print(f"[WARN] Overhead camera_info stream skipped: {e}")
+
+        print("[INFO] Overhead camera initialized and publishing to ROS 2.")
+        return render_product
+    except Exception as e:
+        print(f"[WARN] Failed to setup overhead camera render product: {e}")
+        return None
 
 simulation_app.update()
 
@@ -502,10 +516,7 @@ simulation_app.update()
 
 # Initialize Overhead Camera
 try:
-    overhead_camera.initialize()
-    publish_overhead_rgb(overhead_camera, freq=10)
-    publish_overhead_depth(overhead_camera, freq=10)
-    publish_camera_info(overhead_camera, freq=10)
+    setup_overhead_camera(freq=10)
     print("Overhead camera initialized and publishing to ROS 2.")
 except Exception as e:
     print(f"Warning: Overhead camera setup failed: {e}")

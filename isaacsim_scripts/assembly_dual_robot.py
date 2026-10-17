@@ -215,7 +215,7 @@ usd_home_deg = {
     "fr3_joint4": -90.0,
     "fr3_joint5": 0.0,
     "fr3_joint6": 90.0,
-    "fr3_joint7": 45.0,
+    "fr3_joint7": -45.0,
 }
 usd_home_lin = {
     "fr3_finger_joint1": 0.04,
@@ -491,10 +491,10 @@ blocks = []
 bar_rp = None
 engine_rp = None
 
-# Canonical home configurations (arm: 7 DOFs, gripper: 2 fingers)
-q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854], dtype=float)
+# Canonical home configurations (arm: 7 DOFs with joint7=-0.7854 rad [-45 deg], rotated 90 deg so fingers open along World Y perpendicular to LongBar)
+q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, -0.7854], dtype=float)
 q_home_gripper = np.array([0.04, 0.04], dtype=float)
-q_home_all = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854, 0.04, 0.04], dtype=float)
+q_home_all = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, -0.7854, 0.04, 0.04], dtype=float)
 
 q_home_dict = {
     "fr3_joint1": 0.0,
@@ -503,7 +503,7 @@ q_home_dict = {
     "fr3_joint4": -1.5708,
     "fr3_joint5": 0.0,
     "fr3_joint6": 1.5708,
-    "fr3_joint7": 0.7854,
+    "fr3_joint7": -0.7854,
     "fr3_finger_joint1": 0.04,
     "fr3_finger_joint2": 0.04,
 }

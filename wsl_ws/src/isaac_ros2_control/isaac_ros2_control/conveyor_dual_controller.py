@@ -327,6 +327,11 @@ class ConveyorDualController(MultiRobotController):
         super().__init__(node_name='conveyor_dual_controller')
         self.active_robot_ids = [1, 2]
         self.conveyor_tracking = True
+        # Rotate gripper raw/home posture by 90 deg (joint7 = -0.7854 rad) so fingers open along World Y across LongBar
+        self.q_home_fr3 = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, -0.7854], dtype=float)
+        self.q_tuck_body = np.array([-0.5, 0.0, -2.0, 0.0, 1.5, -0.7854], dtype=float)
+        self.q_current1 = list(self.q_home_fr3)
+        self.q_current2 = list(self.q_home_fr3)
         self.conveyor_speed = 0.15
 
         # Active Trajectory Strategies
@@ -381,6 +386,7 @@ class ConveyorDualController(MultiRobotController):
                 off2 = float(cmd.get('offset_2', 0.25))
 
                 bar_pos_w = np.array([0.0, 0.0, 0.345], dtype=float)
+                bar_yaw_w = 0.0
                 try:
                     trans = self.tf_buffer.lookup_transform('world', block_name, rclpy.time.Time())
                     bar_pos_w = np.array([
@@ -388,13 +394,16 @@ class ConveyorDualController(MultiRobotController):
                         trans.transform.translation.y,
                         trans.transform.translation.z
                     ])
+                    rot = trans.transform.rotation
+                    bar_yaw_w = kinematics.quat_to_yaw([rot.w, rot.x, rot.y, rot.z])
                 except Exception:
                     pass
 
-                quat1 = kinematics.compute_symmetric_grasp_quat(
-                    np.pi / 2.0, np.arctan2(bar_pos_w[1] - T_BASE1[1], bar_pos_w[0] + off1 - T_BASE1[0]))
-                quat2 = kinematics.compute_symmetric_grasp_quat(
-                    np.pi / 2.0, np.arctan2(bar_pos_w[1] - T_BASE2[1], bar_pos_w[0] + off2 - T_BASE2[0]))
+                p1_loc = world_to_local_base(np.array([bar_pos_w[0] + off1, bar_pos_w[1], bar_pos_w[2]]), 1)
+                p2_loc = world_to_local_base(np.array([bar_pos_w[0] + off2, bar_pos_w[1], bar_pos_w[2]]), 2)
+                bar_yaw_loc = bar_yaw_w - (np.pi / 2.0)
+                quat1 = kinematics.compute_bar_grasp_quat(bar_yaw_loc, np.arctan2(p1_loc[1], p1_loc[0]))
+                quat2 = kinematics.compute_bar_grasp_quat(bar_yaw_loc, np.arctan2(p2_loc[1], p2_loc[0]))
 
                 self.pick_strategy = DualArmPickTrajectory(
                     bar_pos_w=bar_pos_w, off1=off1, off2=off2, hover_height=0.12, steps=steps
@@ -524,7 +533,7 @@ class ConveyorDualController(MultiRobotController):
                 p_grasp_world = np.array([p_world[0] + offset_dist, p_world[1], p_world[2]], dtype=float)
                 p_local = world_to_local_base(p_grasp_world, robot_id)
                 arm_yaw = np.arctan2(p_local[1], p_local[0])
-                target_quat = kinematics.compute_symmetric_grasp_quat(np.pi / 2.0, arm_yaw)
+                target_quat = kinematics.compute_bar_grasp_quat(-np.pi / 2.0, arm_yaw)
             else:
                 p_local = world_to_local_base(p_world, robot_id)
                 arm_yaw = np.arctan2(p_local[1], p_local[0])
@@ -553,7 +562,7 @@ class ConveyorDualController(MultiRobotController):
                 ], dtype=float)
                 p_local = world_to_local_base(p_grasp_w, robot_id)
                 arm_yaw = np.arctan2(p_local[1], p_local[0])
-                target_quat = kinematics.compute_symmetric_grasp_quat(np.pi / 2.0, arm_yaw)
+                target_quat = kinematics.compute_bar_grasp_quat(block_yaw_w - (np.pi / 2.0), arm_yaw)
             else:
                 p_local = world_to_local_base(p_w, robot_id)
                 arm_yaw = np.arctan2(p_local[1], p_local[0])

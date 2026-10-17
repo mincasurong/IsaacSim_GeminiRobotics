@@ -162,6 +162,14 @@ def compute_symmetric_grasp_quat(target_yaw, arm_yaw):
     return [qw, qx, qy, qz]
 
 
+def compute_bar_grasp_quat(bar_yaw_local: float, arm_yaw_local: float) -> list:
+    """Compute downward grasp quaternion with 2-fold (pi) symmetry so fingers straddle a bar."""
+    raw_diff = bar_yaw_local - arm_yaw_local
+    yaw_diff_sym = ((raw_diff + (np.pi / 2.0)) % np.pi) - (np.pi / 2.0)
+    best_yaw = arm_yaw_local + yaw_diff_sym
+    return [0.0, float(np.cos(best_yaw / 2.0)), float(np.sin(best_yaw / 2.0)), 0.0]
+
+
 # 2. Franka FR3 Kinematics (7-DOF Arm + Parallel Gripper)
 
 JOINT_ORIGINS_FR3 = [

@@ -214,7 +214,7 @@ usd_home_deg = {
     "fr3_joint4": -90.0,
     "fr3_joint5": 0.0,
     "fr3_joint6": 90.0,
-    "fr3_joint7": 45.0,
+    "fr3_joint7": -45.0,
 }
 usd_home_lin = {
     "fr3_finger_joint1": 0.04,
@@ -539,10 +539,10 @@ conv_rigid_prims = []
 bar_rp = None
 engine_rp = None
 
-# Canonical home configurations (arm: 7 DOFs, gripper: 2 fingers)
-q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854], dtype=float)
+# Canonical home configurations (arm: 7 DOFs with joint7=-0.7854 rad [-45 deg], rotated 90 deg so fingers open along World Y perpendicular to LongBar)
+q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, -0.7854], dtype=float)
 q_home_gripper = np.array([0.04, 0.04], dtype=float)
-q_home_all = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854, 0.04, 0.04], dtype=float)
+q_home_all = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, -0.7854, 0.04, 0.04], dtype=float)
 
 q_home_dict = {
     "fr3_joint1": 0.0,
@@ -551,7 +551,7 @@ q_home_dict = {
     "fr3_joint4": -1.5708,
     "fr3_joint5": 0.0,
     "fr3_joint6": 1.5708,
-    "fr3_joint7": 0.7854,
+    "fr3_joint7": -0.7854,
     "fr3_finger_joint1": 0.04,
     "fr3_finger_joint2": 0.04,
 }
@@ -713,9 +713,13 @@ if args.test:
     for rid, rpath, nom_x in [(1, "/FR3_1", -0.7), (2, "/FR3_2", 0.7)]:
         l7_t = UsdGeom.Xformable(stage.GetPrimAtPath(f"{rpath}/fr3_link7")).ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
         lf_t = UsdGeom.Xformable(stage.GetPrimAtPath(f"{rpath}/fr3_leftfinger")).ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
+        rf_t = UsdGeom.Xformable(stage.GetPrimAtPath(f"{rpath}/fr3_rightfinger")).ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
         dist = float(np.linalg.norm(np.array(lf_t) - np.array(l7_t)))
-        print(f"[VERIFY] {rpath} link7={np.round(list(l7_t), 4).tolist()}, leftfinger={np.round(list(lf_t), 4).tolist()}, dist={dist:.4f}m")
+        dx_fingers = abs(float(lf_t[0] - rf_t[0]))
+        dy_fingers = abs(float(lf_t[1] - rf_t[1]))
+        print(f"[VERIFY] {rpath} leftfinger={np.round(list(lf_t), 4).tolist()}, rightfinger={np.round(list(rf_t), 4).tolist()}, dx={dx_fingers:.4f}m, dy={dy_fingers:.4f}m, dist={dist:.4f}m")
         assert dist < 0.25, f"{rpath} gripper separated from link7 (dist={dist:.4f}m)!"
+        assert dy_fingers > 0.05 and dx_fingers < 0.01, f"{rpath} fingers not rotated 90 deg along World Y (dx={dx_fingers:.4f}, dy={dy_fingers:.4f})!"
     bar_pos_t = bar_rp.get_world_poses()[0]
     if hasattr(bar_pos_t, "numpy"):
         bar_pos_t = bar_pos_t.numpy()

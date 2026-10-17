@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\caption{Contention-Aware Wavefront Scheduling Performance across S1--S7 ($N=5$ seeds/scenario, Mean $\pm$ Std).}
+\label{tab:scheduling_makespan}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Method} & \textbf{Makespan (s)} $\downarrow$ & \textbf{Arm Utilization (\%)} $\uparrow$ & \textbf{Mean Mutex Wait (s)} $\downarrow$ & \textbf{Pipelining Eff. (\%)} $\uparrow$ \\
+\midrule
+M0 (Baseline) & $13.37 \pm 7.01$ & $43.9 \pm 5.1$ & $2.17 \pm 1.02$ & $36.0 \pm 4.2$ \\
+M1 (+Shield) & $13.26 \pm 6.93$ & $44.0 \pm 4.7$ & $2.16 \pm 1.01$ & $36.1 \pm 3.8$ \\
+M2 (+RCPSP) & $11.06 \pm 5.27$ & $53.0 \pm 9.9$ & $0.03 \pm 0.01$ & $67.9 \pm 12.6$ \\
+M3 (Full Proposed) & $9.89 \pm 4.79$ & $53.0 \pm 10.0$ & $0.04 \pm 0.01$ & $67.8 \pm 12.8$ \\
+\bottomrule
+\end{tabular}
+\end{table}

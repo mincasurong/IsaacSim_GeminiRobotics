@@ -1,0 +1,139 @@
+{
+  "repository": "mincasurong/IsaacSim_GeminiRobotics",
+  "core_invariant": "Plan (DAG) -> Pre-Flight Gate (Shield) -> Contention-Aware Schedule -> Execute (ROS 2) -> Write-Back Limit",
+  "cli_and_config_flags": {
+    "--scheduler": ["greedy", "rcpsp"],
+    "--recovery": ["full_replan", "subgraph_patch"],
+    "--shield": ["off", "strict"]
+  },
+  "entrypoints": {
+    "four_turn_planner_orchestrator": {
+      "file_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/gemini_robotics_node.py",
+      "conveyor_extension_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/conveyor_gemini_node.py",
+      "dag_generator_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/workflow_generator.py",
+      "rule_verifier_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/rule_based_verifier.py",
+      "class_names": [
+        "GeminiRoboticsNode",
+        "ConveyorGeminiNode",
+        "WorkflowGeneratorEngine",
+        "RuleBasedTaskGenerator",
+        "RuleBasedTaskVerifier"
+      ],
+      "methods": [
+        "_brainstorm_spatial_plan",
+        "_run_agentic_task",
+        "_execute_function",
+        "generate_workflow",
+        "verify_action"
+      ],
+      "ros2_interfaces": {
+        "subscriptions": [
+          {"topic": "/gemini/custom_goal", "msg_type": "std_msgs/msg/String"},
+          {"topic": "/gemini/action_result", "msg_type": "std_msgs/msg/String"},
+          {"topic": "/overhead_camera/rgb", "msg_type": "sensor_msgs/msg/Image"},
+          {"topic": "/overhead_camera/depth", "msg_type": "sensor_msgs/msg/Image"},
+          {"topic": "/overhead_camera/camera_info", "msg_type": "sensor_msgs/msg/CameraInfo"},
+          {"topic": "/reset_simulation", "msg_type": "std_msgs/msg/Empty"}
+        ],
+        "publishers": [
+          {"topic": "/gemini/action", "msg_type": "std_msgs/msg/String"},
+          {"topic": "/gemini/chat_reply", "msg_type": "std_msgs/msg/String"},
+          {"topic": "/gemini/detected_objects", "msg_type": "std_msgs/msg/String"}
+        ],
+        "services": [
+          {"service": "/gemini/plan_task", "srv_type": "std_srvs/srv/Trigger"},
+          {"service": "/gemini/detect_objects", "srv_type": "std_srvs/srv/Trigger"},
+          {"service": "/gemini/describe_scene", "srv_type": "std_srvs/srv/Trigger"}
+        ]
+      }
+    },
+    "asynchronous_wavefront_scheduler": {
+      "frontend_file_path": "gemini_web_gui/src/components/VisualWorkflowBuilder.tsx",
+      "backend_file_path": "gemini_web_gui/server.cjs",
+      "python_scheduler_path": "src/scheduler/rcpsp_wavefront.py",
+      "ros2_package_mirror_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/rcpsp_wavefront.py",
+      "class_names": [
+        "VisualWorkflowBuilder",
+        "MutexProfileStore",
+        "ContentionAwareWavefrontScheduler"
+      ],
+      "ui_execution_states": [
+        "IDLE",
+        "STAGED_PRE_GATE",
+        "WAITING_MUTEX",
+        "EXECUTING",
+        "COMPLETED",
+        "FAILED"
+      ],
+      "rosbridge_websocket": "ws://localhost:9090"
+    },
+    "central_collision_arbiter_mutex_node": {
+      "file_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/multi_robot_controller.py",
+      "bimanual_extension_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/conveyor_dual_controller.py",
+      "kinematics_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/kinematics.py",
+      "class_names": [
+        "MultiRobotController",
+        "ConveyorDualController",
+        "BimanualSynchronizedTrajectory",
+        "DualArmPickTrajectory",
+        "DualArmPlaceTrajectory",
+        "DualArmCircleTrajectory"
+      ],
+      "mutex_attributes": {
+        "token_field": "center_occupied_by",
+        "protected_states": [
+          "TUCK_AFTER_PICK",
+          "ROTATE_TO_PLACE",
+          "HOVER_PLACE",
+          "DESCEND_PLACE",
+          "RELEASE",
+          "RETRACT",
+          "TUCK_AFTER_PLACE",
+          "RETURN_HOME"
+        ],
+        "gate_state": "WAIT_FOR_CENTER"
+      },
+      "ros2_interfaces": {
+        "subscriptions": [
+          {"topic": "/fr3_1/joint_states", "msg_type": "sensor_msgs/msg/JointState"},
+          {"topic": "/fr3_2/joint_states", "msg_type": "sensor_msgs/msg/JointState"},
+          {"topic": "/fr3_3/joint_states", "msg_type": "sensor_msgs/msg/JointState"},
+          {"topic": "/gemini/action", "msg_type": "std_msgs/msg/String"},
+          {"topic": "/reset_simulation", "msg_type": "std_msgs/msg/Empty"}
+        ],
+        "publishers": [
+          {"topic": "/fr3_1/joint_commands", "msg_type": "sensor_msgs/msg/JointState"},
+          {"topic": "/fr3_2/joint_commands", "msg_type": "sensor_msgs/msg/JointState"},
+          {"topic": "/fr3_3/joint_commands", "msg_type": "sensor_msgs/msg/JointState"},
+          {"topic": "/gemini/action_result", "msg_type": "std_msgs/msg/String"},
+          {"topic": "/multi_robot/robot_metrics", "msg_type": "std_msgs/msg/String"}
+        ],
+        "services": [
+          {"service": "/multi_robot/reset", "srv_type": "std_srvs/srv/Trigger"},
+          {"service": "/multi_robot/set_gemini_mode", "srv_type": "std_srvs/srv/SetBool"}
+        ]
+      }
+    },
+    "benchmark_logger_and_scenarios": {
+      "logger_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/experiment_logger.py",
+      "runner_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/experiment_runner.py",
+      "scenarios_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/experiment_scenarios.py",
+      "analyzer_path": "wsl_ws/src/isaac_ros2_control/isaac_ros2_control/analyze_experiments.py",
+      "ablation_runner_path": "scripts/run_ablation_matrix.py",
+      "latex_exporter_path": "scripts/export_latex_tables.py",
+      "class_names": [
+        "ExperimentLogger",
+        "ExperimentRunner",
+        "ExperimentAnalyzer"
+      ],
+      "scenarios": ["S1", "S2", "S3", "S4", "S5", "S6", "S7"]
+    },
+    "research_tracks": {
+      "track_c_shield": "src/shield/pre_flight_gate.py",
+      "track_a_scheduler": "src/scheduler/rcpsp_wavefront.py",
+      "track_b_recovery_classifier": "src/recovery/fault_classifier.py",
+      "track_b_recovery_patcher": "src/recovery/subgraph_patcher.py",
+      "track_d_router": "src/planner/model_router.py"
+    }
+  }
+}

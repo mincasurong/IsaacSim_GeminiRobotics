@@ -46,7 +46,7 @@ export interface WorkflowStepData {
   radius?: number;
   plane?: string;
   cycles?: number;
-  status: 'idle' | 'running' | 'success' | 'failed';
+  status: 'idle' | 'WAITING_MUTEX' | 'STAGED_PRE_GATE' | 'EXECUTING' | 'running' | 'success' | 'failed';
   label?: string;
 }
 
@@ -110,14 +110,18 @@ const TaskActionNode = ({ id, data }: NodeProps<Node<WorkflowStepData>>) => {
   };
 
   const getStatusBorder = () => {
-    if (data.status === 'running') return '2px solid #fbbf24';
+    if (data.status === 'WAITING_MUTEX') return '2px dashed #f59e0b';
+    if (data.status === 'STAGED_PRE_GATE') return '2px solid #06b6d4';
+    if (data.status === 'EXECUTING' || data.status === 'running') return '2px solid #fbbf24';
     if (data.status === 'success') return '2px solid #10b981';
     if (data.status === 'failed') return '2px solid #ef4444';
     return `1px solid ${C.nodeBorderHi}`;
   };
 
   const getStatusGlow = () => {
-    if (data.status === 'running') return '0 0 16px rgba(251, 191, 36, 0.4)';
+    if (data.status === 'WAITING_MUTEX') return '0 0 16px rgba(245, 158, 11, 0.4)';
+    if (data.status === 'STAGED_PRE_GATE') return '0 0 16px rgba(6, 182, 212, 0.4)';
+    if (data.status === 'EXECUTING' || data.status === 'running') return '0 0 16px rgba(251, 191, 36, 0.4)';
     if (data.status === 'success') return '0 0 16px rgba(16, 185, 129, 0.4)';
     if (data.status === 'failed') return '0 0 16px rgba(239, 68, 68, 0.4)';
     return C.nodeShadow;

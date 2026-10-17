@@ -103,6 +103,17 @@ class ExperimentLogger:
         self.hallucination_count: int = 0
         self.guardrail_denies: int = 0
         self.ghost_grasps_prevented: int = 0
+        self.gate_interception_count: int = 0
+        self.write_back_iterations: int = 0
+        self.proposals_evaluated_count: int = 0
+        self.tier1_local_repair_count: int = 0
+        self.recovery_latency_ms_list: List[float] = []
+        self.tokens_consumed_on_recovery: int = 0
+        self.surviving_arm_utilization_during_fault: float = 0.0
+        self.mutex_wait_time_total_sec: float = 0.0
+        self.model_escalations: int = 0
+        self.total_routed_turns: int = 0
+        self.total_token_cost: int = 0
 
         # Robot Statistics: FR3_1, FR3_2, FR3_3
         self.robot_stats: Dict[str, Dict[str, Any]] = {
@@ -257,6 +268,45 @@ class ExperimentLogger:
             "cumulative_ghost_grasps_prevented": self.ghost_grasps_prevented
         })
 
+    def record_gate_interception(self, certificate: Dict[str, Any], write_back_iteration: int = 1):
+        with self._lock:
+            self.gate_interception_count += 1
+            self.proposals_evaluated_count += 1
+            self.write_back_iterations = max(self.write_back_iterations, int(write_back_iteration))
+        self.log_event("shield", "gate_rejection_certificate", certificate)
+
+    def record_recovery_event(
+        self,
+        tier: int,
+        latency_ms: float,
+        tokens_consumed: int = 0,
+        surviving_arm_util: float = 0.0,
+    ):
+        with self._lock:
+            if tier == 1:
+                self.tier1_local_repair_count += 1
+            self.recovery_latency_ms_list.append(float(latency_ms))
+            self.tokens_consumed_on_recovery += int(tokens_consumed)
+            self.surviving_arm_utilization_during_fault = float(surviving_arm_util)
+        self.log_event("recovery", f"tier{tier}_repair", {
+            "tier": tier,
+            "latency_ms": round(float(latency_ms), 3),
+            "tokens_consumed": int(tokens_consumed),
+            "surviving_arm_utilization": round(float(surviving_arm_util), 4),
+        })
+
+    def record_model_route(self, selected_model: str, escalated: bool, token_cost: int = 0):
+        with self._lock:
+            self.total_routed_turns += 1
+            if escalated:
+                self.model_escalations += 1
+            self.total_token_cost += int(token_cost)
+        self.log_event("router", "model_routed", {
+            "selected_model": selected_model,
+            "escalated": bool(escalated),
+            "token_cost": int(token_cost),
+        })
+
     def finalize_trial(
         self,
         task_success: bool,
@@ -322,6 +372,26 @@ class ExperimentLogger:
             "tower_physically_stable": bool(tower_stable),
             "final_tower_height_tf": int(final_tower_height_tf),
             "mean_displacement_error_m": round(mean_displacement_error_m, 4),
+            "gate_interception_count": self.gate_interception_count,
+            "write_back_iterations": self.write_back_iterations,
+            "invalid_proposal_rejection_rate": (
+                round(self.gate_interception_count / max(1, self.proposals_evaluated_count), 4)
+                if self.proposals_evaluated_count > 0 else 0.0
+            ),
+            "tier1_local_repair_count": self.tier1_local_repair_count,
+            "recovery_latency_ms": (
+                round(float(sum(self.recovery_latency_ms_list) / len(self.recovery_latency_ms_list)), 3)
+                if self.recovery_latency_ms_list else 0.0
+            ),
+            "tokens_consumed_on_recovery": self.tokens_consumed_on_recovery,
+            "surviving_arm_utilization_during_fault": round(self.surviving_arm_utilization_during_fault, 4),
+            "mutex_wait_time_total_sec": round(self.mutex_wait_time_total_sec, 4),
+            "planning_wall_clock_ms": round(total_planning_time * 1000.0, 2),
+            "model_escalation_ratio": (
+                round(self.model_escalations / max(1, self.total_routed_turns), 4)
+                if self.total_routed_turns > 0 else 0.0
+            ),
+            "total_token_cost": self.total_token_cost,
             "robot_stats": self.robot_stats
         }
 

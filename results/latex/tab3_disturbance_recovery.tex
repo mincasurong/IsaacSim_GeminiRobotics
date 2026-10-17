@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\caption{Disturbance Recovery Latency, Token Consumption per Fault, and Task Completion Rate across S1--S7.}
+\label{tab:disturbance_recovery}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Method} & \textbf{Recovery Latency (ms)} $\downarrow$ & \textbf{Tokens Consumed / Fault} $\downarrow$ & \textbf{Task Completion Rate (\%)} $\uparrow$ \\
+\midrule
+M0 (Baseline) & $1471.0 \pm 89.5$ & $1850 \pm 0$ & $74.3 \pm 17.6$ \\
+M1 (+Shield) & $1452.7 \pm 80.9$ & $1850 \pm 0$ & $80.0 \pm 15.1$ \\
+M2 (+RCPSP) & $1484.2 \pm 89.7$ & $1850 \pm 0$ & $91.4 \pm 9.9$ \\
+M3 (Full Proposed) & $42.5 \pm 4.1$ & $0 \pm 0$ & $94.3 \pm 9.0$ \\
+\bottomrule
+\end{tabular}
+\end{table}

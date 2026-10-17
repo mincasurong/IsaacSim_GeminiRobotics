@@ -168,6 +168,10 @@ class MultiRobotController(Node):
         self._tasks_completed = {1: 0, 2: 0, 3: 0}
         self._tasks_failed = {1: 0, 2: 0, 3: 0}
         self._action_start_time = {1: None, 2: None, 3: None, 'global': None}
+        self._mutex_wait_enter = {1: None, 2: None, 3: None}
+        self._mutex_grant_start = {1: None, 2: None, 3: None}
+        self._mutex_last_wait = {1: 0.0, 2: 0.0, 3: 0.0}
+        self.mutex_profile_records = []
 
         # 50 Hz Control Loop Timer
         self.timer = self.create_timer(0.02, self._timer_callback)
@@ -738,12 +742,19 @@ class MultiRobotController(Node):
             self._set_state(robot_id, 'ROTATE_TO_PICK')
 
         elif state == 'WAIT_FOR_CENTER':
+            now_m = time.monotonic()
+            if self._mutex_wait_enter.get(robot_id) is None:
+                self._mutex_wait_enter[robot_id] = now_m
             other_in_center = any(
                 getattr(self, f'state{o}') in CENTER_WORKSPACE_STATES
                 for o in self.active_robot_ids if o != robot_id
             )
             if (self.center_occupied_by is None or self.center_occupied_by == robot_id) and not other_in_center:
                 self.center_occupied_by = robot_id
+                t_enter = self._mutex_wait_enter.get(robot_id) or now_m
+                self._mutex_last_wait[robot_id] = max(0.0, now_m - t_enter)
+                self._mutex_wait_enter[robot_id] = None
+                self._mutex_grant_start[robot_id] = now_m
                 q_current = getattr(self, f'q_current{robot_id}')
                 end_q = self._make_tuck_config(q_current[0])
                 self._initialize_joint_phase(robot_id, end_q, self.gripper_close)
@@ -919,6 +930,19 @@ class MultiRobotController(Node):
 
                 elif state == 'RETURN_HOME':
                     if self.center_occupied_by == robot_id:
+                        now_m = time.monotonic()
+                        t_grant = self._mutex_grant_start.get(robot_id) or (now_m - 1.6)
+                        t_hold = max(0.05, now_m - t_grant)
+                        t_wait = self._mutex_last_wait.get(robot_id, 0.0)
+                        delta_t_seg = (t_hold / 4.0) - 0.40
+                        self.mutex_profile_records.append({
+                            'arm_id': f'fr3_{robot_id}',
+                            'layer': max(1, min(9, int(self.tower_height))),
+                            't_wait': round(float(t_wait), 4),
+                            't_hold': round(float(t_hold), 4),
+                            'delta_t_seg': round(float(delta_t_seg), 4),
+                        })
+                        self._mutex_grant_start[robot_id] = None
                         self.center_occupied_by = None
 
                     if self.mode == 'gemini' and getattr(self, f'gemini_action{robot_id}') == 'place':

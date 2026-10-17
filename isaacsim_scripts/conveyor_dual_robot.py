@@ -172,18 +172,10 @@ FR3_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaFR3/fr3.usd"
 # Robot 1 (Left Arm)
 print("Loading Robot 1 (FR3_1)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_1")
-robot1_prim = get_prim_at_path("/FR3_1")
-xform_api1 = UsdGeom.XformCommonAPI(robot1_prim)
-xform_api1.SetTranslate(Gf.Vec3d(-0.7, 0.0, 0.20))
-xform_api1.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 # Robot 2 (Right Arm)
 print("Loading Robot 2 (FR3_2)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_2")
-robot2_prim = get_prim_at_path("/FR3_2")
-xform_api2 = UsdGeom.XformCommonAPI(robot2_prim)
-xform_api2.SetTranslate(Gf.Vec3d(0.7, 0.0, 0.20))
-xform_api2.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True):
     root_prim = stage.GetPrimAtPath(robot_prim_path)
@@ -202,13 +194,12 @@ def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True)
 configure_robot_tf_names("/FR3_1", "FR3_1", use_prefix_for_links=False)
 configure_robot_tf_names("/FR3_2", "FR3_2", use_prefix_for_links=True)
 
-# The USD's internal joint drives are already correctly tuned by NVIDIA for the FR3.
-# Previously, applying 1e5 stiffness and 1e4 damping caused extreme numerical explosions.
-
-# Fix exploding robot physics & PhysX warnings:
-# 1. Force fr3_link0 to be dynamic and align /FR3_*/root_joint localPos0/localRot0 with the robot's world mount pose.
-# 2. Fix negative mass / {1, 1, 1} dummy inertia tensor on virtual links (fr3_link8, fr3_hand_tcp).
-# 3. Cap TGS solverVelocityIterationCount to 4 on articulation roots.
+# Fix exploding robot physics, initial posture, & PhysX warnings:
+# 1. Author xformOp:translate and xformOp:orient directly on /FR3_* (XformCommonAPI fails on fr3.usd's orient op)
+#    and align /FR3_*/root_joint localPos0/localRot0 with the robot's world mount pose.
+# 2. Author home joint angles and PD drive targets ([0, 0, 0, -90, 0, 90, 45] deg, [0.04, 0.04] m) directly in USD before play().
+# 3. Fix negative mass / {0, 0, 0} or {1, 1, 1} dummy inertia tensor on virtual links (fr3_link8, fr3_hand_tcp).
+# 4. Cap TGS solverVelocityIterationCount to 4 on articulation roots.
 from pxr import PhysxSchema, UsdPhysics
 
 robot_mount_poses = {
@@ -216,8 +207,35 @@ robot_mount_poses = {
     "/FR3_2": (Gf.Vec3f(0.7, 0.0, 0.20), Gf.Quatf(0.7071068, 0.0, 0.0, 0.7071068)),
 }
 
+usd_home_deg = {
+    "fr3_joint1": 0.0,
+    "fr3_joint2": 0.0,
+    "fr3_joint3": 0.0,
+    "fr3_joint4": -90.0,
+    "fr3_joint5": 0.0,
+    "fr3_joint6": 90.0,
+    "fr3_joint7": 45.0,
+}
+usd_home_lin = {
+    "fr3_finger_joint1": 0.04,
+    "fr3_finger_joint2": 0.04,
+}
+
 for robot_path, (mount_pos, mount_quat) in robot_mount_poses.items():
     robot_root_prim = stage.GetPrimAtPath(robot_path)
+    if robot_root_prim.IsValid():
+        xf = UsdGeom.Xformable(robot_root_prim)
+        xf.ClearXformOpOrder()
+        xf.AddTranslateOp().Set(Gf.Vec3d(float(mount_pos[0]), float(mount_pos[1]), float(mount_pos[2])))
+        xf.AddOrientOp(UsdGeom.XformOp.PrecisionDouble).Set(
+            Gf.Quatd(
+                float(mount_quat.GetReal()),
+                float(mount_quat.GetImaginary()[0]),
+                float(mount_quat.GetImaginary()[1]),
+                float(mount_quat.GetImaginary()[2]),
+            )
+        )
+
     base_prim = stage.GetPrimAtPath(robot_path + "/fr3_link0")
     if base_prim.IsValid():
         kin_attr = base_prim.GetAttribute("physics:kinematicEnabled")
@@ -241,10 +259,23 @@ for robot_path, (mount_pos, mount_quat) in robot_mount_poses.items():
             if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
                 physx_art = PhysxSchema.PhysxArticulationAPI.Apply(prim)
                 physx_art.CreateSolverVelocityIterationCountAttr().Set(4)
-            if prim.GetName() in ("fr3_link8", "fr3_hand_tcp") or prim.HasAPI(UsdPhysics.MassAPI):
+            jname = prim.GetName()
+            if jname in usd_home_deg:
+                deg_val = usd_home_deg[jname]
+                for attr_name in ("drive:angular:physics:targetPosition", "state:angular:physics:position"):
+                    attr = prim.GetAttribute(attr_name)
+                    if attr.IsValid():
+                        attr.Set(deg_val)
+            elif jname in usd_home_lin:
+                lin_val = usd_home_lin[jname]
+                for attr_name in ("drive:linear:physics:targetPosition", "state:linear:physics:position"):
+                    attr = prim.GetAttribute(attr_name)
+                    if attr.IsValid():
+                        attr.Set(lin_val)
+            if jname in ("fr3_link8", "fr3_hand_tcp") or prim.HasAPI(UsdPhysics.MassAPI):
                 mass_api = UsdPhysics.MassAPI.Apply(prim)
                 mass_val = mass_api.GetMassAttr().Get() if mass_api.GetMassAttr().IsValid() else None
-                if prim.GetName() in ("fr3_link8", "fr3_hand_tcp") or mass_val is None or mass_val <= 0.0:
+                if jname in ("fr3_link8", "fr3_hand_tcp") or mass_val is None or mass_val <= 0.0:
                     mass_api.CreateMassAttr().Set(1e-4)
                 inertia_val = (
                     mass_api.GetDiagonalInertiaAttr().Get()
@@ -252,7 +283,7 @@ for robot_path, (mount_pos, mount_quat) in robot_mount_poses.items():
                     else None
                 )
                 if (
-                    prim.GetName() in ("fr3_link8", "fr3_hand_tcp")
+                    jname in ("fr3_link8", "fr3_hand_tcp")
                     or inertia_val is None
                     or inertia_val == Gf.Vec3f(0.0, 0.0, 0.0)
                     or inertia_val == Gf.Vec3f(1.0, 1.0, 1.0)
@@ -496,22 +527,50 @@ q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854], dtype=float
 q_home_gripper = np.array([0.04, 0.04], dtype=float)
 q_home_all = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854, 0.04, 0.04], dtype=float)
 
+q_home_dict = {
+    "fr3_joint1": 0.0,
+    "fr3_joint2": 0.0,
+    "fr3_joint3": 0.0,
+    "fr3_joint4": -1.5708,
+    "fr3_joint5": 0.0,
+    "fr3_joint6": 1.5708,
+    "fr3_joint7": 0.7854,
+    "fr3_finger_joint1": 0.04,
+    "fr3_finger_joint2": 0.04,
+}
+
 def reset_robot_articulation(robot_art, pos=None, quat_wxyz=None):
-    """Resets a fixed-base Franka FR3 robot articulation to its home DOF configuration."""
+    """Resets a Franka FR3 robot articulation to its mount pose and home DOF configuration."""
     if robot_art is None:
         return
     if hasattr(app_utils, "is_playing") and not app_utils.is_playing():
         return
 
-    zero_vel = np.zeros(9, dtype=float)
+    if pos is not None and quat_wxyz is not None:
+        try:
+            robot_art.set_world_poses(
+                positions=np.array([pos], dtype=float),
+                orientations=np.array([quat_wxyz], dtype=float),
+            )
+        except Exception as e:
+            print(f"[WARN] set_world_poses on robot failed: {e}")
+
+    dof_names = list(getattr(robot_art, "dof_names", []) or [])
+    if dof_names:
+        target_positions = np.array([q_home_dict.get(name, 0.0) for name in dof_names], dtype=float)
+        zero_vel = np.zeros(len(dof_names), dtype=float)
+    else:
+        target_positions = q_home_all
+        zero_vel = np.zeros(9, dtype=float)
+
     if hasattr(robot_art, "set_dof_positions"):
         try:
-            robot_art.set_dof_positions(q_home_all)
+            robot_art.set_dof_positions(target_positions)
         except Exception as e:
             print(f"[WARN] set_dof_positions failed: {e}")
         if hasattr(robot_art, "set_dof_position_targets"):
             try:
-                robot_art.set_dof_position_targets(q_home_all)
+                robot_art.set_dof_position_targets(target_positions)
             except Exception:
                 pass
         if hasattr(robot_art, "set_dof_velocities"):

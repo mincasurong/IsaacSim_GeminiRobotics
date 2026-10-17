@@ -180,32 +180,25 @@ class MultiRobotController(Node):
 
     # Callbacks & ROS 2 Handlers
 
-    def _state_cb1(self, msg):
-        self.current_joints1 = msg.position
+    def _handle_joint_state(self, robot_id: int, msg):
+        """Unified joint state handler updating joint position vector and finger gap."""
+        setattr(self, f'current_joints{robot_id}', msg.position)
+        q_current = getattr(self, f'q_current{robot_id}')
         for i in range(7):
             name = f"fr3_joint{i+1}"
             if name in msg.name:
-                self.q_current1[i] = msg.position[msg.name.index(name)]
+                q_current[i] = msg.position[msg.name.index(name)]
         if "fr3_finger_joint1" in msg.name:
-            self.current_gripper1 = msg.position[msg.name.index("fr3_finger_joint1")]
+            setattr(self, f'current_gripper{robot_id}', msg.position[msg.name.index("fr3_finger_joint1")])
+
+    def _state_cb1(self, msg):
+        self._handle_joint_state(1, msg)
 
     def _state_cb2(self, msg):
-        self.current_joints2 = msg.position
-        for i in range(7):
-            name = f"fr3_joint{i+1}"
-            if name in msg.name:
-                self.q_current2[i] = msg.position[msg.name.index(name)]
-        if "fr3_finger_joint1" in msg.name:
-            self.current_gripper2 = msg.position[msg.name.index("fr3_finger_joint1")]
+        self._handle_joint_state(2, msg)
 
     def _state_cb3(self, msg):
-        self.current_joints3 = msg.position
-        for i in range(7):
-            name = f"fr3_joint{i+1}"
-            if name in msg.name:
-                self.q_current3[i] = msg.position[msg.name.index(name)]
-        if "fr3_finger_joint1" in msg.name:
-            self.current_gripper3 = msg.position[msg.name.index("fr3_finger_joint1")]
+        self._handle_joint_state(3, msg)
 
     def _reset_cb(self, msg):
         self._execute_reset()
@@ -225,39 +218,27 @@ class MultiRobotController(Node):
 
     def _execute_reset(self):
         self.get_logger().info("[RESET] Resetting multi-robot controller and sequencer...")
-        self.state1 = 'INIT'
-        self.state2 = 'INIT'
-        self.state3 = 'INIT'
-        self.block_index1 = 0
-        self.block_index2 = 0
-        self.block_index3 = 0
-        self.step_counter1 = 0
-        self.step_counter2 = 0
-        self.step_counter3 = 0
-        self.q_current1 = list(self.q_home_fr3)
-        self.q_current2 = list(self.q_home_fr3)
-        self.q_current3 = list(self.q_home_fr3)
+        now = time.monotonic()
+        for rid in self.active_robot_ids:
+            setattr(self, f'state{rid}', 'INIT')
+            setattr(self, f'block_index{rid}', 0)
+            setattr(self, f'step_counter{rid}', 0)
+            setattr(self, f'q_current{rid}', list(self.q_home_fr3))
+            setattr(self, f'active_target{rid}', None)
+            setattr(self, f'gemini_action{rid}', None)
+            self._robot_busy_time[rid] = 0.0
+            self._robot_idle_time[rid] = 0.0
+            self._robot_last_transition[rid] = now
+            self._robot_was_busy[rid] = False
+            self._tasks_completed[rid] = 0
+            self._tasks_failed[rid] = 0
+            self._action_start_time[rid] = None
+
+        self._action_start_time['global'] = None
+        self._metrics_start_time = now
         self.tower_height = 0
         self.active_robot_id = 1
-        
-        self.active_target1 = None
-        self.active_target2 = None
-        self.active_target3 = None
-        
-        self.gemini_action1 = None
-        self.gemini_action2 = None
-        self.gemini_action3 = None
-        
         self.center_occupied_by = None
-        
-        self._metrics_start_time = time.monotonic()
-        self._robot_busy_time = {1: 0.0, 2: 0.0, 3: 0.0}
-        self._robot_idle_time = {1: 0.0, 2: 0.0, 3: 0.0}
-        self._robot_last_transition = {1: time.monotonic(), 2: time.monotonic(), 3: time.monotonic()}
-        self._robot_was_busy = {1: False, 2: False, 3: False}
-        self._tasks_completed = {1: 0, 2: 0, 3: 0}
-        self._tasks_failed = {1: 0, 2: 0, 3: 0}
-        self._action_start_time = {1: None, 2: None, 3: None, 'global': None}
 
         try:
             self.tf_buffer.clear()
@@ -583,39 +564,24 @@ class MultiRobotController(Node):
 
     def _initialize_phase(self, robot_id, end_pos, end_gripper, target_quat=[0.0, 1.0, 0.0, 0.0]):
         """Capture starting waypoint and set target for the new trajectory phase."""
-        if robot_id == 1:
-            self.start_pos1 = kinematics.forward_kinematics(self.q_current1)[:3, 3]
-            self.end_pos1 = np.array(end_pos, dtype=float)
-            self.start_quat1 = list(self.end_quat1)
-            self.end_quat1 = list(target_quat)
-            self.start_gripper1 = self.end_gripper1
-            self.end_gripper1 = end_gripper
-            self.start_q1 = np.array(self.q_current1)
-            q_sol, _ = kinematics.inverse_kinematics(self.end_pos1, self.end_quat1, self.start_q1)
-            self.end_q1 = np.array(q_sol)
-            self.step_counter1 = 0
-        elif robot_id == 2:
-            self.start_pos2 = kinematics.forward_kinematics(self.q_current2)[:3, 3]
-            self.end_pos2 = np.array(end_pos, dtype=float)
-            self.start_quat2 = list(self.end_quat2)
-            self.end_quat2 = list(target_quat)
-            self.start_gripper2 = self.end_gripper2
-            self.end_gripper2 = end_gripper
-            self.start_q2 = np.array(self.q_current2)
-            q_sol, _ = kinematics.inverse_kinematics(self.end_pos2, self.end_quat2, self.start_q2)
-            self.end_q2 = np.array(q_sol)
-            self.step_counter2 = 0
-        else:
-            self.start_pos3 = kinematics.forward_kinematics(self.q_current3)[:3, 3]
-            self.end_pos3 = np.array(end_pos, dtype=float)
-            self.start_quat3 = list(self.end_quat3)
-            self.end_quat3 = list(target_quat)
-            self.start_gripper3 = self.end_gripper3
-            self.end_gripper3 = end_gripper
-            self.start_q3 = np.array(self.q_current3)
-            q_sol, _ = kinematics.inverse_kinematics(self.end_pos3, self.end_quat3, self.start_q3)
-            self.end_q3 = np.array(q_sol)
-            self.step_counter3 = 0
+        q_cur = getattr(self, f'q_current{robot_id}')
+        end_q_last = getattr(self, f'end_quat{robot_id}')
+        end_g_last = getattr(self, f'end_gripper{robot_id}')
+
+        start_p = kinematics.forward_kinematics(q_cur)[:3, 3]
+        end_p = np.array(end_pos, dtype=float)
+        q_init = np.array(q_cur)
+        q_sol, _ = kinematics.inverse_kinematics(end_p, target_quat, q_init)
+
+        setattr(self, f'start_pos{robot_id}', start_p)
+        setattr(self, f'end_pos{robot_id}', end_p)
+        setattr(self, f'start_quat{robot_id}', list(end_q_last))
+        setattr(self, f'end_quat{robot_id}', list(target_quat))
+        setattr(self, f'start_gripper{robot_id}', end_g_last)
+        setattr(self, f'end_gripper{robot_id}', end_gripper)
+        setattr(self, f'start_q{robot_id}', q_init)
+        setattr(self, f'end_q{robot_id}', np.array(q_sol))
+        setattr(self, f'step_counter{robot_id}', 0)
 
     def _send_home_cmd(self, robot_id):
         """Command a robot to hold its retracted home configuration without dropping grasped items."""
@@ -624,12 +590,9 @@ class MultiRobotController(Node):
         cur_grip = getattr(self, f'end_gripper{robot_id}', self.gripper_open)
         cmd.name = self.joint_names_fr3
         cmd.position = self.q_home_fr3 + [cur_grip, cur_grip]
-        if robot_id == 1:
-            self.cmd_pub1.publish(cmd)
-        elif robot_id == 2:
-            self.cmd_pub2.publish(cmd)
-        elif robot_id == 3:
-            self.cmd_pub3.publish(cmd)
+        pub = getattr(self, f'cmd_pub{robot_id}', None)
+        if pub:
+            pub.publish(cmd)
 
     def _set_state(self, robot_id, state):
         setattr(self, f'state{robot_id}', state)

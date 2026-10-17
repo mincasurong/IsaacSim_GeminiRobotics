@@ -23,6 +23,10 @@ WORKSPACE = {
         'center': np.array([0.0, 0.0]),
         'bounds': ((-0.15, 0.15), (-0.15, 0.15))
     },
-    'block_height': 0.06,
+    'block_height': 0.045,
     'table_surface_z': 0.30,
+    'conveyor_speed': 0.05,
+    'conveyor_direction': np.array([1.0, 0.0, 0.0]),
+    'conveyor_surface_z': 0.50,
+    'buffer_table_z': 0.32,
 }

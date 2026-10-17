@@ -66,9 +66,11 @@ class ExperimentLogger:
                 candidates = [
                     Path("/mnt/d/git/IsaacSim_Gemini/logs/experiments"),
                     Path("d:/git/IsaacSim_Gemini/logs/experiments"),
-                    current_file.parents[4] / "logs" / "experiments",
+                    Path.home() / "catkin_ws" / "logs" / "experiments",
                     Path.home() / ".gemini_robotics" / "logs"
                 ]
+                for p in current_file.parents:
+                    candidates.append(p / "logs" / "experiments")
                 base_dir = candidates[0]
                 for c in candidates:
                     if c.parent.exists():

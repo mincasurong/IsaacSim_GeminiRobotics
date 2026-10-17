@@ -33,62 +33,71 @@ class MoveItControllerNode(Node):
             3: self.moveit_py.get_planning_component('fr3_3_arm')
         }
         
-        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_buffer = tf2_ros.Buffer(node=self)
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         
         self.tower_height = 0
+        self.tower_lock = threading.Lock()
+        self.arm_locks = {rid: threading.Lock() for rid in (1, 2, 3)}
         
-        self.sub_cmd1 = self.create_subscription(String, '/fr3_1/gemini_action_cmd', lambda msg: self._action_cb(msg, 1), 10)
-        self.sub_cmd2 = self.create_subscription(String, '/fr3_2/gemini_action_cmd', lambda msg: self._action_cb(msg, 2), 10)
-        self.sub_cmd3 = self.create_subscription(String, '/fr3_3/gemini_action_cmd', lambda msg: self._action_cb(msg, 3), 10)
-        
-        self.pub_res1 = self.create_publisher(String, '/fr3_1/gemini_action_result', 10)
-        self.pub_res2 = self.create_publisher(String, '/fr3_2/gemini_action_result', 10)
-        self.pub_res3 = self.create_publisher(String, '/fr3_3/gemini_action_result', 10)
-        
-        self.pub_grip1 = self.create_publisher(String, '/fr3_1/gripper_cmd', 10)
-        self.pub_grip2 = self.create_publisher(String, '/fr3_2/gripper_cmd', 10)
-        self.pub_grip3 = self.create_publisher(String, '/fr3_3/gripper_cmd', 10)
+        self.cmd_subs = {}
+        self.res_pubs = {}
+        self.grip_pubs = {}
+        for rid in (1, 2, 3):
+            self.cmd_subs[rid] = self.create_subscription(
+                String, f'/fr3_{rid}/gemini_action_cmd',
+                lambda msg, r=rid: self._action_cb(msg, r), 10
+            )
+            self.res_pubs[rid] = self.create_publisher(String, f'/fr3_{rid}/gemini_action_result', 10)
+            self.grip_pubs[rid] = self.create_publisher(String, f'/fr3_{rid}/gripper_cmd', 10)
+            setattr(self, f'sub_cmd{rid}', self.cmd_subs[rid])
+            setattr(self, f'pub_res{rid}', self.res_pubs[rid])
+            setattr(self, f'pub_grip{rid}', self.grip_pubs[rid])
         
         self.get_logger().info("MoveIt Multi-Robot Controller Ready.")
 
     def _action_cb(self, msg, robot_id):
-        # Run action in a separate thread to avoid blocking ROS spinner
-        threading.Thread(target=self._execute_action, args=(msg.data, robot_id)).start()
+        # Run action in a daemon thread serialized per robot_id to avoid blocking ROS spinner
+        threading.Thread(target=self._execute_action, args=(msg.data, robot_id), daemon=True).start()
 
     def _execute_action(self, msg_data, robot_id):
-        try:
-            cmd = json.loads(msg_data)
-            action = cmd.get('action')
-            target = cmd.get('target', '')
-            
-            if action == 'pick':
-                self.get_logger().info(f"Robot {robot_id}: Planning pick for {target}")
-                self._execute_pick(robot_id, target)
-            elif action == 'place':
-                self.get_logger().info(f"Robot {robot_id}: Planning place to {target}")
-                self._execute_place(robot_id, target)
-            elif action == 'go_home':
-                self.get_logger().info(f"Robot {robot_id}: Planning return to home.")
-                arm = self.arms[robot_id]
-                arm.set_start_state_to_current_state()
-                arm.set_goal_state(configuration_name=f'fr3_{robot_id}_home')
+        lock = self.arm_locks.get(robot_id)
+        if lock is None:
+            return
+        with lock:
+            try:
+                cmd = json.loads(msg_data)
+                action = cmd.get('action')
+                target = cmd.get('target', '')
                 
-                plan = arm.plan()
-                if plan:
-                    self.get_logger().info(f"Robot {robot_id}: Plan found, executing...")
-                    self.moveit_py.execute(plan.trajectory, controllers=[])
-                    self._publish_result(robot_id, True, "Returned home via MoveIt.")
+                if action == 'pick':
+                    self.get_logger().info(f"Robot {robot_id}: Planning pick for {target}")
+                    self._execute_pick(robot_id, target)
+                elif action == 'place':
+                    self.get_logger().info(f"Robot {robot_id}: Planning place to {target}")
+                    self._execute_place(robot_id, target)
+                elif action == 'go_home':
+                    self.get_logger().info(f"Robot {robot_id}: Planning return to home.")
+                    arm = self.arms[robot_id]
+                    arm.set_start_state_to_current_state()
+                    arm.set_goal_state(configuration_name=f'fr3_{robot_id}_home')
+                    
+                    plan = arm.plan()
+                    if plan:
+                        self.get_logger().info(f"Robot {robot_id}: Plan found, executing...")
+                        self.moveit_py.execute(plan.trajectory, controllers=[])
+                        self._publish_result(robot_id, True, "Returned home via MoveIt.")
+                    else:
+                        self.get_logger().error(f"Robot {robot_id}: Planning failed!")
+                        self._publish_result(robot_id, False, "MoveIt planning failed.")
+                elif action == 'reset':
+                    with self.tower_lock:
+                        self.tower_height = 0
+                    self._publish_result(robot_id, True, "Reset completed.")
                 else:
-                    self.get_logger().error(f"Robot {robot_id}: Planning failed!")
-                    self._publish_result(robot_id, False, "MoveIt planning failed.")
-            elif action == 'reset':
-                self.tower_height = 0
-                self._publish_result(robot_id, True, "Reset completed.")
-            else:
-                self.get_logger().warn(f"Robot {robot_id}: Unknown action {action}")
-        except Exception as e:
-            self.get_logger().error(f"Action parse failed: {e}")
+                    self.get_logger().warn(f"Robot {robot_id}: Unknown action {action}")
+            except Exception as e:
+                self.get_logger().error(f"Action parse failed: {e}")
 
     def _get_tf_pose(self, target_frame, robot_id):
         try:
@@ -130,9 +139,9 @@ class MoveItControllerNode(Node):
     def _set_gripper(self, robot_id, action):
         msg = String()
         msg.data = action
-        if robot_id == 1: self.pub_grip1.publish(msg)
-        elif robot_id == 2: self.pub_grip2.publish(msg)
-        elif robot_id == 3: self.pub_grip3.publish(msg)
+        pub = self.grip_pubs.get(robot_id)
+        if pub is not None:
+            pub.publish(msg)
         time.sleep(0.5)
 
     def _execute_pick(self, robot_id, target):
@@ -187,15 +196,17 @@ class MoveItControllerNode(Node):
             self._publish_result(robot_id, False, "Place lift failed")
             return
             
-        self.tower_height += 1
-        self._publish_result(robot_id, True, f"Place completed. Tower height is now {self.tower_height}")
+        with self.tower_lock:
+            self.tower_height += 1
+            current_height = self.tower_height
+        self._publish_result(robot_id, True, f"Place completed. Tower height is now {current_height}")
 
     def _publish_result(self, robot_id, success, message):
         msg = String()
         msg.data = json.dumps({'success': success, 'message': message})
-        if robot_id == 1: self.pub_res1.publish(msg)
-        elif robot_id == 2: self.pub_res2.publish(msg)
-        elif robot_id == 3: self.pub_res3.publish(msg)
+        pub = self.res_pubs.get(robot_id)
+        if pub is not None:
+            pub.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)

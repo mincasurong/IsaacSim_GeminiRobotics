@@ -318,13 +318,22 @@ def main():
     log_path = Path(args.log_dir)
     if not log_path.exists():
         candidates = [
+            Path("/mnt/d/git/IsaacSim_Gemini/logs/experiments"),
             Path("d:/git/IsaacSim_Gemini/logs/experiments"),
-            Path(__file__).resolve().parents[4] / "logs" / "experiments"
+            Path.home() / "catkin_ws" / "logs" / "experiments",
         ]
+        cur = Path(__file__).resolve()
+        for p in cur.parents:
+            c = p / "logs" / "experiments"
+            if c not in candidates:
+                candidates.append(c)
         for c in candidates:
-            if c.exists():
-                log_path = c
-                break
+            try:
+                if c.exists():
+                    log_path = c
+                    break
+            except Exception:
+                pass
 
     analyzer = ExperimentAnalyzer(log_dir=str(log_path), output_dir=args.output_dir)
     analyzer.run_full_analysis()

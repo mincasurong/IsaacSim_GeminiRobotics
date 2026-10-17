@@ -80,8 +80,8 @@ class GeminiRoboticsNode(Node):
     """ROS 2 node that uses Gemini Robotics-ER VLM for scene understanding
     and agentic task orchestration via Function Calling."""
 
-    def __init__(self):
-        super().__init__('gemini_robotics_node')
+    def __init__(self, node_name: str = 'gemini_robotics_node'):
+        super().__init__(node_name)
 
         # Parameters
         self.declare_parameter('env_file', '')
@@ -777,6 +777,26 @@ All actions are strictly intercepted and verified by the Rule-Based Task Verifie
                 result = self._fn_place(args.get("robot"), float(args.get("x", 0.0)), float(args.get("y", 0.0)), args.get("speed", "fast"), float(args.get("approach_height", 0.1)))
             elif name == "place_relative":
                 result = self._fn_place_relative(args.get("robot"), args.get("anchor_block"), args.get("relation"), args.get("speed", "fast"), float(args.get("approach_height", 0.1)))
+            elif name == "dual_arm_pick":
+                result = self._fn_dual_arm_pick(
+                    args.get("object_label", "LongBar"),
+                    float(args.get("offset_1", -0.25)),
+                    float(args.get("offset_2", 0.25)),
+                    args.get("speed", "fast")
+                )
+            elif name == "dual_arm_circle":
+                result = self._fn_dual_arm_circle(
+                    float(args.get("radius", 0.08)),
+                    int(args.get("cycles", 1)),
+                    str(args.get("plane", "XY")),
+                    args.get("speed", "fast")
+                )
+            elif name == "dual_arm_place":
+                result = self._fn_dual_arm_place(
+                    float(args.get("x", 0.0)),
+                    float(args.get("y", 0.25)),
+                    args.get("speed", "fast")
+                )
             elif name == "verify_tower":
                 result = self._fn_verify_tower()
             elif name == "go_home":
@@ -789,7 +809,7 @@ All actions are strictly intercepted and verified by the Rule-Based Task Verifie
                 result = {"error": f"Unknown function: {name}"}
                 
             # Log action history
-            if name in ["pick", "place", "go_home"]:
+            if name in ["pick", "place", "go_home", "dual_arm_pick", "dual_arm_circle", "dual_arm_place"]:
                 self.workspace_state.record_action(f"{name} {args}", result.get("success", True), result.get("message", ""))
                 
             return result
@@ -921,6 +941,51 @@ All actions are strictly intercepted and verified by the Rule-Based Task Verifie
             self.get_logger().error(f"Error in place_relative: {e}")
             return {"success": False, "message": f"TF lookup failed for {anchor_block}: {e}"}
 
+
+    def _fn_dual_arm_pick(self, object_label: str, offset_1: float = -0.25, offset_2: float = 0.25, speed: str = 'fast') -> dict:
+        """Dispatch synchronized bimanual pick across FR3_1 and FR3_2."""
+        msg = String()
+        msg.data = json.dumps({
+            "action": "dual_arm_pick",
+            "target": object_label,
+            "offset_1": offset_1,
+            "offset_2": offset_2,
+            "speed": speed
+        })
+        self.action_pub.publish(msg)
+        res1 = self._wait_for_action_complete("FR3_1", timeout=35.0)
+        res2 = self._wait_for_action_complete("FR3_2", timeout=35.0)
+        return {"success": res1.get("success", False) and res2.get("success", False), "FR3_1": res1, "FR3_2": res2}
+
+    def _fn_dual_arm_circle(self, radius: float = 0.08, cycles: int = 1, plane: str = 'XY', speed: str = 'fast') -> dict:
+        """Dispatch synchronized bimanual circular closed-chain trajectory."""
+        msg = String()
+        msg.data = json.dumps({
+            "action": "dual_arm_circle",
+            "radius": float(radius),
+            "cycles": int(cycles),
+            "plane": str(plane),
+            "speed": str(speed)
+        })
+        self.action_pub.publish(msg)
+        return self._wait_for_action_complete("global", timeout=45.0)
+
+    def _fn_dual_arm_place(self, x: float = 0.0, y: float = 0.25, speed: str = 'fast') -> dict:
+        """Dispatch synchronized bimanual Cartesian placement."""
+        msg = String()
+        msg.data = json.dumps({
+            "action": "dual_arm_place",
+            "x": float(x),
+            "y": float(y),
+            "speed": speed
+        })
+        self.action_pub.publish(msg)
+        res = self._wait_for_action_complete("global", timeout=35.0)
+        if res.get("success", False):
+            return res
+        res1 = self._wait_for_action_complete("FR3_1", timeout=5.0)
+        res2 = self._wait_for_action_complete("FR3_2", timeout=5.0)
+        return {"success": res1.get("success", False) or res2.get("success", False), "FR3_1": res1, "FR3_2": res2}
 
     def _fn_go_home(self, robot: str) -> dict:
         msg = String()

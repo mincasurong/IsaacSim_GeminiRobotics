@@ -6,17 +6,25 @@ from pathlib import Path
 def load_env(env_path=None):
     """Parse key=value pairs from a .env file."""
     if env_path is None:
-        current_file = Path(__file__).resolve()
         candidates = [
-            current_file.parents[4] / "private" / ".env",  # If run from src/
-            current_file.parents[7] / "private" / ".env",  # If run from install/ (wsl_ws/install/pkg/lib/python3.X/site-packages/pkg/)
-            Path.home() / ".gemini_robotics" / ".env",
             Path("/mnt/d/git/IsaacSim_Gemini/private/.env"),
+            Path.home() / "catkin_ws" / "private" / ".env",
+            Path.home() / ".gemini_robotics" / ".env",
         ]
+        # Safely scan parent directories dynamically without static index assumption
+        cur = Path(__file__).resolve()
+        for p in cur.parents:
+            c = p / "private" / ".env"
+            if c not in candidates:
+                candidates.append(c)
+
         for c in candidates:
-            if c.exists():
-                env_path = c
-                break
+            try:
+                if c.exists():
+                    env_path = c
+                    break
+            except Exception:
+                pass
 
     config = {}
     if env_path and Path(env_path).exists():

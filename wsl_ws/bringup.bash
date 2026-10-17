@@ -36,10 +36,16 @@ if [ -d "$WINDOWS_WS_DIR" ]; then
     
     # Sync package source files (using rsync if available, fallback to cp)
     if command -v rsync >/dev/null 2>&1; then
-        rsync -ru --delete --exclude 'libfranka*' "$WINDOWS_WS_DIR/src/" "${HOME}/catkin_ws/src/"
+        rsync -ru --delete --exclude 'libfranka*' --exclude 'COLCON_IGNORE' "$WINDOWS_WS_DIR/src/" "${HOME}/catkin_ws/src/"
     else
         cp -ru "$WINDOWS_WS_DIR/src"/* "${HOME}/catkin_ws/src/"
     fi
+    # Ensure physical hardware packages remain ignored during simulation colcon builds
+    for pkg_ignore in franka_ros2 franka_description libfranka; do
+        if [ -d "${HOME}/catkin_ws/src/${pkg_ignore}" ]; then
+            touch "${HOME}/catkin_ws/src/${pkg_ignore}/COLCON_IGNORE"
+        fi
+    done
     
     # Normalize line endings on synced Python/CMake files to prevent script errors
     find "${HOME}/catkin_ws/src/" -type f \( -name "*.py" -name "*.xml" -name "*.cfg" -name "*.txt" \) -exec sed -i 's/\r$//' {} + 2>/dev/null

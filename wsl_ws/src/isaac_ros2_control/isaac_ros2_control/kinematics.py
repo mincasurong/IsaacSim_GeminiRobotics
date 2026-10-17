@@ -225,6 +225,35 @@ def get_jacobian(q):
     return J
 
 
+def manipulability(q: np.ndarray) -> float:
+    """Yoshikawa manipulability measure for Franka FR3.
+
+    w = sqrt(det(J J^T))
+
+    Values near 0 indicate kinematic singularity.
+    Typical operational range for FR3: 0.05 - 0.25.
+    """
+    J = get_jacobian(q)
+    det_val = np.linalg.det(J @ J.T)
+    return float(np.sqrt(max(0.0, det_val)))
+
+
+def manipulability_gradient(q: np.ndarray, eps: float = 1e-4) -> np.ndarray:
+    """Numerical gradient of Yoshikawa manipulability w.r.t. joint angles.
+
+    Returns dw/dq (7,) - used in null-space projection to maximize manipulability
+    and naturally avoid singular arm configurations during IK.
+    """
+    grad = np.zeros(7)
+    for i in range(7):
+        q_p = np.array(q, dtype=float).copy()
+        q_p[i] += eps
+        q_m = np.array(q, dtype=float).copy()
+        q_m[i] -= eps
+        grad[i] = (manipulability(q_p) - manipulability(q_m)) / (2.0 * eps)
+    return grad
+
+
 def inverse_kinematics(target_pos, target_quat, q_init, max_iter=150, tol=1e-4):
     """Solve Franka FR3 inverse kinematics using Damped Least Squares (DLS)."""
     q = np.array(q_init, dtype=float)

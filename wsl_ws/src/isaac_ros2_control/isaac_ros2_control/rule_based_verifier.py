@@ -258,6 +258,16 @@ class RuleBasedTaskVerifier:
                 self.intercepted_count += 1
                 return False, sanitized, f"Cannot resolve pick target '{target_raw}'."
 
+            # Auto-promote oversized / heavy objects to coordinated dual-arm pick
+            if block_name in ['LongBar', 'HeavyEnginePart']:
+                sanitized['action'] = 'dual_arm_pick'
+                sanitized['target'] = block_name
+                sanitized['speed'] = sanitized.get('speed', 'fast')
+                self.robot_holding['FR3_1'] = block_name
+                self.robot_holding['FR3_2'] = block_name
+                self.verified_count += 1
+                return True, sanitized, f"Rule-verifier intercept: Promoted single-arm pick of '{block_name}' to coordinated dual_arm_pick."
+
             # Check holding precondition: robot must not already hold a block
             if self.robot_holding.get(robot) is not None:
                 held = self.robot_holding[robot]

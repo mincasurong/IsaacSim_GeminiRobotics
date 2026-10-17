@@ -12,7 +12,16 @@ import time
 from pathlib import Path
 from typing import Dict, Any, List
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+WORKSPACE_ROOT = Path("/mnt/d/git/IsaacSim_Gemini")
+if not WORKSPACE_ROOT.exists():
+    WORKSPACE_ROOT = Path("d:/git/IsaacSim_Gemini")
+if not WORKSPACE_ROOT.exists():
+    for p in Path(__file__).resolve().parents:
+        if (p / "logs").exists():
+            WORKSPACE_ROOT = p
+            break
+if not WORKSPACE_ROOT.exists():
+    WORKSPACE_ROOT = Path.home() / "catkin_ws"
 LOGS_DIR = WORKSPACE_ROOT / "logs" / "monitoring"
 AUDIT_LOG_FILE = LOGS_DIR / "monitoring_agent_audit.jsonl"
 FEEDBACK_LOG_FILE = LOGS_DIR / "user_feedback.jsonl"

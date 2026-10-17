@@ -430,9 +430,12 @@ xform_cam.AddRotateXYZOp().Set(Gf.Vec3f(0.0, 90.0, 0.0))  # Downward looking
 _camera_initialized = False
 
 def setup_overhead_camera_publishing():
-    """Sets up Replicator render product and ROS 2 image publishers once stage is live."""
+    """Sets up Replicator render product and ROS 2 image publishers when --enable-cameras is set."""
     global _camera_initialized
     if _camera_initialized:
+        return
+    if "--enable-cameras" not in sys.argv and "--enable-camera" not in sys.argv:
+        print("[INFO] Overhead camera render product skipped by default (pass --enable-cameras to enable).")
         return
     try:
         import carb.settings

@@ -29,7 +29,21 @@ Key features:
 import argparse
 import sys
 import os
-import numpy as np
+import ctypes
+
+# Pre-load ROS 2 tinyxml2.dll (92KB) before SimulationApp loads omni.kit.asset_converter's
+# incompatible tinyxml2.dll (104KB), preventing stack buffer overflow in fastrtps-2.14.dll
+for _cand in (
+    os.path.join(os.environ.get("ISAAC_PATH", r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release"), "exts", "isaacsim.ros2.core", os.environ.get("ROS_DISTRO", "jazzy"), "lib", "tinyxml2.dll"),
+    r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release\exts\isaacsim.ros2.core\jazzy\lib\tinyxml2.dll",
+    r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release\exts\isaacsim.ros2.core\humble\lib\tinyxml2.dll",
+):
+    if os.path.exists(_cand):
+        try:
+            ctypes.WinDLL(_cand)
+            break
+        except OSError:
+            pass
 
 from isaacsim.simulation_app import SimulationApp
 
@@ -56,6 +70,7 @@ CONFIG = {
 }
 simulation_app = SimulationApp(CONFIG)
 
+import numpy as np
 import carb
 import isaacsim.core.experimental.utils.app as app_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
@@ -69,9 +84,14 @@ from pxr import Gf, UsdGeom, UsdPhysics, Usd, PhysxSchema, Sdf
 import omni.usd
 import omni.client
 import omni.replicator.core as rep
-import omni.syntheticdata._syntheticdata as sd
-from isaacsim.sensors.camera import Camera
-import isaacsim.core.experimental.utils.transform as transform_utils
+# Modern camera imports
+try:
+    from isaacsim.core.experimental.objects import Camera
+except ImportError:
+    try:
+        from isaacsim.sensors.camera import Camera
+    except ImportError:
+        Camera = None
 
 # Enable ROS 2 Bridge extension
 app_utils.enable_extension("isaacsim.ros2.bridge")
@@ -80,17 +100,15 @@ simulation_app.update()
 # Load stage and check assets
 stage_utils.set_stage_units(meters_per_unit=1.0)
 
-# ── Physics Scene: GPU broadphase + TGS solver for stable stacking ───────────
+# ── Physics Scene: Stable CPU solver for 3-arm fleet (prevents VRAM access violation) ───
 stage = omni.usd.get_context().get_stage()  # early ref for physics scene creation
 physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
 physics_scene.CreateGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -1.0))
 physics_scene.CreateGravityMagnitudeAttr().Set(9.81)
 physx_scene_api = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
-# Stabilized for RTX 2080 Ti (11GB): CPU dynamics avoids GPU pool exhaustion
-# that caused access-violation on first tick with 3x FR3 articulations.
 physx_scene_api.CreateEnableGPUDynamicsAttr().Set(False)
 physx_scene_api.CreateBroadphaseTypeAttr().Set("MBP")
-physx_scene_api.CreateSolverTypeAttr().Set("PGS")
+physx_scene_api.CreateSolverTypeAttr().Set("TGS")
 
 assets_root_path = get_assets_root_path()
 if assets_root_path is None:
@@ -142,7 +160,7 @@ print("Loading Robot 1 (FR3_1)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_1")
 robot1_prim = get_prim_at_path("/FR3_1")
 xform_api1 = UsdGeom.XformCommonAPI(robot1_prim)
-xform_api1.SetTranslate(Gf.Vec3d(0.0, -0.45, 0.205))
+xform_api1.SetTranslate(Gf.Vec3d(0.0, -0.45, 0.20))
 xform_api1.SetRotate((0, 0, 168), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 # Robot 2: Franka FR3 at [0.3897, 0.225, 0.20] rotated -64 deg around Z
@@ -150,7 +168,7 @@ print("Loading Robot 2 (FR3_2)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_2")
 robot2_prim = get_prim_at_path("/FR3_2")
 xform_api2 = UsdGeom.XformCommonAPI(robot2_prim)
-xform_api2.SetTranslate(Gf.Vec3d(0.3897, 0.225, 0.205))
+xform_api2.SetTranslate(Gf.Vec3d(0.3897, 0.225, 0.20))
 xform_api2.SetRotate((0, 0, -64), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 # Robot 3: Franka FR3 at [-0.3897, 0.225, 0.20] rotated 42 deg around Z
@@ -158,7 +176,7 @@ print("Loading Robot 3 (FR3_3)...")
 stage_utils.add_reference_to_stage(assets_root_path + FR3_USD_PATH, "/FR3_3")
 robot3_prim = get_prim_at_path("/FR3_3")
 xform_api3 = UsdGeom.XformCommonAPI(robot3_prim)
-xform_api3.SetTranslate(Gf.Vec3d(-0.3897, 0.225, 0.205))
+xform_api3.SetTranslate(Gf.Vec3d(-0.3897, 0.225, 0.20))
 xform_api3.SetRotate((0, 0, 42), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True):
@@ -323,58 +341,46 @@ except Exception as mat_err:
 
 simulation_app.update()
 
-# 6. Overhead Camera for Gemini Robotics VLM
+# 6. Overhead Camera for Gemini Robotics VLM (Native OpenUSD Camera)
 print("Adding overhead camera for Gemini Robotics integration...")
 camera_prim = UsdGeom.Camera.Define(stage, "/OverheadCamera")
-camera_prim.CreateFocalLengthAttr().Set(24.0)
-camera_prim.CreateHorizontalApertureAttr().Set(20.955)
-camera_prim.CreateVerticalApertureAttr().Set(15.29)
-camera_prim.CreateClippingRangeAttr().Set(Gf.Vec2f(0.1, 1000.0))
 xform_cam = UsdGeom.Xformable(camera_prim.GetPrim())
 xform_cam.ClearXformOpOrder()
 xform_cam.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 1.8))
-xform_cam.AddRotateXYZOp().Set(Gf.Vec3f(0.0, 90.0, 0.0))
+xform_cam.AddRotateXYZOp().Set(Gf.Vec3f(0.0, 90.0, 0.0))  # Downward looking
 
-def setup_overhead_camera(freq=10):
-    """Initializes render product and ROS 2 camera publishing AFTER timeline starts playing."""
+def setup_overhead_camera_publishing():
+    """Sets up Replicator render product and ROS 2 image publishers once stage is live."""
     try:
+        import omni.syntheticdata._syntheticdata as sd
         render_product = rep.create.render_product("/OverheadCamera", (640, 480))
-        step_size = max(1, int(60 / freq))
+        rp_path = render_product.path if hasattr(render_product, "path") else str(render_product)
+        freq = 10
+        step_size = int(60 / freq)
 
-        try:
-            rv_rgb = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.Rgb.name)
-            writer_rgb = rep.writers.get(rv_rgb + "ROS2PublishImage")
-            writer_rgb.initialize(frameId="overhead_camera", topicName="/overhead_camera/rgb")
-            writer_rgb.attach([render_product])
-            gate_rgb = omni.syntheticdata.SyntheticData._get_node_path(rv_rgb + "IsaacSimulationGate", render_product)
-            if gate_rgb:
-                og.Controller.attribute(gate_rgb + ".inputs:step").set(step_size)
-        except Exception as e:
-            print(f"[WARN] Overhead RGB camera stream skipped: {e}")
+        # RGB Image Publisher
+        rv_rgb = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.Rgb.name)
+        writer_rgb = rep.writers.get(rv_rgb + "ROS2PublishImage")
+        writer_rgb.initialize(frameId="overhead_camera", topicName="/overhead_camera/rgb")
+        writer_rgb.attach([render_product])
+        gate_path_rgb = omni.syntheticdata.SyntheticData._get_node_path(rv_rgb + "IsaacSimulationGate", rp_path)
+        og.Controller.attribute(gate_path_rgb + ".inputs:step").set(step_size)
 
-        try:
-            rv_depth = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.DistanceToImagePlane.name)
-            writer_depth = rep.writers.get(rv_depth + "ROS2PublishImage")
-            writer_depth.initialize(frameId="overhead_camera", topicName="/overhead_camera/depth")
-            writer_depth.attach([render_product])
-            gate_depth = omni.syntheticdata.SyntheticData._get_node_path(rv_depth + "IsaacSimulationGate", render_product)
-            if gate_depth:
-                og.Controller.attribute(gate_depth + ".inputs:step").set(step_size)
-        except Exception as e:
-            print(f"[WARN] Overhead depth camera stream skipped: {e}")
+        # Depth Image Publisher
+        rv_depth = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.DistanceToImagePlane.name)
+        writer_depth = rep.writers.get(rv_depth + "ROS2PublishImage")
+        writer_depth.initialize(frameId="overhead_camera", topicName="/overhead_camera/depth")
+        writer_depth.attach([render_product])
+        gate_path_depth = omni.syntheticdata.SyntheticData._get_node_path(rv_depth + "IsaacSimulationGate", rp_path)
+        og.Controller.attribute(gate_path_depth + ".inputs:step").set(step_size)
 
-        try:
-            writer_info = rep.writers.get("ROS2PublishCameraInfo")
-            writer_info.initialize(frameId="overhead_camera", topicName="/overhead_camera/camera_info")
-            writer_info.attach([render_product])
-        except Exception as e:
-            print(f"[WARN] Overhead camera_info stream skipped: {e}")
-
-        print("[INFO] Overhead camera initialized and publishing to ROS 2.")
-        return render_product
-    except Exception as e:
-        print(f"[WARN] Failed to setup overhead camera render product: {e}")
-        return None
+        # Camera Info Publisher
+        writer_info = rep.writers.get("ROS2PublishCameraInfo")
+        writer_info.initialize(frameId="overhead_camera", topicName="/overhead_camera/camera_info")
+        writer_info.attach([render_product])
+        print("[INFO] Overhead camera ROS 2 publishing initialized successfully.")
+    except Exception as cam_err:
+        print(f"[WARN] Overhead camera publishing setup: {cam_err}")
 
 simulation_app.update()
 
@@ -509,67 +515,150 @@ try:
 except Exception as e:
     print(f"Error creating Action Graph: {e}")
 
-simulation_app.update()
+# 8. Articulations & Rigid Prims Management
+robot1_art = None
+robot2_art = None
+robot3_art = None
+blocks = []
 
-# Setup simulation manager and play
-SimulationManager.setup_simulation(dt=1.0 / 240.0, device="cpu")  # python CPU API, GPU physics via Scene
-app_utils.play()
-simulation_app.update()
+# Canonical home configurations (arm: 7 DOFs, gripper: 2 fingers)
+q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854], dtype=float)
+q_home_gripper = np.array([0.04, 0.04], dtype=float)
+q_home_all = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854, 0.04, 0.04], dtype=float)
 
-# Initialize Overhead Camera (opt-in via --enable-camera; skipped by default:
-# render-product + ROS2 writer attach triggers native access violation on RTX 2080 Ti)
-if "--enable-camera" in sys.argv:
+# Nominal robot bases in world frame
+robot_nominal_poses = {
+    1: ([0.0, -0.45, 0.20], [0.1045285, 0.0, 0.0, 0.9945219]),
+    2: ([0.3897, 0.225, 0.20], [0.8480481, 0.0, 0.0, -0.5299193]),
+    3: ([-0.3897, 0.225, 0.20], [0.9335804, 0.0, 0.0, 0.3583679]),
+}
+
+def reset_robot_articulation(robot_art, pos, quat_wxyz):
+    """Resets a Franka FR3 robot articulation to its initial base pose and home joints."""
+    if robot_art is None:
+        return
+    # 1. Root world pose
     try:
-        setup_overhead_camera(freq=10)
-        print("Overhead camera initialized and publishing to ROS 2.")
+        robot_art.set_world_poses(
+            positions=np.array([pos], dtype=float),
+            orientations=np.array([quat_wxyz], dtype=float)
+        )
     except Exception as e:
-        print(f"Warning: Overhead camera setup failed: {e}")
-else:
-    print("[INFO] Overhead camera render product skipped (use --enable-camera to opt in).")
+        print(f"[WARN] set_world_poses on robot failed: {e}")
 
-simulation_app.update()
+    # 2. DOF positions, velocity and position targets
+    zero_vel = np.zeros(9, dtype=float)
+    if hasattr(robot_art, "set_dof_positions"):
+        # Isaac Sim 6.0 Experimental Articulation API
+        try:
+            robot_art.set_dof_positions(q_home_all)
+        except Exception as e:
+            print(f"[WARN] set_dof_positions failed: {e}")
+        if hasattr(robot_art, "set_dof_position_targets"):
+            try:
+                robot_art.set_dof_position_targets(q_home_all)
+            except Exception:
+                pass
+        if hasattr(robot_art, "set_dof_velocities"):
+            try:
+                robot_art.set_dof_velocities(zero_vel)
+            except Exception:
+                pass
+    elif hasattr(robot_art, "set_joint_positions"):
+        # Classic Isaac Sim 4.x Articulation API
+        try:
+            robot_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
+            if hasattr(robot_art, "set_joint_velocities"):
+                n_dof = getattr(robot_art, "num_dof", 9)
+                robot_art.set_joint_velocities(np.zeros(n_dof))
+            robot_art.set_joint_positions(q_home_gripper, joint_indices=np.array([7, 8]))
+        except Exception as e:
+            print(f"[WARN] set_joint_positions failed: {e}")
 
-# 8. Initialize Articulations & Rigid Prims with World Poses
-try:
-    from isaacsim.core.prims import Articulation, RigidPrim
-    
-    robot1_art = Articulation("/FR3_1")
-    robot1_art.initialize()
-    robot1_art.set_world_poses(positions=np.array([[0.0, -0.45, 0.205]]), orientations=np.array([[0.1045285, 0.0, 0.0, 0.9945219]])) # 168 deg Z
-    
-    robot2_art = Articulation("/FR3_2")
-    robot2_art.initialize()
-    robot2_art.set_world_poses(positions=np.array([[0.3897, 0.225, 0.205]]), orientations=np.array([[0.8480481, 0.0, 0.0, -0.5299193]])) # -64 deg Z
-    
-    robot3_art = Articulation("/FR3_3")
-    robot3_art.initialize()
-    robot3_art.set_world_poses(positions=np.array([[-0.3897, 0.225, 0.205]]), orientations=np.array([[0.9335804, 0.0, 0.0, 0.3583679]])) # 42 deg Z
-    
-    # FR3 has 7 arm DOFs; gripper fingers are separate joints
-    # q_home_arm faces standby/outward with link1 Z orientation at (168°, -64°, 42°)
-    q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854])
-    q_home_gripper = np.array([0.04, 0.04])
-    
-    robot1_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
-    robot2_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
-    robot3_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
+def set_rigid_velocity(prim, lin_vel=None, ang_vel=None):
+    """Safely sets linear and angular velocity across Isaac Sim 6.0 and 4.x."""
+    if prim is None:
+        return
+    if hasattr(prim, "set_velocities"):
+        try:
+            prim.set_velocities(linear_velocities=lin_vel, angular_velocities=ang_vel)
+            return
+        except Exception:
+            pass
+    if lin_vel is not None and hasattr(prim, "set_linear_velocities"):
+        try:
+            prim.set_linear_velocities(lin_vel)
+        except Exception:
+            pass
+    if ang_vel is not None and hasattr(prim, "set_angular_velocities"):
+        try:
+            prim.set_angular_velocities(ang_vel)
+        except Exception:
+            pass
+
+def reset_rigid_body(prim, pos, quat_wxyz):
+    """Resets rigid body pose and zeroes out linear and angular velocities."""
+    if prim is None:
+        return
     try:
-        robot1_art.set_joint_positions(q_home_gripper, joint_indices=np.array([7, 8]))
-        robot2_art.set_joint_positions(q_home_gripper, joint_indices=np.array([7, 8]))
-        robot3_art.set_joint_positions(q_home_gripper, joint_indices=np.array([7, 8]))
-    except Exception:
-        pass
-    
-    blocks = []
-    for i in range(9):
-        block_prim = RigidPrim(f"/Block{i+1}")
-        block_prim.initialize()
-        blocks.append(block_prim)
+        prim.set_world_poses(
+            positions=np.array([pos], dtype=float),
+            orientations=np.array([quat_wxyz], dtype=float)
+        )
+    except Exception as e:
+        print(f"[WARN] set_world_poses on block failed: {e}")
+    set_rigid_velocity(prim, lin_vel=np.zeros((1, 3), dtype=float), ang_vel=np.zeros((1, 3), dtype=float))
 
-    # 9. ROS 2 Reset Mechanism setup & Pose Randomization Callback
+def init_articulations_and_poses():
+    """Initializes robot articulations, camera streaming, and joint positions once physics is active."""
+    global robot1_art, robot2_art, robot3_art, blocks
+    try:
+        try:
+            from isaacsim.core.experimental.prims import Articulation, RigidPrim
+        except ImportError:
+            from isaacsim.core.prims import Articulation, RigidPrim
+
+        robot1_art = Articulation("/FR3_1")
+        robot2_art = Articulation("/FR3_2")
+        robot3_art = Articulation("/FR3_3")
+
+        for art in [robot1_art, robot2_art, robot3_art]:
+            if hasattr(art, "initialize"):
+                try:
+                    art.initialize()
+                except Exception:
+                    pass
+
+        # Set initial poses for all 3 robots
+        for rid, art in [(1, robot1_art), (2, robot2_art), (3, robot3_art)]:
+            pos, quat = robot_nominal_poses[rid]
+            reset_robot_articulation(art, pos, quat)
+
+        blocks = []
+        for i in range(9):
+            b_prim = RigidPrim(f"/Block{i+1}")
+            if hasattr(b_prim, "initialize"):
+                try:
+                    b_prim.initialize()
+                except Exception:
+                    pass
+            blocks.append(b_prim)
+
+        # Initialize overhead camera streams safely after physics is live
+        setup_overhead_camera_publishing()
+        print("[INFO] Robot articulations, camera streams, and rigid bodies initialized successfully.")
+    except Exception as e:
+        print(f"[WARN] Articulation setup on frame: {e}")
+
+# 9. ROS 2 Reset Mechanism setup
+reset_node = None
+reset_pub = None
+goal_pub = None
+
+try:
     import rclpy
     from rclpy.node import Node
-    from std_msgs.msg import Empty
+    from std_msgs.msg import Empty, String
     from std_srvs.srv import Trigger
 
     if not rclpy.ok():
@@ -577,49 +666,8 @@ try:
 
     reset_node = Node('three_robot_reset_node')
     reset_pub = reset_node.create_publisher(Empty, '/reset_simulation', 10)
-    
-    from std_msgs.msg import String
     goal_pub = reset_node.create_publisher(String, '/gemini/custom_goal', 10)
 
-    def reset_simulation(publish_to_ros=True):
-        print("[RESET] Randomizing block poses and resetting robot arms...")
-        try:
-            # Reset Robot Arms to Table World Poses & Home Joint States
-            robot1_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
-            robot1_art.set_joint_velocities(np.zeros(robot1_art.num_dof))
-            robot1_art.set_world_poses(positions=np.array([[0.0, -0.45, 0.205]]), orientations=np.array([[0.1045285, 0.0, 0.0, 0.9945219]]))
-            
-            robot2_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
-            robot2_art.set_joint_velocities(np.zeros(robot2_art.num_dof))
-            robot2_art.set_world_poses(positions=np.array([[0.3897, 0.225, 0.205]]), orientations=np.array([[0.8480481, 0.0, 0.0, -0.5299193]]))
-            
-            robot3_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
-            robot3_art.set_joint_velocities(np.zeros(robot3_art.num_dof))
-            robot3_art.set_world_poses(positions=np.array([[-0.3897, 0.225, 0.205]]), orientations=np.array([[0.9335804, 0.0, 0.0, 0.3583679]]))
-            
-            # Reset & Randomize All 9 Block Poses on Source Tables
-            for i, block_prim in enumerate(blocks):
-                nominal_p = nominal_block_poses[i]
-                dx = np.random.uniform(-0.035, 0.035)
-                dy = np.random.uniform(-0.035, 0.035)
-                theta = np.random.uniform(0, 2 * np.pi)
-                qw = np.cos(theta / 2.0)
-                qz = np.sin(theta / 2.0)
-                
-                block_prim.set_world_poses(
-                    positions=np.array([[nominal_p[0] + dx, nominal_p[1] + dy, nominal_p[2]]]),
-                    orientations=np.array([[qw, 0.0, 0.0, qz]])
-                )
-                block_prim.set_linear_velocities(np.zeros((1, 3)))
-                block_prim.set_angular_velocities(np.zeros((1, 3)))
-                
-            if publish_to_ros:
-                reset_pub.publish(Empty())
-            print("[RESET] Simulation reset and block pose randomization complete.")
-        except Exception as err:
-            print(f"[RESET] Error resetting simulation: {err}")
-
-    # Subscriber & Service callbacks
     def ros_reset_callback(msg):
         reset_simulation(publish_to_ros=False)
 
@@ -631,72 +679,125 @@ try:
         return response
 
     reset_srv = reset_node.create_service(Trigger, '/reset_simulation', ros_reset_service_callback)
+    print("[INFO] ROS 2 reset node, topics, and service initialized successfully.")
+except Exception as e:
+    print(f"[WARN] ROS 2 reset interface setup skipped or failed: {e}")
 
-    def adversarial_push():
-        print("\n[ADVERSARIAL] Applying physics impulses to knock over the tower!")
-        try:
-            for i in range(9):
-                block_prim = blocks[i]
-                pos, _ = block_prim.get_world_poses()
-                pos = pos[0]
-                # If block is roughly on the target table
-                if abs(pos[0]) < 0.3 and abs(pos[1]) < 0.3 and pos[2] > 0.25:
-                    v_x = np.random.uniform(-1.5, 1.5)
-                    v_y = np.random.uniform(-1.5, 1.5)
-                    v_z = np.random.uniform(0.5, 2.0)
-                    w_x = np.random.uniform(-10.0, 10.0)
-                    w_y = np.random.uniform(-10.0, 10.0)
-                    w_z = np.random.uniform(-10.0, 10.0)
-                    block_prim.set_linear_velocities(np.array([[v_x, v_y, v_z]]))
-                    block_prim.set_angular_velocities(np.array([[w_x, w_y, w_z]]))
-        except Exception as e:
-            print(f"[ADVERSARIAL] Failed to apply push: {e}")
+def reset_simulation(publish_to_ros=True):
+    print("[RESET] Initializing robot poses, randomizing blocks, and resetting simulation...")
+    global robot1_art, robot2_art, robot3_art, blocks
+    try:
+        # Ensure physics timeline is playing so physics tensors are active
+        if hasattr(app_utils, "is_playing") and not app_utils.is_playing():
+            try:
+                app_utils.play()
+                simulation_app.update()
+            except Exception:
+                pass
 
-    # UI Reset Button setup
-    import omni.appwindow
-    import carb.input
-    import omni.ui as ui
+        # If articulations were not yet initialized, initialize them now
+        if robot1_art is None or robot2_art is None or robot3_art is None or not blocks:
+            init_articulations_and_poses()
 
-    def on_keyboard_event(event, *args, **kwargs):
-        if event.type == carb.input.KeyboardEventType.KEY_PRESS:
-            if event.input.name in ["R", "I"]:
-                reset_simulation(publish_to_ros=True)
-            elif event.input.name == "T":
-                adversarial_push()
-        return True
-    appwindow = omni.appwindow.get_default_app_window()
-    input_interface = carb.input.acquire_input_interface()
-    keyboard = appwindow.get_keyboard()
-    sub_keyboard = input_interface.subscribe_to_keyboard_events(keyboard, on_keyboard_event)
-    # UI logic for Interactive Mode
-    print("\n[INFO] Press PLAY in the UI and use the interactive window.")
-    ui.Workspace.set_show_window_fn("Controls", lambda x: True)
-    controls_window = ui.Window("Tower Stacking Controls", width=400, height=200)
-    
-    with controls_window.frame:
-        with ui.VStack(spacing=10):
-            ui.Label("Controls:", height=20)
-            ui.Button("Initialize Poses / Randomize Blocks (R key)", clicked_fn=lambda: reset_simulation(publish_to_ros=True), height=30)
-            ui.Button("💥 KNOCK TOWER OVER 💥 (T key)", clicked_fn=adversarial_push, height=30, style={"background_color": 0xFF4444FF, "color": 0xFFFFFFFF})
-            
-            ui.Spacer(height=10)
-            ui.Label("Custom Gemini Goal:", height=20)
-            goal_field = ui.StringField(height=30)
-            goal_field.model.set_value("Your ultimate goal is to build a single, stable 9-layer tower on the central target table using ALL 9 available objects.")
-            
-            def send_custom_goal():
+        # Reset Robot Arms to Table World Poses & Home Joint States
+        if robot1_art is not None:
+            reset_robot_articulation(robot1_art, robot_nominal_poses[1][0], robot_nominal_poses[1][1])
+        if robot2_art is not None:
+            reset_robot_articulation(robot2_art, robot_nominal_poses[2][0], robot_nominal_poses[2][1])
+        if robot3_art is not None:
+            reset_robot_articulation(robot3_art, robot_nominal_poses[3][0], robot_nominal_poses[3][1])
+
+        # Reset & Randomize All 9 Block Poses on Source Tables
+        for i, block_prim in enumerate(blocks):
+            nominal_p = nominal_block_poses[i]
+            dx = np.random.uniform(-0.035, 0.035)
+            dy = np.random.uniform(-0.035, 0.035)
+            theta = np.random.uniform(0, 2 * np.pi)
+            qw = np.cos(theta / 2.0)
+            qz = np.sin(theta / 2.0)
+
+            target_pos = [nominal_p[0] + dx, nominal_p[1] + dy, nominal_p[2]]
+            target_quat = [qw, 0.0, 0.0, qz]
+            reset_rigid_body(block_prim, target_pos, target_quat)
+
+        # Notify ROS 2 multi-robot controller and VLA node of reset
+        if publish_to_ros and reset_pub is not None:
+            try:
+                reset_pub.publish(Empty())
+                print("[RESET] Dispatched /reset_simulation message to ROS 2 network.")
+            except Exception as pe:
+                print(f"[RESET] ROS 2 reset dispatch warning: {pe}")
+
+        print("[RESET] Simulation reset and robot pose initialization complete.")
+    except Exception as err:
+        print(f"[RESET] Error resetting simulation: {err}")
+
+def adversarial_push():
+    print("\n[ADVERSARIAL] Applying physics impulses to knock over the tower!")
+    try:
+        for i in range(9):
+            block_prim = blocks[i]
+            pos, _ = block_prim.get_world_poses()
+            pos = pos[0]
+            # If block is roughly on the target table
+            if abs(pos[0]) < 0.3 and abs(pos[1]) < 0.3 and pos[2] > 0.25:
+                v_x = np.random.uniform(-1.5, 1.5)
+                v_y = np.random.uniform(-1.5, 1.5)
+                v_z = np.random.uniform(0.5, 2.0)
+                w_x = np.random.uniform(-10.0, 10.0)
+                w_y = np.random.uniform(-10.0, 10.0)
+                w_z = np.random.uniform(-10.0, 10.0)
+                set_rigid_velocity(block_prim, lin_vel=np.array([[v_x, v_y, v_z]]), ang_vel=np.array([[w_x, w_y, w_z]]))
+    except Exception as e:
+        print(f"[ADVERSARIAL] Failed to apply push: {e}")
+
+# UI Reset Button setup
+import omni.appwindow
+import carb.input
+import omni.ui as ui
+
+def on_keyboard_event(event, *args, **kwargs):
+    if event.type == carb.input.KeyboardEventType.KEY_PRESS:
+        if event.input.name in ["R", "I"]:
+            reset_simulation(publish_to_ros=True)
+        elif event.input.name == "T":
+            adversarial_push()
+    return True
+
+appwindow = omni.appwindow.get_default_app_window()
+input_interface = carb.input.acquire_input_interface()
+keyboard = appwindow.get_keyboard()
+sub_keyboard = input_interface.subscribe_to_keyboard_events(keyboard, on_keyboard_event)
+
+# UI logic for Interactive Mode
+print("\n[INFO] Press PLAY in the UI and use the interactive window.")
+ui.Workspace.set_show_window_fn("Controls", lambda x: True)
+controls_window = ui.Window("Tower Stacking Controls", width=400, height=200)
+
+with controls_window.frame:
+    with ui.VStack(spacing=10):
+        ui.Label("Controls:", height=20)
+        ui.Button("Initialize Poses / Randomize Blocks (R key)", clicked_fn=lambda: reset_simulation(publish_to_ros=True), height=30)
+        ui.Button("💥 KNOCK TOWER OVER 💥 (T key)", clicked_fn=adversarial_push, height=30, style={"background_color": 0xFF4444FF, "color": 0xFFFFFFFF})
+        
+        ui.Spacer(height=10)
+        ui.Label("Custom Gemini Goal:", height=20)
+        goal_field = ui.StringField(height=30)
+        goal_field.model.set_value("Your ultimate goal is to build a single, stable 9-layer tower on the central target table using ALL 9 available objects.")
+        
+        def send_custom_goal():
+            try:
                 from std_msgs.msg import String
                 text = goal_field.model.get_value_as_string()
                 msg = String()
                 msg.data = text
-                goal_pub.publish(msg)
+                if goal_pub is not None:
+                    goal_pub.publish(msg)
                 print(f"[GEMINI] Custom goal sent to ROS 2: {text}")
-                
-            ui.Button("Send Custom Goal to Gemini", clicked_fn=send_custom_goal, height=40, style={"background_color": 0xFF44FF44})
-
-except Exception as e:
-    print(f"Error setting up initial joint positions or reset interfaces: {e}")
-    reset_node = None
+            except Exception as e:
+                print(f"[GEMINI] Custom goal dispatch: {e}")
+            
+        ui.Button("Send Custom Goal to Gemini", clicked_fn=send_custom_goal, height=40, style={"background_color": 0xFF44FF44})
 
 # Self-Verification Block
 if args.test:
@@ -717,17 +818,27 @@ if args.test:
             assert b_prim.HasAPI(UsdPhysics.CollisionAPI), f"/Block{idx+1} is missing CollisionAPI!"
         print("[VERIFY] Spawners generated all 9 blocks with accurate dimensions, rigid bodies, and colliders.")
         print("\n[VERIFICATION] ALL SELF-VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
-        simulation_app.close()
-        sys.exit(0)
     except AssertionError as ae:
         print(f"\n[VERIFICATION FAILED]: {ae}\n")
         simulation_app.close()
         sys.exit(1)
 
 # Simulation loop
+if args.test:
+    app_utils.play()
+frame_count = 0
 while simulation_app.is_running():
     simulation_app.update()
+    if frame_count == 0:
+        init_articulations_and_poses()
     if reset_node is not None:
-        rclpy.spin_once(reset_node, timeout_sec=0.0)
+        try:
+            rclpy.spin_once(reset_node, timeout_sec=0.0)
+        except Exception:
+            pass
+    frame_count += 1
+    if args.test and frame_count >= 20:
+        print(f"[TEST] {frame_count} live simulation frames completed successfully!")
+        break
 
 simulation_app.close()

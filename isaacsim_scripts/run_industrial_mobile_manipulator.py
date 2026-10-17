@@ -3,8 +3,27 @@
 
 import argparse
 import sys
-import numpy as np
-from isaacsim import SimulationApp
+import os
+import ctypes
+
+# Pre-load ROS 2 tinyxml2.dll (92KB) before SimulationApp loads omni.kit.asset_converter's
+# incompatible tinyxml2.dll (104KB), preventing stack buffer overflow in fastrtps-2.14.dll
+for _cand in (
+    os.path.join(os.environ.get("ISAAC_PATH", r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release"), "exts", "isaacsim.ros2.core", os.environ.get("ROS_DISTRO", "jazzy"), "lib", "tinyxml2.dll"),
+    r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release\exts\isaacsim.ros2.core\jazzy\lib\tinyxml2.dll",
+    r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release\exts\isaacsim.ros2.core\humble\lib\tinyxml2.dll",
+):
+    if os.path.exists(_cand):
+        try:
+            ctypes.WinDLL(_cand)
+            break
+        except OSError:
+            pass
+
+try:
+    from isaacsim.simulation_app import SimulationApp
+except ImportError:
+    from isaacsim import SimulationApp
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--test", default=False, action="store_true", help="Run in test mode")
@@ -45,6 +64,7 @@ CONFIG = {"renderer": "RayTracedLighting", "headless": args.headless}
 
 simulation_app = SimulationApp(CONFIG)
 
+import numpy as np
 import carb
 import isaacsim.core.experimental.utils.app as app_utils
 import isaacsim.core.experimental.utils.stage as stage_utils

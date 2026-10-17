@@ -1,6 +1,21 @@
 import sys
-import numpy as np
+import os
+import ctypes
 import argparse
+
+# Pre-load ROS 2 tinyxml2.dll (92KB) before SimulationApp loads omni.kit.asset_converter's
+# incompatible tinyxml2.dll (104KB), preventing stack buffer overflow in fastrtps-2.14.dll
+for _cand in (
+    os.path.join(os.environ.get("ISAAC_PATH", r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release"), "exts", "isaacsim.ros2.core", os.environ.get("ROS_DISTRO", "jazzy"), "lib", "tinyxml2.dll"),
+    r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release\exts\isaacsim.ros2.core\jazzy\lib\tinyxml2.dll",
+    r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release\exts\isaacsim.ros2.core\humble\lib\tinyxml2.dll",
+):
+    if os.path.exists(_cand):
+        try:
+            ctypes.WinDLL(_cand)
+            break
+        except OSError:
+            pass
 
 # Parse arguments first
 parser = argparse.ArgumentParser()
@@ -11,11 +26,15 @@ args, unknown_args = parser.parse_known_args()
 # Remove our custom args from sys.argv so SimulationApp doesn't complain about them
 sys.argv = [sys.argv[0]] + unknown_args
 
-from isaacsim import SimulationApp
+try:
+    from isaacsim.simulation_app import SimulationApp
+except ImportError:
+    from isaacsim import SimulationApp
 
 # Start SimulationApp headlessly to build the scene
 simulation_app = SimulationApp({"headless": True})
 
+import numpy as np
 import carb
 import omni.usd
 import isaacsim.core.experimental.utils.stage as stage_utils

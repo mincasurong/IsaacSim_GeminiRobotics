@@ -34,6 +34,11 @@ if exist "D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release\setup_ros_e
     goto :path_found
 )
 
+if exist "%LOCALAPPDATA%\ov\pkg\isaac-sim-6.0.0\setup_ros_env.bat" (
+    set "ISAAC_SIM_RELEASE_PATH=%LOCALAPPDATA%\ov\pkg\isaac-sim-6.0.0"
+    goto :path_found
+)
+
 if exist "%LOCALAPPDATA%\ov\pkg\isaac-sim-4.5.0\setup_ros_env.bat" (
     set "ISAAC_SIM_RELEASE_PATH=%LOCALAPPDATA%\ov\pkg\isaac-sim-4.5.0"
     goto :path_found
@@ -68,6 +73,24 @@ goto :ask_path
 
 :path_found
 echo [INFO] Using Isaac Sim path: %ISAAC_SIM_RELEASE_PATH%
+
+REM Isolate Isaac Sim bundled Python 3.12 from host Python 3.12 site-packages
+set "PYTHONNOUSERSITE=1"
+set "PYTHONPATH=%ISAAC_SIM_RELEASE_PATH%\site"
+if exist "%ISAAC_SIM_RELEASE_PATH%\python_packages" (
+    set "PYTHONPATH=%ISAAC_SIM_RELEASE_PATH%\python_packages;!PYTHONPATH!"
+)
+
+REM Configure ROS 2 Jazzy bridge libraries into PATH and PYTHONPATH for Isaac Sim 6.0
+set "ROS_DISTRO=jazzy"
+set "RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+if exist "%ISAAC_SIM_RELEASE_PATH%\exts\isaacsim.ros2.core\jazzy\lib" (
+    set "PATH=%ISAAC_SIM_RELEASE_PATH%\exts\isaacsim.ros2.core\jazzy\lib;%ISAAC_SIM_RELEASE_PATH%\exts\isaacsim.ros2.core\bin;!PATH!"
+    set "PYTHONPATH=%ISAAC_SIM_RELEASE_PATH%\exts\isaacsim.ros2.core\jazzy\rclpy;!PYTHONPATH!"
+    set "AMENT_PREFIX_PATH=%ISAAC_SIM_RELEASE_PATH%\exts\isaacsim.ros2.core\jazzy"
+)
+
+echo [INFO] Isaac Sim 6.0 runtime and ROS 2 Jazzy bridge environment configured.
 echo.
 
 :menu

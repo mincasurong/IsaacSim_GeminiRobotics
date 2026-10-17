@@ -1,14 +1,31 @@
 # SPDX-FileCopyrightText: Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Dual-robot manufacturing conveyor scene with ROS 2 bridge integration."""
+"""Dual-robot manufacturing conveyor scene with ROS 2 bridge integration — Post-doc edition (Isaac Sim 6.0)."""
 
 import argparse
 import sys
 import os
-import numpy as np
+import ctypes
 
-from isaacsim import SimulationApp
+# Pre-load ROS 2 tinyxml2.dll (92KB) before SimulationApp loads omni.kit.asset_converter's
+# incompatible tinyxml2.dll (104KB), preventing stack buffer overflow in fastrtps-2.14.dll
+for _cand in (
+    os.path.join(os.environ.get("ISAAC_PATH", r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release"), "exts", "isaacsim.ros2.core", os.environ.get("ROS_DISTRO", "jazzy"), "lib", "tinyxml2.dll"),
+    r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release\exts\isaacsim.ros2.core\jazzy\lib\tinyxml2.dll",
+    r"D:\git\isaacsim\src\isaacsim\_build\windows-x86_64\release\exts\isaacsim.ros2.core\humble\lib\tinyxml2.dll",
+):
+    if os.path.exists(_cand):
+        try:
+            ctypes.WinDLL(_cand)
+            break
+        except OSError:
+            pass
+
+try:
+    from isaacsim.simulation_app import SimulationApp
+except ImportError:
+    from isaacsim import SimulationApp
 
 # Parse arguments
 parser = argparse.ArgumentParser()
@@ -33,6 +50,7 @@ CONFIG = {
 }
 simulation_app = SimulationApp(CONFIG)
 
+import numpy as np
 import carb
 import isaacsim.core.experimental.utils.app as app_utils
 import isaacsim.core.experimental.utils.stage as stage_utils
@@ -45,8 +63,6 @@ from isaacsim.storage.native import get_assets_root_path
 from pxr import Gf, UsdGeom, UsdPhysics, Usd, Sdf
 import omni.usd
 import omni.replicator.core as rep
-import omni.syntheticdata._syntheticdata as sd
-from isaacsim.sensors.camera import Camera
 import isaacsim.core.experimental.utils.transform as transform_utils
 
 # Enable ROS 2 Bridge extension
@@ -99,16 +115,18 @@ main_table = UsdGeom.Cube.Define(stage, "/MainTable")
 main_table.GetSizeAttr().Set(1.0)
 xform_main = UsdGeom.Xformable(main_table.GetPrim())
 xform_main.ClearXformOpOrder()
-xform_main.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.25, 0.10)) # Top surface at Z=0.20m
-xform_main.AddScaleOp().Set(Gf.Vec3f(2.8, 0.90, 0.20)) # Y in [-0.70, +0.20]
+xform_main.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.25, 0.10))  # Top surface at Z=0.20m
+xform_main.AddScaleOp().Set(Gf.Vec3f(2.8, 0.90, 0.20))       # Y in [-0.70, +0.20]
 main_table.CreateDisplayColorAttr().Set([Gf.Vec3f(0.22, 0.24, 0.26)])
 
 UsdPhysics.RigidBodyAPI.Apply(main_table.GetPrim())
 UsdPhysics.CollisionAPI.Apply(main_table.GetPrim())
 rb_main = main_table.GetPrim().GetAttribute("physics:rigidBodyEnabled")
-if rb_main.IsValid(): rb_main.Set(False)
+if rb_main.IsValid():
+    rb_main.Set(False)
 kin_main = main_table.GetPrim().GetAttribute("physics:kinematicEnabled")
-if kin_main.IsValid(): kin_main.Set(False)
+if kin_main.IsValid():
+    kin_main.Set(False)
 
 # 3. Add Conveyor Belt (Table representing manufacturing line)
 print("Creating Conveyor Belt Table...")
@@ -116,16 +134,37 @@ conveyor_table = UsdGeom.Cube.Define(stage, "/ConveyorTable")
 conveyor_table.GetSizeAttr().Set(1.0)
 xform_conv = UsdGeom.Xformable(conveyor_table.GetPrim())
 xform_conv.ClearXformOpOrder()
-xform_conv.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.50, 0.25)) # Top surface at Z=0.5m, Y in [0.30, 0.70]
+xform_conv.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.50, 0.25))  # Top surface at Z=0.5m, Y in [0.30, 0.70]
 xform_conv.AddScaleOp().Set(Gf.Vec3f(3.0, 0.40, 0.50))
 conveyor_table.CreateDisplayColorAttr().Set([Gf.Vec3f(0.15, 0.15, 0.15)])
 
 UsdPhysics.RigidBodyAPI.Apply(conveyor_table.GetPrim())
 UsdPhysics.CollisionAPI.Apply(conveyor_table.GetPrim())
 rb_conv = conveyor_table.GetPrim().GetAttribute("physics:rigidBodyEnabled")
-if rb_conv.IsValid(): rb_conv.Set(False)
+if rb_conv.IsValid():
+    rb_conv.Set(False)
 kin_conv = conveyor_table.GetPrim().GetAttribute("physics:kinematicEnabled")
-if kin_conv.IsValid(): kin_conv.Set(True)
+if kin_conv.IsValid():
+    kin_conv.Set(True)
+
+# 3.5 Add Front Assembly Buffer Table (Staging for LongBar & Assembly)
+print("Creating Front Assembly Buffer Table...")
+buffer_table = UsdGeom.Cube.Define(stage, "/BufferTable")
+buffer_table.GetSizeAttr().Set(1.0)
+xform_buf = UsdGeom.Xformable(buffer_table.GetPrim())
+xform_buf.ClearXformOpOrder()
+xform_buf.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.16))  # Top surface at Z=0.32m
+xform_buf.AddScaleOp().Set(Gf.Vec3f(1.6, 0.18, 0.32))       # Bridges between MainTable and ConveyorTable
+buffer_table.CreateDisplayColorAttr().Set([Gf.Vec3f(0.28, 0.30, 0.34)])
+
+UsdPhysics.RigidBodyAPI.Apply(buffer_table.GetPrim())
+UsdPhysics.CollisionAPI.Apply(buffer_table.GetPrim())
+rb_buf = buffer_table.GetPrim().GetAttribute("physics:rigidBodyEnabled")
+if rb_buf.IsValid():
+    rb_buf.Set(False)
+kin_buf = buffer_table.GetPrim().GetAttribute("physics:kinematicEnabled")
+if kin_buf.IsValid():
+    kin_buf.Set(False)
 
 # 4. Add 2 Robots (FR3_1 and FR3_2) side-by-side facing the conveyor
 FR3_USD_PATH = "/Isaac/Robots/FrankaRobotics/FrankaFR3/fr3.usd"
@@ -148,7 +187,8 @@ xform_api2.SetRotate((0, 0, 90), UsdGeom.XformCommonAPI.RotationOrderXYZ)
 
 def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True):
     root_prim = stage.GetPrimAtPath(robot_prim_path)
-    if not root_prim.IsValid(): return
+    if not root_prim.IsValid():
+        return
     for prim in Usd.PrimRange(root_prim):
         if prim.GetPath() == root_prim.GetPath():
             frame_name = prefix
@@ -163,11 +203,7 @@ def configure_robot_tf_names(robot_prim_path, prefix, use_prefix_for_links=True)
 configure_robot_tf_names("/FR3_1", "FR3_1", use_prefix_for_links=False)
 configure_robot_tf_names("/FR3_2", "FR3_2", use_prefix_for_links=True)
 
-# The USD's internal joint drives are already correctly tuned by NVIDIA for the FR3.
-# Previously, applying 1e5 stiffness and 1e4 damping caused extreme numerical explosions.
-
-# Fix exploding robot physics: The Franka USD defaults fr3_link0 to kinematic.
-# We force fr3_link0 to be dynamic, and EXPLICITLY anchor it to the world using a new FixedJoint.
+# Anchor fr3_link0 safely to World via FixedJoint
 for robot_path in ["/FR3_1", "/FR3_2"]:
     base_prim = stage.GetPrimAtPath(robot_path + "/fr3_link0")
     if base_prim.IsValid():
@@ -175,20 +211,16 @@ for robot_path in ["/FR3_1", "/FR3_2"]:
         if not kin_attr.IsValid():
             kin_attr = base_prim.CreateAttribute("physics:kinematicEnabled", Sdf.ValueTypeNames.Bool)
         kin_attr.Set(False)
-        
-        # Explicitly create a FixedJoint from the World to the base link to anchor it safely
-        from pxr import UsdPhysics
+
         joint_path = robot_path + "/world_fixed_anchor"
         if not stage.GetPrimAtPath(joint_path).IsValid():
             fixed_joint = UsdPhysics.FixedJoint.Define(stage, joint_path)
-            # Leaving Body0 empty implicitly targets the World
             fixed_joint.CreateBody1Rel().SetTargets([base_prim.GetPath()])
 
-# 5. Add Objects (Standard blocks and one Long Bar)
-# Z = 0.50m (conveyor top) + 0.03m (half height) = 0.53m
+# 5. Add Objects (Standard blocks, Long Bar, Heavy Engine Part)
 nominal_poses = [
-    [-0.3, 0.5, 0.53], # Block 1
-    [ 0.3, 0.5, 0.53], # Block 2
+    [-0.3, 0.5, 0.53],  # Block 1
+    [ 0.3, 0.5, 0.53],  # Block 2
 ]
 
 for i, pos in enumerate(nominal_poses):
@@ -199,8 +231,8 @@ for i, pos in enumerate(nominal_poses):
     xform.ClearXformOpOrder()
     xform.AddTranslateOp().Set(Gf.Vec3d(*pos))
     xform.AddScaleOp().Set(Gf.Vec3f(0.06, 0.06, 0.06))
-    block.CreateDisplayColorAttr().Set([Gf.Vec3f(0.9, 0.1, 0.1) if i==0 else Gf.Vec3f(0.1, 0.9, 0.1)])
-    
+    block.CreateDisplayColorAttr().Set([Gf.Vec3f(0.9, 0.1, 0.1) if i == 0 else Gf.Vec3f(0.1, 0.9, 0.1)])
+
     UsdPhysics.RigidBodyAPI.Apply(block.GetPrim())
     UsdPhysics.CollisionAPI.Apply(block.GetPrim())
 
@@ -211,8 +243,8 @@ bar.GetSizeAttr().Set(1.0)
 xform = UsdGeom.Xformable(bar.GetPrim())
 xform.ClearXformOpOrder()
 xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.35))
-xform.AddScaleOp().Set(Gf.Vec3f(0.8, 0.045, 0.045)) # 80cm long
-bar.CreateDisplayColorAttr().Set([Gf.Vec3f(0.1, 0.1, 0.9)]) # Blue
+xform.AddScaleOp().Set(Gf.Vec3f(0.8, 0.045, 0.045))  # 80cm long
+bar.CreateDisplayColorAttr().Set([Gf.Vec3f(0.1, 0.1, 0.9)])  # Blue
 
 UsdPhysics.RigidBodyAPI.Apply(bar.GetPrim())
 UsdPhysics.CollisionAPI.Apply(bar.GetPrim())
@@ -224,67 +256,54 @@ engine.GetSizeAttr().Set(1.0)
 engine_xform = UsdGeom.Xformable(engine.GetPrim())
 engine_xform.ClearXformOpOrder()
 engine_xform.AddTranslateOp().Set(Gf.Vec3d(0.0, -0.25, 0.245))
-engine_xform.AddScaleOp().Set(Gf.Vec3f(1.0, 0.12, 0.09)) # 100cm long, bulkier
-engine.CreateDisplayColorAttr().Set([Gf.Vec3f(0.4, 0.4, 0.4)]) # Grey
+engine_xform.AddScaleOp().Set(Gf.Vec3f(1.0, 0.12, 0.09))  # 100cm long
+engine.CreateDisplayColorAttr().Set([Gf.Vec3f(0.4, 0.4, 0.4)])  # Grey
 
 UsdPhysics.RigidBodyAPI.Apply(engine.GetPrim())
 UsdPhysics.CollisionAPI.Apply(engine.GetPrim())
 
-
 simulation_app.update()
 
-# 5.5 Overhead Camera for Gemini Robotics VLM
+# 5.5 Overhead Camera for Gemini Robotics VLM (Native OpenUSD Camera)
 print("Adding overhead camera for Gemini Robotics integration...")
 camera_prim = UsdGeom.Camera.Define(stage, "/OverheadCamera")
-camera_prim.CreateFocalLengthAttr().Set(24.0)
-camera_prim.CreateHorizontalApertureAttr().Set(20.955)
-camera_prim.CreateVerticalApertureAttr().Set(15.29)
-camera_prim.CreateClippingRangeAttr().Set(Gf.Vec2f(0.1, 1000.0))
 xform_cam = UsdGeom.Xformable(camera_prim.GetPrim())
 xform_cam.ClearXformOpOrder()
 xform_cam.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.4, 2.0))
-xform_cam.AddRotateXYZOp().Set(Gf.Vec3f(0.0, 90.0, 0.0))
+xform_cam.AddRotateXYZOp().Set(Gf.Vec3f(0.0, 90.0, 0.0))  # Downward looking
 
-def setup_overhead_camera(freq=10):
-    """Initializes render product and ROS 2 camera publishing AFTER timeline starts playing."""
+def setup_overhead_camera_publishing():
+    """Sets up Replicator render product and ROS 2 image publishers once stage is live."""
     try:
+        import omni.syntheticdata._syntheticdata as sd
         render_product = rep.create.render_product("/OverheadCamera", (640, 480))
-        step_size = max(1, int(60 / freq))
+        rp_path = render_product.path if hasattr(render_product, "path") else str(render_product)
+        freq = 10
+        step_size = int(60 / freq)
 
-        try:
-            rv_rgb = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.Rgb.name)
-            writer_rgb = rep.writers.get(rv_rgb + "ROS2PublishImage")
-            writer_rgb.initialize(frameId="overhead_camera", topicName="/overhead_camera/rgb")
-            writer_rgb.attach([render_product])
-            gate_rgb = omni.syntheticdata.SyntheticData._get_node_path(rv_rgb + "IsaacSimulationGate", render_product)
-            if gate_rgb:
-                og.Controller.attribute(gate_rgb + ".inputs:step").set(step_size)
-        except Exception as e:
-            print(f"[WARN] Overhead RGB camera stream skipped: {e}")
+        # RGB Image Publisher
+        rv_rgb = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.Rgb.name)
+        writer_rgb = rep.writers.get(rv_rgb + "ROS2PublishImage")
+        writer_rgb.initialize(frameId="overhead_camera", topicName="/overhead_camera/rgb")
+        writer_rgb.attach([render_product])
+        gate_path_rgb = omni.syntheticdata.SyntheticData._get_node_path(rv_rgb + "IsaacSimulationGate", rp_path)
+        og.Controller.attribute(gate_path_rgb + ".inputs:step").set(step_size)
 
-        try:
-            rv_depth = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.DistanceToImagePlane.name)
-            writer_depth = rep.writers.get(rv_depth + "ROS2PublishImage")
-            writer_depth.initialize(frameId="overhead_camera", topicName="/overhead_camera/depth")
-            writer_depth.attach([render_product])
-            gate_depth = omni.syntheticdata.SyntheticData._get_node_path(rv_depth + "IsaacSimulationGate", render_product)
-            if gate_depth:
-                og.Controller.attribute(gate_depth + ".inputs:step").set(step_size)
-        except Exception as e:
-            print(f"[WARN] Overhead depth camera stream skipped: {e}")
+        # Depth Image Publisher
+        rv_depth = omni.syntheticdata.SyntheticData.convert_sensor_type_to_rendervar(sd.SensorType.DistanceToImagePlane.name)
+        writer_depth = rep.writers.get(rv_depth + "ROS2PublishImage")
+        writer_depth.initialize(frameId="overhead_camera", topicName="/overhead_camera/depth")
+        writer_depth.attach([render_product])
+        gate_path_depth = omni.syntheticdata.SyntheticData._get_node_path(rv_depth + "IsaacSimulationGate", rp_path)
+        og.Controller.attribute(gate_path_depth + ".inputs:step").set(step_size)
 
-        try:
-            writer_info = rep.writers.get("ROS2PublishCameraInfo")
-            writer_info.initialize(frameId="overhead_camera", topicName="/overhead_camera/camera_info")
-            writer_info.attach([render_product])
-        except Exception as e:
-            print(f"[WARN] Overhead camera_info stream skipped: {e}")
-
-        print("[INFO] Overhead camera initialized and publishing to ROS 2.")
-        return render_product
-    except Exception as e:
-        print(f"[WARN] Failed to setup overhead camera render product: {e}")
-        return None
+        # Camera Info Publisher
+        writer_info = rep.writers.get("ROS2PublishCameraInfo")
+        writer_info.initialize(frameId="overhead_camera", topicName="/overhead_camera/camera_info")
+        writer_info.attach([render_product])
+        print("[INFO] Overhead camera ROS 2 publishing initialized successfully.")
+    except Exception as cam_err:
+        print(f"[WARN] Overhead camera publishing setup: {cam_err}")
 
 # 6. Setup ROS 2 Bridge Action Graph
 try:
@@ -298,13 +317,13 @@ try:
                 ("Context", "isaacsim.ros2.bridge.ROS2Context"),
                 ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
                 ("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
-                
+
                 # Robot 1 (FR3_1)
                 ("ReadJointState1", "isaacsim.sensors.physics.IsaacReadJointState"),
                 ("PublishJointState1", "isaacsim.ros2.bridge.ROS2PublishJointState"),
                 ("SubscribeJointState1", "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
                 ("ArticulationController1", "isaacsim.core.nodes.IsaacArticulationController"),
-                
+
                 # Robot 2 (FR3_2)
                 ("ReadJointState2", "isaacsim.sensors.physics.IsaacReadJointState"),
                 ("PublishJointState2", "isaacsim.ros2.bridge.ROS2PublishJointState"),
@@ -318,7 +337,7 @@ try:
                 ("Context.outputs:context", "PublishTF.inputs:context"),
                 ("ReadSimTime.outputs:simulationTime", "PublishClock.inputs:timeStamp"),
                 ("ReadSimTime.outputs:simulationTime", "PublishTF.inputs:timeStamp"),
-                
+
                 # Robot 1 connections
                 ("OnPlaybackTick.outputs:tick", "ReadJointState1.inputs:execIn"),
                 ("ReadJointState1.outputs:execOut", "PublishJointState1.inputs:execIn"),
@@ -337,7 +356,7 @@ try:
                 ("SubscribeJointState1.outputs:effortCommand", "ArticulationController1.inputs:effortCommand"),
                 ("Context.outputs:context", "PublishJointState1.inputs:context"),
                 ("Context.outputs:context", "SubscribeJointState1.inputs:context"),
-                
+
                 # Robot 2 connections
                 ("OnPlaybackTick.outputs:tick", "ReadJointState2.inputs:execIn"),
                 ("ReadJointState2.outputs:execOut", "PublishJointState2.inputs:execIn"),
@@ -362,16 +381,16 @@ try:
                 ("PublishTF.inputs:targetPrims", [
                     usdrt.Sdf.Path("/FR3_1"),
                     usdrt.Sdf.Path("/FR3_2"),
-                    usdrt.Sdf.Path("/Block1"), usdrt.Sdf.Path("/Block2"), 
+                    usdrt.Sdf.Path("/Block1"), usdrt.Sdf.Path("/Block2"),
                     usdrt.Sdf.Path("/LongBar"), usdrt.Sdf.Path("/HeavyEnginePart"),
                 ]),
-                
+
                 # Robot 1 config
                 ("ArticulationController1.inputs:robotPath", "/FR3_1"),
                 ("ReadJointState1.inputs:prim", [usdrt.Sdf.Path("/FR3_1")]),
                 ("PublishJointState1.inputs:topicName", "/fr3_1/joint_states"),
                 ("SubscribeJointState1.inputs:topicName", "/fr3_1/joint_commands"),
-                
+
                 # Robot 2 config
                 ("ArticulationController2.inputs:robotPath", "/FR3_2"),
                 ("ReadJointState2.inputs:prim", [usdrt.Sdf.Path("/FR3_2")]),
@@ -386,69 +405,236 @@ except Exception as e:
 
 simulation_app.update()
 
-# Setup physics scene with GPU broadphase + TGS solver for stability
-stage = omni.usd.get_context().get_stage()
-physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
-physics_scene.CreateGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -1.0))
-physics_scene.CreateGravityMagnitudeAttr().Set(9.81)
-try:
-    from pxr import PhysxSchema
-    physx_scene_api = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
-    physx_scene_api.CreateEnableGPUDynamicsAttr().Set(True)
-    physx_scene_api.CreateBroadphaseTypeAttr().Set("GPU")
-    physx_scene_api.CreateSolverTypeAttr().Set("TGS")
-except Exception as e:
-    print(f"Warning: Failed to set PhysX TGS solver: {e}")
+# 8. Articulations & Rigid Prims Management
+robot1_art = None
+robot2_art = None
+blocks = []
+bar_rp = None
+engine_rp = None
 
-# Setup simulation manager and play (240 Hz physics for smooth 100Hz ROS2 tracking)
-# Note: device="cpu" is used here to avoid PyTorch tensor crashes ('numpy.ndarray' object has no attribute 'to').
-SimulationManager.setup_simulation(dt=1.0 / 240.0, device="cpu")
-app_utils.play()
-simulation_app.update()
+# Canonical home configurations (arm: 7 DOFs, gripper: 2 fingers)
+q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854], dtype=float)
+q_home_gripper = np.array([0.04, 0.04], dtype=float)
+q_home_all = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854, 0.04, 0.04], dtype=float)
 
-# Initialize Overhead Camera
-try:
-    setup_overhead_camera(freq=10)
-    print("Overhead camera initialized and publishing to ROS 2.")
-except Exception as e:
-    print(f"Warning: Overhead camera setup failed: {e}")
-
-simulation_app.update()
-
-# 8. Initialize Articulations & Rigid Prims with World Poses
-try:
-    from isaacsim.core.prims import Articulation, RigidPrim
-    
-    robot1_art = Articulation("/FR3_1")
-    robot1_art.initialize()
-    robot1_art.set_world_poses(positions=np.array([[-0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
-    
-    robot2_art = Articulation("/FR3_2")
-    robot2_art.initialize()
-    robot2_art.set_world_poses(positions=np.array([[0.7, 0.0, 0.20]]), orientations=np.array([[0.7071068, 0.0, 0.0, 0.7071068]]))
-    
-    # FR3 has 7 arm DOFs; gripper fingers are separate joints
-    q_home_arm = np.array([0.0, 0.0, 0.0, -1.5708, 0.0, 1.5708, 0.7854])
-    q_home_gripper = np.array([0.04, 0.04])
-    
-    robot1_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
-    robot2_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
+def reset_robot_articulation(robot_art, pos, quat_wxyz):
+    """Resets a Franka FR3 robot articulation to its initial base pose and home joints."""
+    if robot_art is None:
+        return
     try:
-        robot1_art.set_joint_positions(q_home_gripper, joint_indices=np.array([7, 8]))
-        robot2_art.set_joint_positions(q_home_gripper, joint_indices=np.array([7, 8]))
-    except Exception:
-        pass
+        robot_art.set_world_poses(
+            positions=np.array([pos], dtype=float),
+            orientations=np.array([quat_wxyz], dtype=float)
+        )
+    except Exception as e:
+        print(f"[WARN] set_world_poses on robot failed: {e}")
 
-except Exception as e:
-    print(f"Error setting up initial joint positions or reset interfaces: {e}")
+    zero_vel = np.zeros(9, dtype=float)
+    if hasattr(robot_art, "set_dof_positions"):
+        try:
+            robot_art.set_dof_positions(q_home_all)
+        except Exception as e:
+            print(f"[WARN] set_dof_positions failed: {e}")
+        if hasattr(robot_art, "set_dof_position_targets"):
+            try:
+                robot_art.set_dof_position_targets(q_home_all)
+            except Exception:
+                pass
+        if hasattr(robot_art, "set_dof_velocities"):
+            try:
+                robot_art.set_dof_velocities(zero_vel)
+            except Exception:
+                pass
+    elif hasattr(robot_art, "set_joint_positions"):
+        try:
+            robot_art.set_joint_positions(q_home_arm, joint_indices=np.arange(7))
+            if hasattr(robot_art, "set_joint_velocities"):
+                n_dof = getattr(robot_art, "num_dof", 9)
+                robot_art.set_joint_velocities(np.zeros(n_dof))
+            robot_art.set_joint_positions(q_home_gripper, joint_indices=np.array([7, 8]))
+        except Exception as e:
+            print(f"[WARN] set_joint_positions failed: {e}")
+
+def set_rigid_velocity(prim, lin_vel=None, ang_vel=None):
+    """Safely sets linear and angular velocity across Isaac Sim 6.0 and 4.x."""
+    if prim is None:
+        return
+    if hasattr(prim, "set_velocities"):
+        try:
+            prim.set_velocities(linear_velocities=lin_vel, angular_velocities=ang_vel)
+            return
+        except Exception:
+            pass
+    if lin_vel is not None and hasattr(prim, "set_linear_velocities"):
+        try:
+            prim.set_linear_velocities(lin_vel)
+        except Exception:
+            pass
+    if ang_vel is not None and hasattr(prim, "set_angular_velocities"):
+        try:
+            prim.set_angular_velocities(ang_vel)
+        except Exception:
+            pass
+
+def reset_rigid_body(prim, pos, quat_wxyz):
+    """Resets rigid body pose and zeroes out velocities."""
+    if prim is None:
+        return
+    try:
+        prim.set_world_poses(
+            positions=np.array([pos], dtype=float),
+            orientations=np.array([quat_wxyz], dtype=float)
+        )
+    except Exception as e:
+        print(f"[WARN] set_world_poses on prim failed: {e}")
+    set_rigid_velocity(prim, lin_vel=np.zeros((1, 3), dtype=float), ang_vel=np.zeros((1, 3), dtype=float))
+
+def init_articulations_and_poses():
+    """Initializes robot articulations, rigid bodies, and camera streams once physics is active."""
+    global robot1_art, robot2_art, blocks, bar_rp, engine_rp
+    try:
+        try:
+            from isaacsim.core.experimental.prims import Articulation, RigidPrim
+        except ImportError:
+            from isaacsim.core.prims import Articulation, RigidPrim
+
+        robot1_art = Articulation("/FR3_1")
+        robot2_art = Articulation("/FR3_2")
+
+        for art in [robot1_art, robot2_art]:
+            if hasattr(art, "initialize"):
+                try:
+                    art.initialize()
+                except Exception:
+                    pass
+
+        reset_robot_articulation(robot1_art, [-0.7, 0.0, 0.20], [0.7071068, 0.0, 0.0, 0.7071068])
+        reset_robot_articulation(robot2_art, [0.7, 0.0, 0.20], [0.7071068, 0.0, 0.0, 0.7071068])
+
+        blocks = []
+        for i, pos in enumerate(nominal_poses):
+            b_prim = RigidPrim(f"/Block{i+1}")
+            if hasattr(b_prim, "initialize"):
+                try:
+                    b_prim.initialize()
+                except Exception:
+                    pass
+            reset_rigid_body(b_prim, pos, [1.0, 0.0, 0.0, 0.0])
+            blocks.append(b_prim)
+
+        bar_rp = RigidPrim("/LongBar")
+        if hasattr(bar_rp, "initialize"):
+            try:
+                bar_rp.initialize()
+            except Exception:
+                pass
+        reset_rigid_body(bar_rp, [0.0, 0.25, 0.35], [1.0, 0.0, 0.0, 0.0])
+
+        engine_rp = RigidPrim("/HeavyEnginePart")
+        if hasattr(engine_rp, "initialize"):
+            try:
+                engine_rp.initialize()
+            except Exception:
+                pass
+        reset_rigid_body(engine_rp, [0.0, -0.25, 0.245], [1.0, 0.0, 0.0, 0.0])
+
+        setup_overhead_camera_publishing()
+        print("[INFO] Assembly robot articulations, camera streams, and rigid bodies initialized successfully.")
+    except Exception as e:
+        print(f"[WARN] Assembly articulation setup on frame: {e}")
 
 if args.test:
+    app_utils.play()
+    for _i in range(10):
+        simulation_app.update()
+        if _i == 0:
+            init_articulations_and_poses()
     print("\n[VERIFICATION] ALL SELF-VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
     simulation_app.close()
     sys.exit(0)
 
+# ROS 2 Reset Mechanism setup
+assembly_sim_node = None
+assembly_reset_pub = None
+
+try:
+    import rclpy
+    from rclpy.node import Node
+    from std_msgs.msg import Empty
+
+    if not rclpy.ok():
+        rclpy.init()
+
+    assembly_sim_node = Node('assembly_sim_reset_node')
+    assembly_reset_pub = assembly_sim_node.create_publisher(Empty, '/reset_simulation', 10)
+    assembly_reset_sub = assembly_sim_node.create_subscription(
+        Empty, '/reset_simulation', lambda msg: reset_simulation(publish_to_ros=False), 10
+    )
+except Exception as e:
+    print(f"[WARN] ROS 2 reset node setup skipped: {e}")
+    assembly_sim_node = None
+
+def reset_simulation(publish_to_ros=True):
+    print("[RESET] Resetting robot arms and objects in assembly scene...")
+    global robot1_art, robot2_art, blocks, bar_rp, engine_rp
+    if robot1_art is None or robot2_art is None:
+        init_articulations_and_poses()
+    try:
+        reset_robot_articulation(robot1_art, [-0.7, 0.0, 0.20], [0.7071068, 0.0, 0.0, 0.7071068])
+        reset_robot_articulation(robot2_art, [0.7, 0.0, 0.20], [0.7071068, 0.0, 0.0, 0.7071068])
+
+        for idx, bp in enumerate(blocks):
+            if idx < len(nominal_poses):
+                reset_rigid_body(bp, nominal_poses[idx], [1.0, 0.0, 0.0, 0.0])
+
+        if bar_rp is not None:
+            reset_rigid_body(bar_rp, [0.0, 0.25, 0.35], [1.0, 0.0, 0.0, 0.0])
+
+        if engine_rp is not None:
+            reset_rigid_body(engine_rp, [0.0, -0.25, 0.245], [1.0, 0.0, 0.0, 0.0])
+
+        if publish_to_ros and assembly_reset_pub is not None:
+            try:
+                assembly_reset_pub.publish(Empty())
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"Failed to reset simulation: {e}")
+
+# UI Reset Button setup
+import omni.appwindow
+import carb.input
+import omni.ui as ui
+
+def on_keyboard_event(event, *args, **kwargs):
+    if event.type == carb.input.KeyboardEventType.KEY_PRESS:
+        if event.input.name in ["R", "I"]:
+            reset_simulation()
+    return True
+
+appwindow = omni.appwindow.get_default_app_window()
+input_interface = carb.input.acquire_input_interface()
+keyboard = appwindow.get_keyboard()
+sub_keyboard = input_interface.subscribe_to_keyboard_events(keyboard, on_keyboard_event)
+
+controls_window = ui.Window("Assembly Controls", width=400, height=100)
+with controls_window.frame:
+    with ui.VStack(spacing=10):
+        ui.Label("Controls:", height=20)
+        ui.Button("Initialize Poses / Reset Scene (R key)", clicked_fn=lambda: reset_simulation(), height=30)
+
 # Simulation loop
+frame_idx = 0
 while simulation_app.is_running():
     simulation_app.update()
+    if frame_idx == 0:
+        init_articulations_and_poses()
+    frame_idx += 1
+
+    if assembly_sim_node is not None:
+        try:
+            rclpy.spin_once(assembly_sim_node, timeout_sec=0.0)
+        except Exception:
+            pass
 
 simulation_app.close()

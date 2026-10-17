@@ -242,14 +242,19 @@ for robot_path, (mount_pos, mount_quat) in robot_mount_poses.items():
             if prim.GetName() in ("fr3_link8", "fr3_hand_tcp") or prim.HasAPI(UsdPhysics.MassAPI):
                 mass_api = UsdPhysics.MassAPI.Apply(prim)
                 mass_val = mass_api.GetMassAttr().Get() if mass_api.GetMassAttr().IsValid() else None
-                if mass_val is None or mass_val <= 0.0:
+                if prim.GetName() in ("fr3_link8", "fr3_hand_tcp") or mass_val is None or mass_val <= 0.0:
                     mass_api.CreateMassAttr().Set(1e-4)
                 inertia_val = (
                     mass_api.GetDiagonalInertiaAttr().Get()
                     if mass_api.GetDiagonalInertiaAttr().IsValid()
                     else None
                 )
-                if inertia_val is None or inertia_val == Gf.Vec3f(1.0, 1.0, 1.0):
+                if (
+                    prim.GetName() in ("fr3_link8", "fr3_hand_tcp")
+                    or inertia_val is None
+                    or inertia_val == Gf.Vec3f(0.0, 0.0, 0.0)
+                    or inertia_val == Gf.Vec3f(1.0, 1.0, 1.0)
+                ):
                     mass_api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(1e-6, 1e-6, 1e-6))
 
 # 5. Add Objects (Standard blocks, Long Bar, Heavy Engine Part)
@@ -452,6 +457,7 @@ try:
 except Exception as e:
     print(f"Error creating Action Graph: {e}")
 
+setup_overhead_camera_publishing()
 simulation_app.update()
 
 # 8. Articulations & Rigid Prims Management
@@ -582,7 +588,6 @@ def init_articulations_and_poses():
                 pass
         reset_rigid_body(engine_rp, [0.0, -0.25, 0.245], [1.0, 0.0, 0.0, 0.0])
 
-        setup_overhead_camera_publishing()
         print("[INFO] Assembly robot articulations, camera streams, and rigid bodies initialized successfully.")
     except Exception as e:
         print(f"[WARN] Assembly articulation setup on frame: {e}")
@@ -604,6 +609,7 @@ assembly_reset_pub = None
 _articulations_initialized = False
 _pending_reset = False
 _pending_reset_publish_ros = True
+_last_local_reset_pub_time = 0.0
 
 def request_reset(publish_to_ros=True):
     """Schedules a simulation reset to execute safely between frames in the main loop."""
@@ -612,6 +618,7 @@ def request_reset(publish_to_ros=True):
     _pending_reset_publish_ros = publish_to_ros
 
 try:
+    import time as _time
     import rclpy
     from rclpy.node import Node
     from std_msgs.msg import Empty
@@ -622,7 +629,10 @@ try:
     assembly_sim_node = Node('assembly_sim_reset_node')
     assembly_reset_pub = assembly_sim_node.create_publisher(Empty, '/reset_simulation', 10)
     assembly_reset_sub = assembly_sim_node.create_subscription(
-        Empty, '/reset_simulation', lambda msg: request_reset(publish_to_ros=False), 10
+        Empty,
+        '/reset_simulation',
+        lambda msg: None if (_time.monotonic() - _last_local_reset_pub_time < 0.25) else request_reset(publish_to_ros=False),
+        10,
     )
 except Exception as e:
     print(f"[WARN] ROS 2 reset node setup skipped: {e}")
@@ -655,6 +665,9 @@ def reset_simulation(publish_to_ros=True):
 
         if publish_to_ros and assembly_reset_pub is not None:
             try:
+                import time as _time
+                global _last_local_reset_pub_time
+                _last_local_reset_pub_time = _time.monotonic()
                 assembly_reset_pub.publish(Empty())
             except Exception:
                 pass

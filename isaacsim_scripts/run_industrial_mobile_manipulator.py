@@ -113,14 +113,19 @@ if robot_root_prim.IsValid():
         if prim.GetName() in ("fr3_link8", "fr3_hand_tcp") or prim.HasAPI(UsdPhysics.MassAPI):
             mass_api = UsdPhysics.MassAPI.Apply(prim)
             mass_val = mass_api.GetMassAttr().Get() if mass_api.GetMassAttr().IsValid() else None
-            if mass_val is None or mass_val <= 0.0:
+            if prim.GetName() in ("fr3_link8", "fr3_hand_tcp") or mass_val is None or mass_val <= 0.0:
                 mass_api.CreateMassAttr().Set(1e-4)
             inertia_val = (
                 mass_api.GetDiagonalInertiaAttr().Get()
                 if mass_api.GetDiagonalInertiaAttr().IsValid()
                 else None
             )
-            if inertia_val is None or inertia_val == Gf.Vec3f(1.0, 1.0, 1.0):
+            if (
+                prim.GetName() in ("fr3_link8", "fr3_hand_tcp")
+                or inertia_val is None
+                or inertia_val == Gf.Vec3f(0.0, 0.0, 0.0)
+                or inertia_val == Gf.Vec3f(1.0, 1.0, 1.0)
+            ):
                 mass_api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(1e-6, 1e-6, 1e-6))
 
 # Set up the camera view to overlook the workspace

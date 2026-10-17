@@ -135,9 +135,9 @@ class SpatialObjectSegmenter:
     @staticmethod
     def _classify_label(p_w: np.ndarray, aspect_ratio: float, item_idx: int) -> str:
         """Classify object label based on physical position and geometric aspect ratio."""
-        if aspect_ratio > 3.0 and p_w[1] < 0.0:
+        if aspect_ratio > 3.0 and -0.20 <= p_w[1] <= 0.30:
             return "LongBar"
-        if aspect_ratio > 2.0 and p_w[1] < -0.3:
+        if aspect_ratio > 2.0 and p_w[1] < -0.20:
             return "HeavyEnginePart"
         if p_w[1] > 0.35:
             return f"ConvItem{item_idx}"

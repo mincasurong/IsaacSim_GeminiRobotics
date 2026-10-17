@@ -264,7 +264,7 @@ class DualArmPickTrajectory(BimanualSynchronizedTrajectory):
 class DualArmPlaceTrajectory(BimanualSynchronizedTrajectory):
     """Computes synchronized quintic polynomial placement with release & retract phases."""
 
-    def __init__(self, target_x: float = 0.0, target_y: float = 0.25, total_steps: int = 35):
+    def __init__(self, target_x: float = 0.0, target_y: float = 0.0, total_steps: int = 35):
         super().__init__(steps=total_steps)
         self.target_x = target_x
         self.target_y = target_y
@@ -380,7 +380,7 @@ class ConveyorDualController(MultiRobotController):
                 off1 = float(cmd.get('offset_1', -0.25))
                 off2 = float(cmd.get('offset_2', 0.25))
 
-                bar_pos_w = np.array([0.0, 0.25, 0.345], dtype=float)
+                bar_pos_w = np.array([0.0, 0.0, 0.345], dtype=float)
                 try:
                     trans = self.tf_buffer.lookup_transform('world', block_name, rclpy.time.Time())
                     bar_pos_w = np.array([
@@ -436,7 +436,7 @@ class ConveyorDualController(MultiRobotController):
                 speed = cmd.get('speed', 'fast')
                 steps = 30 if speed == 'fast' else (70 if speed == 'slow' else 45)
                 tx = float(cmd.get('x', 0.0))
-                ty = float(cmd.get('y', 0.25))
+                ty = float(cmd.get('y', 0.0))
 
                 self.place_strategy = DualArmPlaceTrajectory(target_x=tx, target_y=ty, total_steps=steps)
                 self.place_strategy.initialize(self.q_current1, self.q_current2)

@@ -1,21 +1,27 @@
-# OVERVIEW
-Standalone NVIDIA Isaac Sim 6.0 (Kit 110) Python simulation scenes, mirrored identically in `D:\git\isaacsim\src\isaacsim\source\standalone_examples\api\isaacsim.ros2.bridge\`.
+# KNOWLEDGE BASE
+
+## OVERVIEW
+Isaac Sim 6.0 standalone Python scenes configuring OmniGraph to communicate with ROS 2 over FastDDS.
+
+## STRUCTURE
+```
+isaacsim_scripts/
+├── three_robot_tower.py
+├── conveyor_dual_robot.py
+└── assembly_dual_robot.py
+```
 
 ## WHERE TO LOOK
-| Script | Mode | Active Robots & Scene Details |
-|--------|------|-------------------------------|
-| `three_robot_tower.py` | Mode 1 | 3x Franka FR3 on `/MainTable` ($Z=0.20\text{m}, R=0.45\text{m}$), 3 source tables ($R=1.05\text{m}$), central `/TargetTable` ($Z=0.30\text{m}$), 9 randomized blocks |
-| `conveyor_dual_robot.py` | Mode 5 | 2x FR3 at $X=\pm 0.7\text{m}$, continuous $+X$ conveyor belt, `/BufferTable` at $[0.0, 0.25, 0.16]$, bimanual `LongBar` (0.8m) & `HeavyEnginePart` |
-| `assembly_dual_robot.py` | Mode 6 | 2x FR3 cooperative sub-assembly and multi-part staging (ATAMP skill library) |
-| `assemble_industrial_mobile_manipulator.py` / `run_industrial_mobile_manipulator.py` | Mode 2 | OpenUSD composition & runtime for Nova Carter AMR base + Franka FR3 manipulator |
+| Task | Location | Notes |
+|------|----------|-------|
+| Isaac Sim scenes & OmniGraph | `*.py` | Synced with `isaacsim.ros2.bridge` |
 
-## CONVENTIONS & ANTI-PATTERNS
-- **Strict Import Order**: `from isaacsim.simulation_app import SimulationApp` and `simulation_app = SimulationApp(CONFIG)` MUST precede `import numpy`, `import omni.*`, and `from pxr import ...` so Kit mounts its internal `pip_prebundle` (NumPy 2.3.1), and preload `exts/isaacsim.ros2.core/jazzy/lib/tinyxml2.dll` via `ctypes.WinDLL` before `SimulationApp(CONFIG)` so `omni.kit.asset_converter` cannot shadow FastDDS's `tinyxml2.dll`.
-- **PhysX Stability & Joint/Inertia Sanitization**:
-  - `FrankaFR3/fr3.usd` authors `xformOpOrder = [xformOp:translate, xformOp:orient, xformOp:scale]`, which causes `UsdGeom.XformCommonAPI(prim).SetTranslate(...)` and `SetRotate(...)` to return `False` without modifying the transform. Always call `xf.ClearXformOpOrder()`, `xf.AddTranslateOp().Set(...)`, and `xf.AddOrientOp(UsdGeom.XformOp.PrecisionDouble).Set(...)` on `/FR3_*` and align `/FR3_*/root_joint` `localPos0` / `localRot0` with the same `(mount_pos, mount_quat)` so PhysX never logs `CreateJoint - found a joint with disjointed body transforms`.
-  - Author initial home joint positions and PD drive targets (`drive:angular:physics:targetPosition` / `state:angular:physics:position` = `[0, 0, 0, -90, 0, 90, 45]` deg, gripper = `[0.04, 0.04]` m) on the USD stage before `app_utils.play()`, and map DOF targets by `robot_art.dof_names` in `reset_robot_articulation()`.
-  - Sanitize `fr3_link8` and `fr3_hand_tcp` (`UsdPhysics.MassAPI`: `mass = 1e-4`, `diagonalInertia = (1e-6, 1e-6, 1e-6)`) and cap `PhysxArticulationAPI` `solverVelocityIterationCount = 4`.
-- **No Re-Entrant `simulation_app.update()` in UI/Keyboard/ROS Callbacks**:
-  - `omni.ui.Button` `clicked_fn` and `carb.input` callbacks execute mid-frame while `omni.rtx` is recording the GPU command list (`actualState: Recording`). Calling `simulation_app.update()` or `app_utils.play()` + `simulation_app.update()` inside a callback triggers `cmdBegin` before `cmdEnd` and crashes the Vulkan/RTX renderer.
-  - Always defer resets and adversarial impulses via `request_reset()` / `request_adversarial_push()` (`_pending_reset = True`, `_pending_adversarial_push = True`) and execute them in the main `while simulation_app.is_running():` loop between `simulation_app.update()` ticks.
-- **TF Publishing (`OgnIsaacComputeTransformTree` -> `OgnROS2PublishTransformTree`)**: Wire `isaacsim.core.nodes.IsaacComputeTransformTree` (`ComputeTF.inputs:targetPrims`) into `PublishTF.inputs:{parentFrames,childFrames,translations,orientations}` instead of deprecated `PublishTF.inputs:targetPrims`.
+## CONVENTIONS
+- Isaac Sim Import Order: `from isaacsim.simulation_app import SimulationApp` and `simulation_app = SimulationApp(CONFIG)` MUST execute before `import numpy`, `import omni.*`, or `from pxr import ...` so Kit mounts its internal `pip_prebundle`.
+
+## ANTI-PATTERNS (THIS PROJECT)
+- No In-Process `rclpy.Node` in Sim Scripts: Never instantiate an `rclpy.Node` inside Isaac Sim Windows scripts alongside `isaacsim.ros2.bridge` (causes dual-context FastDDS access violations); use OmniGraph nodes exclusively.
+- Never Overwrite `m=0.0` or `i=(0,0,0)` on Real FR3 Links or Fingers: In OpenUSD `UsdPhysics.MassAPI`, `mass = 0.0` and `diagonalInertia = (0, 0, 0)` are the auto-compute sentinels for links with `/collisions` meshes (`fr3_link0..7`, `fr3_hand`, `fr3_leftfinger`, `fr3_rightfinger`). Only apply `mass = 1e-4, diagonalInertia = (1e-6, 1e-6, 1e-6)` to the massless virtual frames `("fr3_link8", "fr3_hand_tcp")`.
+- Always Bind Physics Friction Materials: Define `UsdShade.Material` + `UsdPhysics.MaterialAPI` (`staticFriction=1.2, dynamicFriction=1.0`) and bind to blocks/objects and `fr3_leftfinger`/`fr3_rightfinger` via `UsdShade.MaterialBindingAPI.Apply(prim).Bind(mat, UsdShade.Tokens.weakerThanDescendants, "physics")`.
+- No Re-Entrant `simulation_app.update()` in UI/Keyboard/ROS Callbacks: Always defer resets via `request_reset()` (`_pending_reset = True`) and execute in the main loop between `simulation_app.update()` ticks.
+- Kill Zombie `kit.exe` before starting a new simulation.

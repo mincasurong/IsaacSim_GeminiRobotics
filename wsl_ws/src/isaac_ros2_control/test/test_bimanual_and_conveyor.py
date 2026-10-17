@@ -28,7 +28,7 @@ class TestBimanualAndConveyorKinematics(unittest.TestCase):
     def setUp(self):
         # Franka FR3 nominal home configuration (7-DOF)
         self.q_home = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
-        self.bar_world_pos = np.array([0.0, 0.25, 0.345])
+        self.bar_world_pos = np.array([0.0, 0.0, 0.345])
         self.conveyor_speed = 0.15 # 15 cm/s
 
     def test_dual_arm_pick_trajectory_synchronization(self):

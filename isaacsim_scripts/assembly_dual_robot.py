@@ -80,15 +80,15 @@ if assets_root_path is None:
 
 stage = omni.usd.get_context().get_stage()
 
-# ── Physics Scene: GPU broadphase + TGS solver for stable simulation ───────────
+# ── Physics Scene: Stable CPU MBP broadphase + TGS solver (prevents GPU articulation explosions) ───
 physics_scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
 physics_scene.CreateGravityDirectionAttr().Set(Gf.Vec3f(0.0, 0.0, -1.0))
 physics_scene.CreateGravityMagnitudeAttr().Set(9.81)
 try:
     from pxr import PhysxSchema
     physx_scene_api = PhysxSchema.PhysxSceneAPI.Apply(stage.GetPrimAtPath("/PhysicsScene"))
-    physx_scene_api.CreateEnableGPUDynamicsAttr().Set(True)
-    physx_scene_api.CreateBroadphaseTypeAttr().Set("GPU")
+    physx_scene_api.CreateEnableGPUDynamicsAttr().Set(False)
+    physx_scene_api.CreateBroadphaseTypeAttr().Set("MBP")
     physx_scene_api.CreateSolverTypeAttr().Set("TGS")        # Temporal Gauss-Seidel
 except Exception as e:
     print(f"Warning: Failed to set PhysX TGS solver: {e}")
@@ -147,14 +147,14 @@ kin_conv = conveyor_table.GetPrim().GetAttribute("physics:kinematicEnabled")
 if kin_conv.IsValid():
     kin_conv.Set(True)
 
-# 3.5 Add Front Assembly Buffer Table (Staging for LongBar & Assembly)
-print("Creating Front Assembly Buffer Table...")
+# 3.5 Add Center Assembly Buffer Table (Centered between FR3_1 and FR3_2)
+print("Creating Center Assembly Buffer Table...")
 buffer_table = UsdGeom.Cube.Define(stage, "/BufferTable")
 buffer_table.GetSizeAttr().Set(1.0)
 xform_buf = UsdGeom.Xformable(buffer_table.GetPrim())
 xform_buf.ClearXformOpOrder()
-xform_buf.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.16))  # Top surface at Z=0.32m
-xform_buf.AddScaleOp().Set(Gf.Vec3f(1.6, 0.18, 0.32))       # Bridges between MainTable and ConveyorTable
+xform_buf.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.16))  # Top surface at Z=0.32m, centered at [0.0, 0.0]
+xform_buf.AddScaleOp().Set(Gf.Vec3f(0.95, 0.24, 0.32))       # Fits cleanly between FR3_1 (-0.7) and FR3_2 (+0.7)
 buffer_table.CreateDisplayColorAttr().Set([Gf.Vec3f(0.28, 0.30, 0.34)])
 
 UsdPhysics.RigidBodyAPI.Apply(buffer_table.GetPrim())
@@ -259,6 +259,7 @@ for robot_path, (mount_pos, mount_quat) in robot_mount_poses.items():
         for prim in Usd.PrimRange(robot_root_prim):
             if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
                 physx_art = PhysxSchema.PhysxArticulationAPI.Apply(prim)
+                physx_art.CreateSolverPositionIterationCountAttr().Set(32)
                 physx_art.CreateSolverVelocityIterationCountAttr().Set(4)
             jname = prim.GetName()
             if jname in usd_home_deg:
@@ -273,23 +274,10 @@ for robot_path, (mount_pos, mount_quat) in robot_mount_poses.items():
                     attr = prim.GetAttribute(attr_name)
                     if attr.IsValid():
                         attr.Set(lin_val)
-            if jname in ("fr3_link8", "fr3_hand_tcp") or prim.HasAPI(UsdPhysics.MassAPI):
+            if jname in ("fr3_link8", "fr3_hand_tcp"):
                 mass_api = UsdPhysics.MassAPI.Apply(prim)
-                mass_val = mass_api.GetMassAttr().Get() if mass_api.GetMassAttr().IsValid() else None
-                if jname in ("fr3_link8", "fr3_hand_tcp") or mass_val is None or mass_val <= 0.0:
-                    mass_api.CreateMassAttr().Set(1e-4)
-                inertia_val = (
-                    mass_api.GetDiagonalInertiaAttr().Get()
-                    if mass_api.GetDiagonalInertiaAttr().IsValid()
-                    else None
-                )
-                if (
-                    jname in ("fr3_link8", "fr3_hand_tcp")
-                    or inertia_val is None
-                    or inertia_val == Gf.Vec3f(0.0, 0.0, 0.0)
-                    or inertia_val == Gf.Vec3f(1.0, 1.0, 1.0)
-                ):
-                    mass_api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(1e-6, 1e-6, 1e-6))
+                mass_api.CreateMassAttr().Set(1e-4)
+                mass_api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(1e-6, 1e-6, 1e-6))
 
 # 5. Add Objects (Standard blocks, Long Bar, Heavy Engine Part)
 nominal_poses = [
@@ -310,18 +298,19 @@ for i, pos in enumerate(nominal_poses):
     UsdPhysics.RigidBodyAPI.Apply(block.GetPrim())
     UsdPhysics.CollisionAPI.Apply(block.GetPrim())
 
-# Long Bar (Requires dual arm)
+# Long Bar (Requires dual arm, centered between FR3_1 and FR3_2 at [0.0, 0.0, 0.35])
 bar_path = "/LongBar"
 bar = UsdGeom.Cube.Define(stage, bar_path)
 bar.GetSizeAttr().Set(1.0)
 xform = UsdGeom.Xformable(bar.GetPrim())
 xform.ClearXformOpOrder()
-xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.25, 0.35))
+xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.35))
 xform.AddScaleOp().Set(Gf.Vec3f(0.8, 0.045, 0.045))  # 80cm long
 bar.CreateDisplayColorAttr().Set([Gf.Vec3f(0.1, 0.1, 0.9)])  # Blue
 
 UsdPhysics.RigidBodyAPI.Apply(bar.GetPrim())
 UsdPhysics.CollisionAPI.Apply(bar.GetPrim())
+UsdPhysics.MassAPI.Apply(bar.GetPrim()).CreateMassAttr().Set(0.25)
 
 # Heavy Engine Part (Asymmetric, requires offset grasping)
 engine_path = "/HeavyEnginePart"
@@ -492,7 +481,8 @@ except Exception as e:
     print(f"Error creating Action Graph: {e}")
 
 setup_overhead_camera_publishing()
-simulation_app.update()
+for _ in range(3):
+    simulation_app.update()
 
 # 8. Articulations & Rigid Prims Management
 robot1_art = None
@@ -519,20 +509,11 @@ q_home_dict = {
 }
 
 def reset_robot_articulation(robot_art, pos=None, quat_wxyz=None):
-    """Resets a Franka FR3 robot articulation to its mount pose and home DOF configuration."""
+    """Resets a Franka FR3 robot articulation to its home DOF configuration."""
     if robot_art is None:
         return
     if hasattr(app_utils, "is_playing") and not app_utils.is_playing():
         return
-
-    if pos is not None and quat_wxyz is not None:
-        try:
-            robot_art.set_world_poses(
-                positions=np.array([pos], dtype=float),
-                orientations=np.array([quat_wxyz], dtype=float),
-            )
-        except Exception as e:
-            print(f"[WARN] set_world_poses on robot failed: {e}")
 
     dof_names = list(getattr(robot_art, "dof_names", []) or [])
     if dof_names:
@@ -640,7 +621,7 @@ def init_articulations_and_poses():
                 bar_rp.initialize()
             except Exception:
                 pass
-        reset_rigid_body(bar_rp, [0.0, 0.25, 0.35], [1.0, 0.0, 0.0, 0.0])
+        reset_rigid_body(bar_rp, [0.0, 0.0, 0.35], [1.0, 0.0, 0.0, 0.0])
 
         engine_rp = RigidPrim("/HeavyEnginePart")
         if hasattr(engine_rp, "initialize"):
@@ -720,7 +701,7 @@ def reset_simulation(publish_to_ros=True):
                 reset_rigid_body(bp, nominal_poses[idx], [1.0, 0.0, 0.0, 0.0])
 
         if bar_rp is not None:
-            reset_rigid_body(bar_rp, [0.0, 0.25, 0.35], [1.0, 0.0, 0.0, 0.0])
+            reset_rigid_body(bar_rp, [0.0, 0.0, 0.35], [1.0, 0.0, 0.0, 0.0])
 
         if engine_rp is not None:
             reset_rigid_body(engine_rp, [0.0, -0.25, 0.245], [1.0, 0.0, 0.0, 0.0])

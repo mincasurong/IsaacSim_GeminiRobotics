@@ -794,7 +794,7 @@ All actions are strictly intercepted and verified by the Rule-Based Task Verifie
             elif name == "dual_arm_place":
                 result = self._fn_dual_arm_place(
                     float(args.get("x", 0.0)),
-                    float(args.get("y", 0.25)),
+                    float(args.get("y", 0.0)),
                     args.get("speed", "fast")
                 )
             elif name == "verify_tower":
@@ -970,7 +970,7 @@ All actions are strictly intercepted and verified by the Rule-Based Task Verifie
         self.action_pub.publish(msg)
         return self._wait_for_action_complete("global", timeout=45.0)
 
-    def _fn_dual_arm_place(self, x: float = 0.0, y: float = 0.25, speed: str = 'fast') -> dict:
+    def _fn_dual_arm_place(self, x: float = 0.0, y: float = 0.0, speed: str = 'fast') -> dict:
         """Dispatch synchronized bimanual Cartesian placement."""
         msg = String()
         msg.data = json.dumps({

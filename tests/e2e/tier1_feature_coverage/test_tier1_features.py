@@ -26,7 +26,7 @@ def test_bimanual_pick_trajectory():
     q_home = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
     quat = kinematics.compute_symmetric_grasp_quat(np.pi / 2.0, np.pi / 2.0)
     pick = DualArmPickTrajectory(
-        bar_pos_w=np.array([0.0, 0.25, 0.345]),
+        bar_pos_w=np.array([0.0, 0.0, 0.345]),
         off1=-0.20,
         off2=0.20,
         hover_height=0.10,

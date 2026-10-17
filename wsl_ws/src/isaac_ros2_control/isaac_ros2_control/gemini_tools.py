@@ -139,12 +139,12 @@ def get_robot_tools():
             ),
             types.FunctionDeclaration(
                 name="dual_arm_place",
-                description="Coordinately place the dual-arm held object (LongBar or HeavyEnginePart) at target table coordinates (default x=0.0, y=0.25).",
+                description="Coordinately place the dual-arm held object (LongBar or HeavyEnginePart) at target table coordinates (default x=0.0, y=0.0).",
                 parameters=types.Schema(
                     type="OBJECT",
                     properties={
                         "x": types.Schema(type="NUMBER", description="Target X coordinate (default 0.0)."),
-                        "y": types.Schema(type="NUMBER", description="Target Y coordinate (default 0.25)."),
+                        "y": types.Schema(type="NUMBER", description="Target Y coordinate (default 0.0)."),
                         "speed": types.Schema(type="STRING", enum=["fast", "normal", "slow"], description="Movement speed."),
                     },
                 ),

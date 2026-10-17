@@ -37,7 +37,7 @@ TABLE_ZONES = {
     'table_2': {'center': np.array([0.909, 0.525]), 'radius': 0.35},
     'table_3': {'center': np.array([-0.909, 0.525]), 'radius': 0.35},
     'main_workbench': {'center': np.array([0.0, -0.25]), 'radius': 1.40},
-    'assembly_buffer': {'center': np.array([0.0, 0.25]), 'radius': 1.20},
+    'assembly_buffer': {'center': np.array([0.0, 0.0]), 'radius': 1.20},
     'conveyor_belt': {'center': np.array([0.0, 0.50]), 'radius': 1.50},
 }
 
@@ -343,7 +343,7 @@ class RuleBasedTaskVerifier:
                self.robot_holding.get('FR3_2') in ['LongBar', 'HeavyEnginePart']:
                 sanitized['action'] = 'dual_arm_place'
                 sanitized['x'] = float(sanitized.get('x', 0.0))
-                sanitized['y'] = float(sanitized.get('y', 0.25))
+                sanitized['y'] = float(sanitized.get('y', 0.0))
                 sanitized['speed'] = sanitized.get('speed', 'fast')
                 self.robot_holding['FR3_1'] = None
                 self.robot_holding['FR3_2'] = None

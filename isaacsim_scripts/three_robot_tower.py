@@ -254,6 +254,7 @@ for robot_path, (mount_pos, mount_quat) in robot_mount_poses.items():
         for prim in Usd.PrimRange(robot_root_prim):
             if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
                 physx_art = PhysxSchema.PhysxArticulationAPI.Apply(prim)
+                physx_art.CreateSolverPositionIterationCountAttr().Set(32)
                 physx_art.CreateSolverVelocityIterationCountAttr().Set(4)
             jname = prim.GetName()
             if jname in usd_home_deg:
@@ -268,23 +269,12 @@ for robot_path, (mount_pos, mount_quat) in robot_mount_poses.items():
                     attr = prim.GetAttribute(attr_name)
                     if attr.IsValid():
                         attr.Set(lin_val)
-            if jname in ("fr3_link8", "fr3_hand_tcp") or prim.HasAPI(UsdPhysics.MassAPI):
+            # IMPORTANT: Only assign dummy mass/inertia to massless virtual frames (fr3_link8, fr3_hand_tcp).
+            # Never overwrite m=0.0 / i=(0,0,0) on real links or fingers (UsdPhysics auto-computes them from colliders).
+            if jname in ("fr3_link8", "fr3_hand_tcp"):
                 mass_api = UsdPhysics.MassAPI.Apply(prim)
-                mass_val = mass_api.GetMassAttr().Get() if mass_api.GetMassAttr().IsValid() else None
-                if jname in ("fr3_link8", "fr3_hand_tcp") or mass_val is None or mass_val <= 0.0:
-                    mass_api.CreateMassAttr().Set(1e-4)
-                inertia_val = (
-                    mass_api.GetDiagonalInertiaAttr().Get()
-                    if mass_api.GetDiagonalInertiaAttr().IsValid()
-                    else None
-                )
-                if (
-                    jname in ("fr3_link8", "fr3_hand_tcp")
-                    or inertia_val is None
-                    or inertia_val == Gf.Vec3f(0.0, 0.0, 0.0)
-                    or inertia_val == Gf.Vec3f(1.0, 1.0, 1.0)
-                ):
-                    mass_api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(1e-6, 1e-6, 1e-6))
+                mass_api.CreateMassAttr().Set(1e-4)
+                mass_api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(1e-6, 1e-6, 1e-6))
 
 simulation_app.update()
 
@@ -366,11 +356,11 @@ for i, pos in enumerate(nominal_block_poses):
         
         UsdPhysics.RigidBodyAPI.Apply(cube.GetPrim())
         UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
-        # Mass: 300g block with realistic inertia
+        # Mass: 150g block with realistic inertia for stable parallel-jaw grasping
         mass_api_c = UsdPhysics.MassAPI.Apply(cube.GetPrim())
-        mass_api_c.CreateMassAttr().Set(0.3)
+        mass_api_c.CreateMassAttr().Set(0.15)
     else:
-        # Cylinder (height 0.06m, radius 0.03m)
+        # Cylinder (height 0.045m, radius 0.0225m)
         cylinder = UsdGeom.Cylinder.Define(stage, block_path)
         cylinder.GetHeightAttr().Set(0.045)
         cylinder.GetRadiusAttr().Set(0.0225)
@@ -384,26 +374,46 @@ for i, pos in enumerate(nominal_block_poses):
         UsdPhysics.RigidBodyAPI.Apply(cylinder.GetPrim())
         UsdPhysics.CollisionAPI.Apply(cylinder.GetPrim())
         mass_api_y = UsdPhysics.MassAPI.Apply(cylinder.GetPrim())
-        mass_api_y.CreateMassAttr().Set(0.3)
+        mass_api_y.CreateMassAttr().Set(0.15)
 
-# ── Physics Materials: Friction Coefficients ─────────────────────────────────
+# ── Physics Materials: Friction Coefficients & Explicit Prim Binding ──────────
 print("Applying physics friction materials...")
 try:
     from pxr import UsdShade
-    # Block material: rubber-like, high friction (grasping surface)
-    block_mat = UsdPhysics.MaterialAPI.Apply(
-        UsdGeom.Xform.Define(stage, "/Looks/BlockPhysMat").GetPrim()
-    )
-    block_mat.CreateStaticFrictionAttr().Set(0.8)
-    block_mat.CreateDynamicFrictionAttr().Set(0.6)
-    block_mat.CreateRestitutionAttr().Set(0.05)
+    # Block & Gripper material: high-friction rubberized grasping surface
+    block_mat_shade = UsdShade.Material.Define(stage, "/Looks/BlockPhysMat")
+    block_mat = UsdPhysics.MaterialAPI.Apply(block_mat_shade.GetPrim())
+    block_mat.CreateStaticFrictionAttr().Set(1.2)
+    block_mat.CreateDynamicFrictionAttr().Set(1.0)
+    block_mat.CreateRestitutionAttr().Set(0.0)
+
     # Table material: smooth metal surface
-    table_mat = UsdPhysics.MaterialAPI.Apply(
-        UsdGeom.Xform.Define(stage, "/Looks/TablePhysMat").GetPrim()
-    )
-    table_mat.CreateStaticFrictionAttr().Set(0.5)
-    table_mat.CreateDynamicFrictionAttr().Set(0.4)
-    table_mat.CreateRestitutionAttr().Set(0.02)
+    table_mat_shade = UsdShade.Material.Define(stage, "/Looks/TablePhysMat")
+    table_mat = UsdPhysics.MaterialAPI.Apply(table_mat_shade.GetPrim())
+    table_mat.CreateStaticFrictionAttr().Set(0.6)
+    table_mat.CreateDynamicFrictionAttr().Set(0.5)
+    table_mat.CreateRestitutionAttr().Set(0.0)
+
+    # Bind BlockPhysMat to all 9 blocks and all robot gripper fingers
+    for i in range(9):
+        b_prim = stage.GetPrimAtPath(f"/Block{i+1}")
+        if b_prim.IsValid():
+            UsdShade.MaterialBindingAPI.Apply(b_prim).Bind(
+                block_mat_shade, UsdShade.Tokens.weakerThanDescendants, "physics"
+            )
+    for robot_path in ("/FR3_1", "/FR3_2", "/FR3_3"):
+        for finger_name in ("fr3_leftfinger", "fr3_rightfinger"):
+            f_prim = stage.GetPrimAtPath(f"{robot_path}/{finger_name}")
+            if f_prim.IsValid():
+                UsdShade.MaterialBindingAPI.Apply(f_prim).Bind(
+                    block_mat_shade, UsdShade.Tokens.weakerThanDescendants, "physics"
+                )
+    for t_path in ("/MainTable", "/Table1", "/Table2", "/Table3", "/TargetTable"):
+        t_prim = stage.GetPrimAtPath(t_path)
+        if t_prim.IsValid():
+            UsdShade.MaterialBindingAPI.Apply(t_prim).Bind(
+                table_mat_shade, UsdShade.Tokens.weakerThanDescendants, "physics"
+            )
 except Exception as mat_err:
     print(f"[WARN] Physics material setup: {mat_err}")
 
@@ -597,10 +607,12 @@ try:
 except Exception as e:
     print(f"Error creating Action Graph: {e}")
 
-# Initialize overhead camera Replicator graph BEFORE app_utils.play() so USD node creation
-# never invalidates active PhysX JointStateSensor articulation views during simulation.
+# Initialize overhead camera Replicator graph and step 3 frames BEFORE app_utils.play()
+# so Replicator completes its multi-frame SDGPipeline/WriterSyncGate USD node creation
+# before PhysX JointStateSensor articulation views are created.
 setup_overhead_camera_publishing()
-simulation_app.update()
+for _ in range(3):
+    simulation_app.update()
 
 # 8. Articulations & Rigid Prims Management
 robot1_art = None
@@ -633,20 +645,11 @@ q_home_dict = {
 }
 
 def reset_robot_articulation(robot_art, pos=None, quat_wxyz=None):
-    """Resets a Franka FR3 robot articulation to its mount pose and home DOF configuration."""
+    """Resets a Franka FR3 robot articulation to its home DOF configuration."""
     if robot_art is None:
         return
     if hasattr(app_utils, "is_playing") and not app_utils.is_playing():
         return
-
-    if pos is not None and quat_wxyz is not None:
-        try:
-            robot_art.set_world_poses(
-                positions=np.array([pos], dtype=float),
-                orientations=np.array([quat_wxyz], dtype=float),
-            )
-        except Exception as e:
-            print(f"[WARN] set_world_poses on robot failed: {e}")
 
     dof_names = list(getattr(robot_art, "dof_names", []) or [])
     if dof_names:

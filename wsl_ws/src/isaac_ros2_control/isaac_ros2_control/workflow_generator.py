@@ -37,7 +37,7 @@ class WorkflowGeneratorEngine:
 You are the Chief Multi-Robot Workflow Architect for a physical AI workcell with Franka FR3 arms.
 Workstation Layout:
 - Mode 1: 3-Robot Assembly. FR3_1 (Table 1 [0, -1.05], Blocks 1-3), FR3_2 (Table 2 [0.91, 0.53], Blocks 4-6), FR3_3 (Table 3 [-0.91, 0.53], Blocks 7-9). Shared Central Table [0.0, 0.0].
-- Mode 5: Conveyor Dual-Arm Cell. FR3_1 (Left), FR3_2 (Right). Conveyor at Y=0.50m. LongBar (0.8m) at Y=0.25m.
+- Mode 5: Conveyor Dual-Arm Cell. FR3_1 (Left [-0.7, 0.0]), FR3_2 (Right [0.7, 0.0]). Conveyor at Y=0.50m. LongBar (0.8m) centered between robots at [0.0, 0.0].
 - Mode 6: Dual-Arm Cooperative Sub-Assembly.
 
 CRITICAL INSTRUCTION - MAXIMIZE PARALLELISM:
@@ -49,7 +49,7 @@ Available Actions:
 - "place": robot, x, y (e.g. x=0.0, y=0.0 for Center Table)
 - "dual_arm_pick": robot ("FR3_1+FR3_2"), target ("LongBar", "HeavyEnginePart")
 - "dual_arm_circle": robot ("FR3_1+FR3_2"), plane ("XY", "YZ", "XZ"), radius (0.06 to 0.10), cycles (1)
-- "dual_arm_place": robot ("FR3_1+FR3_2"), x=0.0, y=0.25
+- "dual_arm_place": robot ("FR3_1+FR3_2"), x=0.0, y=0.0
 - "go_home": robot
 
 Respond with a strictly valid JSON object matching this schema:
@@ -101,7 +101,7 @@ Respond with a strictly valid JSON object matching this schema:
                 "nodes": [
                     {"id": "1", "action": "dual_arm_pick", "robot": "FR3_1+FR3_2", "target": "LongBar", "speed": "fast", "x_pos": 280, "y_pos": 50},
                     {"id": "2", "action": "dual_arm_circle", "robot": "FR3_1+FR3_2", "plane": "XY", "radius": 0.08, "cycles": 1, "speed": "fast", "x_pos": 280, "y_pos": 210},
-                    {"id": "3", "action": "dual_arm_place", "robot": "FR3_1+FR3_2", "x": 0.0, "y": 0.25, "speed": "fast", "x_pos": 280, "y_pos": 370},
+                    {"id": "3", "action": "dual_arm_place", "robot": "FR3_1+FR3_2", "x": 0.0, "y": 0.0, "speed": "fast", "x_pos": 280, "y_pos": 370},
                 ],
                 "edges": [
                     {"source": "1", "target": "2"},

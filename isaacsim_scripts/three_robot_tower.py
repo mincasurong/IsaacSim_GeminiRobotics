@@ -201,22 +201,55 @@ configure_robot_tf_names("/FR3_1", "FR3_1", use_prefix_for_links=False)
 configure_robot_tf_names("/FR3_2", "FR3_2", use_prefix_for_links=True)
 configure_robot_tf_names("/FR3_3", "FR3_3", use_prefix_for_links=True)
 
-# Fix exploding robot physics: force fr3_link0 to be dynamic. 
-# In PhysX 5, kinematic roots break Articulations. We dynamically anchor them to the world.
-for robot_path in ["/FR3_1", "/FR3_2", "/FR3_3"]:
+# Fix exploding robot physics & PhysX warnings:
+# 1. Force fr3_link0 to be dynamic and align /FR3_*/root_joint localPos0/localRot0 with the robot's world mount pose.
+# 2. Fix negative mass / {1, 1, 1} dummy inertia tensor on virtual links (fr3_link8, fr3_hand_tcp).
+# 3. Cap TGS solverVelocityIterationCount to 4 on articulation roots.
+from pxr import PhysxSchema, UsdPhysics
+
+robot_mount_poses = {
+    "/FR3_1": (Gf.Vec3f(0.0, -0.45, 0.20), Gf.Quatf(0.1045285, 0.0, 0.0, 0.9945219)),
+    "/FR3_2": (Gf.Vec3f(0.3897, 0.225, 0.20), Gf.Quatf(0.8480481, 0.0, 0.0, -0.5299193)),
+    "/FR3_3": (Gf.Vec3f(-0.3897, 0.225, 0.20), Gf.Quatf(0.9335804, 0.0, 0.0, 0.3583679)),
+}
+
+for robot_path, (mount_pos, mount_quat) in robot_mount_poses.items():
+    robot_root_prim = stage.GetPrimAtPath(robot_path)
     base_prim = stage.GetPrimAtPath(robot_path + "/fr3_link0")
     if base_prim.IsValid():
         kin_attr = base_prim.GetAttribute("physics:kinematicEnabled")
         if not kin_attr.IsValid():
             kin_attr = base_prim.CreateAttribute("physics:kinematicEnabled", Sdf.ValueTypeNames.Bool)
         kin_attr.Set(False)
-        
-        from pxr import UsdPhysics
-        joint_path = robot_path + "/world_fixed_anchor"
-        if not stage.GetPrimAtPath(joint_path).IsValid():
-            fixed_joint = UsdPhysics.FixedJoint.Define(stage, joint_path)
-            # Leaving Body0 empty implicitly targets the World
+
+        root_joint_prim = stage.GetPrimAtPath(robot_path + "/root_joint")
+        if root_joint_prim.IsValid():
+            fixed_joint = UsdPhysics.FixedJoint(root_joint_prim)
+        else:
+            fixed_joint = UsdPhysics.FixedJoint.Define(stage, robot_path + "/root_joint")
             fixed_joint.CreateBody1Rel().SetTargets([base_prim.GetPath()])
+        fixed_joint.CreateLocalPos0Attr().Set(mount_pos)
+        fixed_joint.CreateLocalRot0Attr().Set(mount_quat)
+        fixed_joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+        fixed_joint.CreateLocalRot1Attr().Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+
+    if robot_root_prim.IsValid():
+        for prim in Usd.PrimRange(robot_root_prim):
+            if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+                physx_art = PhysxSchema.PhysxArticulationAPI.Apply(prim)
+                physx_art.CreateSolverVelocityIterationCountAttr().Set(4)
+            if prim.GetName() in ("fr3_link8", "fr3_hand_tcp") or prim.HasAPI(UsdPhysics.MassAPI):
+                mass_api = UsdPhysics.MassAPI.Apply(prim)
+                mass_val = mass_api.GetMassAttr().Get() if mass_api.GetMassAttr().IsValid() else None
+                if mass_val is None or mass_val <= 0.0:
+                    mass_api.CreateMassAttr().Set(1e-4)
+                inertia_val = (
+                    mass_api.GetDiagonalInertiaAttr().Get()
+                    if mass_api.GetDiagonalInertiaAttr().IsValid()
+                    else None
+                )
+                if inertia_val is None or inertia_val == Gf.Vec3f(1.0, 1.0, 1.0):
+                    mass_api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(1e-6, 1e-6, 1e-6))
 
 simulation_app.update()
 
@@ -349,10 +382,17 @@ xform_cam.ClearXformOpOrder()
 xform_cam.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 1.8))
 xform_cam.AddRotateXYZOp().Set(Gf.Vec3f(0.0, 90.0, 0.0))  # Downward looking
 
+_camera_initialized = False
+
 def setup_overhead_camera_publishing():
     """Sets up Replicator render product and ROS 2 image publishers once stage is live."""
+    global _camera_initialized
+    if _camera_initialized:
+        return
     try:
+        import carb.settings
         import omni.syntheticdata._syntheticdata as sd
+        carb.settings.get_settings().set("/rtx/post/dlss/execMode", 2)
         render_product = rep.create.render_product("/OverheadCamera", (640, 480))
         rp_path = render_product.path if hasattr(render_product, "path") else str(render_product)
         freq = 10
@@ -378,6 +418,7 @@ def setup_overhead_camera_publishing():
         writer_info = rep.writers.get("ROS2PublishCameraInfo")
         writer_info.initialize(frameId="overhead_camera", topicName="/overhead_camera/camera_info")
         writer_info.attach([render_product])
+        _camera_initialized = True
         print("[INFO] Overhead camera ROS 2 publishing initialized successfully.")
     except Exception as cam_err:
         print(f"[WARN] Overhead camera publishing setup: {cam_err}")
@@ -394,6 +435,7 @@ try:
                 ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
                 ("Context", "isaacsim.ros2.bridge.ROS2Context"),
                 ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
+                ("ComputeTF", "isaacsim.core.nodes.IsaacComputeTransformTree"),
                 ("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
                 
                 # Robot 1 (FR3_1)
@@ -417,7 +459,12 @@ try:
             og.Controller.Keys.CONNECT: [
                 # Core timing
                 ("OnPlaybackTick.outputs:tick", "PublishClock.inputs:execIn"),
-                ("OnPlaybackTick.outputs:tick", "PublishTF.inputs:execIn"),
+                ("OnPlaybackTick.outputs:tick", "ComputeTF.inputs:execIn"),
+                ("ComputeTF.outputs:execOut", "PublishTF.inputs:execIn"),
+                ("ComputeTF.outputs:parentFrames", "PublishTF.inputs:parentFrames"),
+                ("ComputeTF.outputs:childFrames", "PublishTF.inputs:childFrames"),
+                ("ComputeTF.outputs:translations", "PublishTF.inputs:translations"),
+                ("ComputeTF.outputs:orientations", "PublishTF.inputs:orientations"),
                 ("Context.outputs:context", "PublishClock.inputs:context"),
                 ("Context.outputs:context", "PublishTF.inputs:context"),
                 ("ReadSimTime.outputs:simulationTime", "PublishClock.inputs:timeStamp"),
@@ -482,7 +529,7 @@ try:
             ],
             og.Controller.Keys.SET_VALUES: [
                 ("PublishTF.inputs:topicName", "/tf"),
-                ("PublishTF.inputs:targetPrims", [
+                ("ComputeTF.inputs:targetPrims", [
                     usdrt.Sdf.Path("/FR3_1"),
                     usdrt.Sdf.Path("/FR3_2"),
                     usdrt.Sdf.Path("/FR3_3"),
@@ -533,20 +580,15 @@ robot_nominal_poses = {
     3: ([-0.3897, 0.225, 0.20], [0.9335804, 0.0, 0.0, 0.3583679]),
 }
 
-def reset_robot_articulation(robot_art, pos, quat_wxyz):
-    """Resets a Franka FR3 robot articulation to its initial base pose and home joints."""
+def reset_robot_articulation(robot_art, pos=None, quat_wxyz=None):
+    """Resets a fixed-base Franka FR3 robot articulation to its home DOF configuration."""
     if robot_art is None:
         return
-    # 1. Root world pose
-    try:
-        robot_art.set_world_poses(
-            positions=np.array([pos], dtype=float),
-            orientations=np.array([quat_wxyz], dtype=float)
-        )
-    except Exception as e:
-        print(f"[WARN] set_world_poses on robot failed: {e}")
+    if hasattr(app_utils, "is_playing") and not app_utils.is_playing():
+        return
 
-    # 2. DOF positions, velocity and position targets
+    # Fixed-base FR3 arms are anchored at their table mount via /FR3_*/root_joint;
+    # only reset the 9 DOF joint positions, position targets, and velocities.
     zero_vel = np.zeros(9, dtype=float)
     if hasattr(robot_art, "set_dof_positions"):
         # Isaac Sim 6.0 Experimental Articulation API
@@ -655,6 +697,22 @@ reset_node = None
 reset_pub = None
 goal_pub = None
 
+_articulations_initialized = False
+_pending_reset = False
+_pending_reset_publish_ros = True
+_pending_adversarial_push = False
+
+def request_reset(publish_to_ros=True):
+    """Schedules a simulation reset to execute safely between frames in the main loop."""
+    global _pending_reset, _pending_reset_publish_ros
+    _pending_reset = True
+    _pending_reset_publish_ros = publish_to_ros
+
+def request_adversarial_push():
+    """Schedules an adversarial impulse push to execute safely between frames in the main loop."""
+    global _pending_adversarial_push
+    _pending_adversarial_push = True
+
 try:
     import rclpy
     from rclpy.node import Node
@@ -669,12 +727,12 @@ try:
     goal_pub = reset_node.create_publisher(String, '/gemini/custom_goal', 10)
 
     def ros_reset_callback(msg):
-        reset_simulation(publish_to_ros=False)
+        request_reset(publish_to_ros=False)
 
     reset_sub = reset_node.create_subscription(Empty, '/reset_simulation', ros_reset_callback, 10)
 
     def ros_reset_service_callback(request, response):
-        reset_simulation(publish_to_ros=True)
+        request_reset(publish_to_ros=True)
         response.success = True
         return response
 
@@ -684,22 +742,21 @@ except Exception as e:
     print(f"[WARN] ROS 2 reset interface setup skipped or failed: {e}")
 
 def reset_simulation(publish_to_ros=True):
+    """Executes robot DOF and block pose reset on the main thread between render frames."""
+    global robot1_art, robot2_art, robot3_art, blocks, _articulations_initialized
+    if hasattr(app_utils, "is_playing") and not app_utils.is_playing():
+        request_reset(publish_to_ros=publish_to_ros)
+        app_utils.play()
+        return
+
     print("[RESET] Initializing robot poses, randomizing blocks, and resetting simulation...")
-    global robot1_art, robot2_art, robot3_art, blocks
     try:
-        # Ensure physics timeline is playing so physics tensors are active
-        if hasattr(app_utils, "is_playing") and not app_utils.is_playing():
-            try:
-                app_utils.play()
-                simulation_app.update()
-            except Exception:
-                pass
-
         # If articulations were not yet initialized, initialize them now
-        if robot1_art is None or robot2_art is None or robot3_art is None or not blocks:
+        if not _articulations_initialized or robot1_art is None or robot2_art is None or robot3_art is None or not blocks:
             init_articulations_and_poses()
+            _articulations_initialized = True
 
-        # Reset Robot Arms to Table World Poses & Home Joint States
+        # Reset Robot Arms to Home Joint States
         if robot1_art is not None:
             reset_robot_articulation(robot1_art, robot_nominal_poses[1][0], robot_nominal_poses[1][1])
         if robot2_art is not None:
@@ -733,9 +790,11 @@ def reset_simulation(publish_to_ros=True):
         print(f"[RESET] Error resetting simulation: {err}")
 
 def adversarial_push():
+    if hasattr(app_utils, "is_playing") and not app_utils.is_playing():
+        return
     print("\n[ADVERSARIAL] Applying physics impulses to knock over the tower!")
     try:
-        for i in range(9):
+        for i in range(min(9, len(blocks))):
             block_prim = blocks[i]
             pos, _ = block_prim.get_world_poses()
             pos = pos[0]
@@ -759,9 +818,9 @@ import omni.ui as ui
 def on_keyboard_event(event, *args, **kwargs):
     if event.type == carb.input.KeyboardEventType.KEY_PRESS:
         if event.input.name in ["R", "I"]:
-            reset_simulation(publish_to_ros=True)
+            request_reset(publish_to_ros=True)
         elif event.input.name == "T":
-            adversarial_push()
+            request_adversarial_push()
     return True
 
 appwindow = omni.appwindow.get_default_app_window()
@@ -770,15 +829,15 @@ keyboard = appwindow.get_keyboard()
 sub_keyboard = input_interface.subscribe_to_keyboard_events(keyboard, on_keyboard_event)
 
 # UI logic for Interactive Mode
-print("\n[INFO] Press PLAY in the UI and use the interactive window.")
+print("\n[INFO] Starting simulation timeline and interactive controls window...")
 ui.Workspace.set_show_window_fn("Controls", lambda x: True)
 controls_window = ui.Window("Tower Stacking Controls", width=400, height=200)
 
 with controls_window.frame:
     with ui.VStack(spacing=10):
         ui.Label("Controls:", height=20)
-        ui.Button("Initialize Poses / Randomize Blocks (R key)", clicked_fn=lambda: reset_simulation(publish_to_ros=True), height=30)
-        ui.Button("💥 KNOCK TOWER OVER 💥 (T key)", clicked_fn=adversarial_push, height=30, style={"background_color": 0xFF4444FF, "color": 0xFFFFFFFF})
+        ui.Button("Initialize Poses / Randomize Blocks (R key)", clicked_fn=lambda: request_reset(publish_to_ros=True), height=30)
+        ui.Button("💥 KNOCK TOWER OVER 💥 (T key)", clicked_fn=request_adversarial_push, height=30, style={"background_color": 0xFF4444FF, "color": 0xFFFFFFFF})
         
         ui.Spacer(height=10)
         ui.Label("Custom Gemini Goal:", height=20)
@@ -823,22 +882,34 @@ if args.test:
         simulation_app.close()
         sys.exit(1)
 
-# Simulation loop
-if args.test:
-    app_utils.play()
+# Simulation loop: auto-start timeline so physics tensor entities are active before DOF initialization
+app_utils.play()
 frame_count = 0
 while simulation_app.is_running():
     simulation_app.update()
-    if frame_count == 0:
+    if not _articulations_initialized and app_utils.is_playing():
         init_articulations_and_poses()
+        _articulations_initialized = True
+    if _pending_reset:
+        if not app_utils.is_playing():
+            app_utils.play()
+        else:
+            _pending_reset = False
+            reset_simulation(publish_to_ros=_pending_reset_publish_ros)
+    if _pending_adversarial_push:
+        _pending_adversarial_push = False
+        if app_utils.is_playing():
+            adversarial_push()
     if reset_node is not None:
         try:
             rclpy.spin_once(reset_node, timeout_sec=0.0)
         except Exception:
             pass
     frame_count += 1
+    if args.test and frame_count == 10:
+        request_reset(publish_to_ros=True)
     if args.test and frame_count >= 20:
-        print(f"[TEST] {frame_count} live simulation frames completed successfully!")
+        print(f"[TEST] {frame_count} live simulation frames (including reset) completed successfully!")
         break
 
 simulation_app.close()

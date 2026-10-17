@@ -87,7 +87,7 @@ omni.usd.get_context().open_stage(SCENE_USD_PATH, None)
 simulation_app.update()
 simulation_app.update()
 
-from pxr import Gf
+from pxr import Gf, PhysxSchema, Usd, UsdPhysics
 from isaacsim.core.experimental.utils.stage import is_stage_loading
 while is_stage_loading():
     simulation_app.update()
@@ -102,6 +102,26 @@ for path, val in [("/World/Table_1", Gf.Vec3d(1.8, 0.0, 0.0)), ("/World/Table_2"
         translate_attr = prim.GetAttribute("xformOp:translate")
         if translate_attr.IsValid():
             translate_attr.Set(val)
+
+# Fix negative mass / {1, 1, 1} dummy inertia tensor on FR3 virtual links and cap TGS velocity iterations
+robot_root_prim = stage.GetPrimAtPath(ROBOT_STAGE_PATH)
+if robot_root_prim.IsValid():
+    for prim in Usd.PrimRange(robot_root_prim):
+        if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+            physx_art = PhysxSchema.PhysxArticulationAPI.Apply(prim)
+            physx_art.CreateSolverVelocityIterationCountAttr().Set(4)
+        if prim.GetName() in ("fr3_link8", "fr3_hand_tcp") or prim.HasAPI(UsdPhysics.MassAPI):
+            mass_api = UsdPhysics.MassAPI.Apply(prim)
+            mass_val = mass_api.GetMassAttr().Get() if mass_api.GetMassAttr().IsValid() else None
+            if mass_val is None or mass_val <= 0.0:
+                mass_api.CreateMassAttr().Set(1e-4)
+            inertia_val = (
+                mass_api.GetDiagonalInertiaAttr().Get()
+                if mass_api.GetDiagonalInertiaAttr().IsValid()
+                else None
+            )
+            if inertia_val is None or inertia_val == Gf.Vec3f(1.0, 1.0, 1.0):
+                mass_api.CreateDiagonalInertiaAttr().Set(Gf.Vec3f(1e-6, 1e-6, 1e-6))
 
 # Set up the camera view to overlook the workspace
 ViewportManager.set_camera_view("/OmniverseKit_Persp", eye=np.array([3.5, 3.5, 2.5]), target=np.array([0, 0, 0.7]))
@@ -118,6 +138,7 @@ try:
                 ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
                 ("Context", "isaacsim.ros2.bridge.ROS2Context"),
                 ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
+                ("ComputeTF", "isaacsim.core.nodes.IsaacComputeTransformTree"),
                 ("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
                 
                 # Odometry nodes
@@ -146,7 +167,12 @@ try:
                 ("ReadSimTime.outputs:simulationTime", "PublishClock.inputs:timeStamp"),
                 
                 # TF connection
-                ("OnPlaybackTick.outputs:tick", "PublishTF.inputs:execIn"),
+                ("OnPlaybackTick.outputs:tick", "ComputeTF.inputs:execIn"),
+                ("ComputeTF.outputs:execOut", "PublishTF.inputs:execIn"),
+                ("ComputeTF.outputs:parentFrames", "PublishTF.inputs:parentFrames"),
+                ("ComputeTF.outputs:childFrames", "PublishTF.inputs:childFrames"),
+                ("ComputeTF.outputs:translations", "PublishTF.inputs:translations"),
+                ("ComputeTF.outputs:orientations", "PublishTF.inputs:orientations"),
                 ("Context.outputs:context", "PublishTF.inputs:context"),
                 ("ReadSimTime.outputs:simulationTime", "PublishTF.inputs:timeStamp"),
                 
@@ -196,7 +222,7 @@ try:
             og.Controller.Keys.SET_VALUES: [
                 # TF targets
                 ("PublishTF.inputs:topicName", "/tf"),
-                ("PublishTF.inputs:targetPrims", [
+                ("ComputeTF.inputs:targetPrims", [
                     usdrt.Sdf.Path("/World"),
                     usdrt.Sdf.Path("/World/Robot"),
                     usdrt.Sdf.Path("/World/Robot/chassis_link"),
@@ -354,17 +380,25 @@ try:
         except Exception as reset_err:
             print(f"[RESET] Error during reset: {reset_err}")
             
+    _pending_reset = False
+    _pending_reset_publish_ros = True
+
+    def request_reset(publish_to_ros=True):
+        global _pending_reset, _pending_reset_publish_ros
+        _pending_reset = True
+        _pending_reset_publish_ros = publish_to_ros
+
     # ROS2 Reset Subscriptions
     def ros_reset_callback(msg):
         print("[RESET] Received reset empty topic request.")
-        reset_simulation(publish_to_ros=False)
+        request_reset(publish_to_ros=False)
         
     reset_sub = reset_node.create_subscription(Empty, "/reset_simulation", ros_reset_callback, 10)
     
     # ROS2 Reset Service callback
     def ros_reset_service_callback(request, response):
         print("[RESET] Received reset service call.")
-        reset_simulation(publish_to_ros=True)
+        request_reset(publish_to_ros=True)
         response.success = True
         response.message = "Mobile manipulator environment successfully reset"
         return response
@@ -379,7 +413,7 @@ try:
         if event.type == carb.input.KeyboardEventType.KEY_PRESS:
             if event.input.name in ["R", "I"]:
                 print(f"[KEYBOARD] Reset triggered by pressing key '{event.input.name}'")
-                reset_simulation(publish_to_ros=True)
+                request_reset(publish_to_ros=True)
         return True
         
     appwindow = omni.appwindow.get_default_app_window()
@@ -398,7 +432,7 @@ try:
                     ui.Label("Mobile Manipulator Factory Simulation", alignment=ui.Alignment.CENTER)
                     ui.Label("Press 'R' / 'I' keys to trigger reset", alignment=ui.Alignment.CENTER)
                     init_btn = ui.Button("Initialize Poses / Reset Scene (R key)", height=35)
-                    init_btn.set_clicked_fn(lambda: reset_simulation(publish_to_ros=True))
+                    init_btn.set_clicked_fn(lambda: request_reset(publish_to_ros=True))
                     ui.Spacer(height=2)
             print("[UI] Simulation panel created successfully.")
     except Exception as ui_err:
@@ -407,6 +441,8 @@ try:
 except Exception as init_err:
     print(f"Error setting up simulation initial states: {init_err}")
     reset_node = None
+    _pending_reset = False
+    _pending_reset_publish_ros = True
 
 # Main loop
 frame_count = 0
@@ -414,6 +450,12 @@ while simulation_app.is_running():
     if reset_node is not None:
         rclpy.spin_once(reset_node, timeout_sec=0.0)
     simulation_app.update()
+    if _pending_reset:
+        if not app_utils.is_playing():
+            app_utils.play()
+        else:
+            _pending_reset = False
+            reset_simulation(publish_to_ros=_pending_reset_publish_ros)
     frame_count += 1
     if args.test and frame_count >= 10:
         break

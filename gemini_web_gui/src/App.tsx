@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Mic, MicOff, Send, Bot, Wifi, WifiOff, Trash2,
+  Mic, MicOff, Send, Bot, Trash2,
   Terminal, ChevronDown, ChevronUp,
-  Play, Square, RotateCcw, Plus, Minus, Wrench,
-  PanelRightOpen, PanelRightClose, User,
+  Play, Square, RotateCcw, User,
   BarChart3, Network, Map, Clock, Sparkles, Moon, Sun, Activity, Layers,
 } from 'lucide-react';
 import { C, C_light, C_dark, btnSmall, btnCtrl, monoFont, stripAnsi, fmt, LOG_COLORS, LOG_LABELS,
@@ -37,17 +36,17 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [bringupRunning, setBringupRunning] = useState(false);
   const [termLines, setTermLines] = useState<string[]>([]);
-  const [fontSize, setFontSize] = useState(14);
-  const [sideOpen, setSideOpen] = useState(true);
   const [bottomOpen, setBottomOpen] = useState(true);
+  const fontSize = 14;
+  const sideOpen = true;
   const [rightPanelWidth, setRightPanelWidth] = useState(55);
   const [activeRightTab, setActiveRightTab] = useState<'builder' | 'graph' | 'map' | 'gantt' | 'telemetry' | 'monitor'>('builder');
   const [executionMode, setExecutionMode] = useState<'flow' | 'vla'>('flow');
-  const [showChatPane, setShowChatPane] = useState(false);
   const isDragging = useRef(false);
+  const isVla = executionMode === 'vla';
   
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 0, role: 'system', text: 'Welcome to Gemini Robotics ER. Click **▶ Start** to launch the robot workspace, then type or speak a goal to begin.', ts: new Date() },
+    { id: 0, role: 'system', text: 'Welcome to Physical AI with Isaac / Gemini. Click **▶ Start** to launch the robot workspace, then choose User-Defined Flow or Autonomous VLA.', ts: new Date() },
   ]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [actions, setActions] = useState<RobotAction[]>([]);
@@ -63,6 +62,11 @@ function App() {
   const resetTopic = useRef<any>(null);
   const summarizeClient = useRef<any>(null);
   const recognition = useRef<any>(null);
+  const actionListenersRef = useRef<Array<{
+    expectedRobot: string;
+    expectedAction?: string;
+    resolve: (res: { success: boolean; message: string }) => void;
+  }>>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const termEndRef = useRef<HTMLDivElement>(null);
@@ -136,7 +140,35 @@ function App() {
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action', messageType: 'std_msgs/String' })
           .subscribe((m: any) => { setActions(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/action_result', messageType: 'std_msgs/String' })
-          .subscribe((m: any) => { setActionResults(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; }); });
+          .subscribe((m: any) => {
+            try {
+              const resObj = JSON.parse(m.data);
+              const resRobot = String(resObj.robot_id || 'global');
+
+              // Dispatch to matching active workflow listener
+              const matchIdx = actionListenersRef.current.findIndex(l => {
+                const exp = l.expectedRobot.toUpperCase();
+                const res = resRobot.toUpperCase();
+                if (exp === 'GLOBAL' || res === 'GLOBAL') return true;
+                if ((exp.includes('1') || exp.includes('FR3_1')) && (res.includes('1') || res.includes('FR3_1'))) return true;
+                if ((exp.includes('2') || exp.includes('FR3_2')) && (res.includes('2') || res.includes('FR3_2'))) return true;
+                if ((exp.includes('3') || exp.includes('FR3_3')) && (res.includes('3') || res.includes('FR3_3'))) return true;
+                return false;
+              });
+
+              if (matchIdx >= 0) {
+                const [listener] = actionListenersRef.current.splice(matchIdx, 1);
+                listener.resolve({
+                  success: Boolean(resObj.success),
+                  message: resObj.message || (resObj.success ? 'Success' : 'Execution failed'),
+                });
+              }
+            } catch (e) {
+              console.warn('[ROS] Error parsing action_result:', e);
+            }
+
+            setActionResults(p => { const n = [...p, { id: seqRef.current++, raw: m.data, ts: new Date() }]; return n.length > 100 ? n.slice(-100) : n; });
+          });
 
         // Subscribe to chat replies from the VLA agent
         new ROSLIB.Topic({ ros: ros.current, name: '/gemini/chat_reply', messageType: 'std_msgs/String' })
@@ -218,7 +250,6 @@ function App() {
   const [bringupMode, setBringupMode] = useState(1);
   const startBringup = async () => { try { await fetch(`${API}/api/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: bringupMode }) }); setBringupRunning(true); } catch { addMsg('system', '❌ Backend unreachable.'); } };
   const stopBringup = async () => { try { await fetch(`${API}/api/stop`, { method: 'POST' }); setBringupRunning(false); } catch {} };
-  const triggerBuild = async () => { try { await fetch(`${API}/api/build`, { method: 'POST' }); addMsg('system', '🔧 Build triggered. Check WSL terminal.'); } catch { addMsg('system', '❌ Backend unreachable.'); } };
   const resetSim = () => { if (!connected || !resetTopic.current) { addMsg('system', '⚠️ Not connected.'); return; } resetTopic.current.publish(new ROSLIB.Message({})); addMsg('system', '🔄 Simulation reset sent.'); };
   const triggerAudit = () => {
     if (!connected || !summarizeClient.current) { addMsg('system', '⚠️ Not connected.'); return; }
@@ -236,50 +267,29 @@ function App() {
         return;
       }
 
-      const robotRaw = String(actionMsg.robot || 'global');
-      let expectedId = 'global';
-      if (robotRaw.includes('1') && !robotRaw.includes('2')) expectedId = '1';
-      else if (robotRaw.includes('2') && !robotRaw.includes('1')) expectedId = '2';
-      else if (robotRaw.includes('3')) expectedId = '3';
-      else expectedId = 'global';
+      const robotKey = String(actionMsg.robot || 'global');
+      let timeoutTimer: any = null;
 
-      let resolved = false;
+      const listenerEntry = {
+        expectedRobot: robotKey,
+        expectedAction: actionMsg.action,
+        resolve: (val: any) => {
+          if (timeoutTimer) clearTimeout(timeoutTimer);
+          resolve(val);
+        },
+      };
 
-      // Timeout safety: 40s max
-      const timer = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          try { resSub.unsubscribe(); } catch {}
-          resolve({ success: false, message: 'Action execution timed out (40s)' });
-        }
+      // 40-second safety timeout
+      timeoutTimer = setTimeout(() => {
+        const idx = actionListenersRef.current.indexOf(listenerEntry);
+        if (idx >= 0) actionListenersRef.current.splice(idx, 1);
+        console.warn(`[WORKFLOW] Action timed out for robot ${robotKey}`);
+        resolve({ success: false, message: 'Action execution timed out (40s)' });
       }, 40000);
 
-      const resSub = new ROSLIB.Topic({
-        ros: ros.current,
-        name: '/gemini/action_result',
-        messageType: 'std_msgs/String',
-      });
+      actionListenersRef.current.push(listenerEntry);
 
-      resSub.subscribe((m: any) => {
-        try {
-          const res = JSON.parse(m.data);
-          const resRobot = String(res.robot_id || 'global');
-          const match = (expectedId === 'global') || (resRobot === expectedId) || (resRobot === 'global');
-          if (match && !resolved) {
-            resolved = true;
-            clearTimeout(timer);
-            try { resSub.unsubscribe(); } catch {}
-            resolve({
-              success: Boolean(res.success),
-              message: res.message || (res.success ? 'Success' : 'Execution failed'),
-            });
-          }
-        } catch (e) {
-          // Keep waiting
-        }
-      });
-
-      // Publish action command
+      // Publish action command to ROS 2
       if (actionTopic.current) {
         actionTopic.current.publish(new ROSLIB.Message({ data: JSON.stringify(actionMsg) }));
       } else {
@@ -297,31 +307,45 @@ function App() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: isDark ? 'radial-gradient(ellipse at 50% -20%, #18181b, #09090b 80%)' : C.bg, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', color: C.text, fontSize }}>
 
-      {/* ════ Top Bar ════ */}
-      <div style={{ height: 50, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : C.border}`, background: C.glassBg, backdropFilter: 'blur(24px) saturate(150%)', flexShrink: 0, zIndex: 10 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: isDark ? 'linear-gradient(135deg, #a855f7, #6366f1)' : '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: isDark ? '0 0 16px rgba(99, 102, 241, 0.4)' : '0 4px 6px rgba(0,0,0,0.1)' }}><Bot size={17} color="#fff" /></div>
-        <div>
-          <span style={{ fontWeight: 800, color: C.white, fontSize: 14, letterSpacing: '-0.02em' }}>Gemini Robotics ER</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -2 }}>
-            <span style={{ fontSize: 9.5, color: '#d46a43', fontWeight: 600, fontFamily: monoFont }}>VLA × FRANKA MULTI-ARM</span>
+      {/* ════ Top Bar (Concise & Clean) ════ */}
+      <div style={{ height: 46, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : C.border}`, background: C.glassBg, backdropFilter: 'blur(20px)', flexShrink: 0, zIndex: 10 }}>
+        {/* Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 7, background: isDark ? 'linear-gradient(135deg, #a855f7, #6366f1)' : '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+            <Bot size={15} color="#fff" />
           </div>
+          <span style={{ fontWeight: 800, color: C.white, fontSize: 13.5, letterSpacing: '-0.02em' }}>Physical AI with Isaac / Gemini</span>
         </div>
-        <div style={{ width: 1, height: 22, background: C.border, margin: '0 4px' }} />
-        <a href="https://antigravity.google/" target="_blank" rel="noreferrer" title="Powered by Google Antigravity" style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', padding: '3px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, transition: 'all 0.2s' }}>
-          <img src="/antigravity.svg" alt="Antigravity" style={{ width: 18, height: 18 }} />
-          <span style={{ fontSize: 10.5, color: C.textDim, fontWeight: 600 }}>Antigravity</span>
+
+        {/* Gemini Robotics Official Link */}
+        <a
+          href="https://deepmind.google/models/gemini-robotics/"
+          target="_blank"
+          rel="noreferrer"
+          title="Google DeepMind Gemini Robotics"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            textDecoration: 'none',
+            padding: '3px 8px',
+            borderRadius: 6,
+            background: 'rgba(59, 130, 246, 0.1)',
+            border: '1px solid rgba(59, 130, 246, 0.25)',
+            color: '#60a5fa',
+            fontSize: 10.5,
+            fontWeight: 600,
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <Sparkles size={11} color="#60a5fa" />
+          <span>Gemini Robotics</span>
         </a>
 
-        {/* Model Indicator Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', color: '#34d399', fontSize: 10.5, fontWeight: 700 }}>
-          <Sparkles size={12} />
-          <span>Gemini 3.5-Flash-Lite (4M TPM ⚡)</span>
-        </div>
-
         {/* Execution Mode Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', borderRadius: 7, border: `1px solid ${C.border}`, padding: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', borderRadius: 7, border: `1px solid ${C.border}`, padding: 2, marginLeft: 4 }}>
           <button
-            onClick={() => { setExecutionMode('flow'); setActiveRightTab('builder'); setShowChatPane(false); }}
+            onClick={() => { setExecutionMode('flow'); setActiveRightTab('builder'); }}
             style={{
               padding: '3px 9px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 700,
               background: executionMode === 'flow' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
@@ -329,10 +353,10 @@ function App() {
               transition: 'all 0.15s',
             }}
           >
-            🧩 Visual Flow (Zero-Token)
+            🧩 User-Defined Flow
           </button>
           <button
-            onClick={() => { setExecutionMode('vla'); setActiveRightTab('graph'); setShowChatPane(true); }}
+            onClick={() => { setExecutionMode('vla'); setActiveRightTab('graph'); }}
             style={{
               padding: '3px 9px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 700,
               background: executionMode === 'vla' ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
@@ -344,68 +368,118 @@ function App() {
           </button>
         </div>
 
-        {/* Chat / CoT Toggle Button */}
-        <button
-          onClick={() => setShowChatPane(!showChatPane)}
-          style={{
-            ...btnCtrl,
-            background: showChatPane ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.04)',
-            color: showChatPane ? '#c084fc' : C.textDim,
-            border: showChatPane ? '1px solid rgba(168, 85, 247, 0.35)' : `1px solid ${C.border}`,
-          }}
-          title={showChatPane ? 'Hide Chat Pane' : 'Show Chat & VLA CoT'}
-        >
-          <Bot size={13} />
-          <span>{showChatPane ? 'Hide Chat' : 'Chat & CoT'}</span>
-        </button>
-
         <div style={{ flex: 1 }} />
 
-        {/* Theme Toggle */}
-        <button onClick={() => setIsDark(!isDark)} style={{ ...btnSmall, border: `1px solid ${C.border}`, width: 28, height: 28 }}>
-          {isDark ? <Sun size={14} color={C.yellow} /> : <Moon size={14} color={C.textDim} />}
-        </button>
-
-        {/* Font size */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'transparent', padding: '2px 4px', borderRadius: 6, border: `1px solid ${C.border}` }}>
-          <button onClick={() => setFontSize(s => Math.max(10, s-1))} style={btnSmall}><Minus size={11} /></button>
-          <span style={{ fontSize: 10, color: C.textMuted, width: 20, textAlign: 'center', fontFamily: monoFont }}>{fontSize}</span>
-          <button onClick={() => setFontSize(s => Math.min(20, s+1))} style={btnSmall}><Plus size={11} /></button>
-        </div>
-
-        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
-
-        {/* Controls */}
-        <button onClick={triggerBuild} style={{ ...btnCtrl, color: C.blue, background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.2)' }}><Wrench size={13} /> Build</button>
-        <select value={bringupMode} onChange={(e) => setBringupMode(parseInt(e.target.value))} style={{ ...btnCtrl, background: 'transparent', color: C.text, width: 160 }}>
-          <option value={1}>Mode 1: 3-Robot Tower</option>
-          <option value={5}>Mode 5: Conveyor Dual</option>
+        {/* Workcell Mode Selector */}
+        <select
+          value={bringupMode}
+          onChange={(e) => setBringupMode(parseInt(e.target.value))}
+          style={{
+            ...btnCtrl,
+            background: 'rgba(0,0,0,0.25)',
+            color: C.text,
+            width: 140,
+            height: 28,
+            fontSize: 11,
+            borderRadius: 6,
+            border: `1px solid ${C.border}`,
+          }}
+        >
+          <option value={1}>Mode 1: Tower</option>
+          <option value={5}>Mode 5: Conveyor</option>
           <option value={6}>Mode 6: Assembly</option>
         </select>
-        {!bringupRunning
-          ? <button onClick={startBringup} style={{ ...btnCtrl, background: '#000', color: '#fff', border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}><Play size={13} /> Start</button>
-          : <button onClick={stopBringup} style={{ ...btnCtrl, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', border: 'none', boxShadow: '0 0 12px rgba(239, 68, 68, 0.35)' }}><Square size={13} /> Stop</button>
-        }
-        <button onClick={resetSim} style={{ ...btnCtrl, color: C.yellow, background: 'rgba(250, 204, 21, 0.08)', borderColor: 'rgba(250, 204, 21, 0.2)' }}><RotateCcw size={13} /> Reset</button>
 
-        <div style={{ width: 1, height: 20, background: C.border, margin: '0 2px' }} />
+        {/* Start / Stop Bringup */}
+        {!bringupRunning ? (
+          <button
+            onClick={startBringup}
+            style={{
+              ...btnCtrl,
+              height: 28,
+              padding: '0 12px',
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: 11,
+              borderRadius: 6,
+              boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+            }}
+          >
+            <Play size={12} fill="#fff" /> Start
+          </button>
+        ) : (
+          <button
+            onClick={stopBringup}
+            style={{
+              ...btnCtrl,
+              height: 28,
+              padding: '0 12px',
+              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: 11,
+              borderRadius: 6,
+              boxShadow: '0 2px 6px rgba(239, 68, 68, 0.3)',
+            }}
+          >
+            <Square size={12} fill="#fff" /> Stop
+          </button>
+        )}
 
-        {/* Tower height badge */}
+        {/* Reset Sim Button */}
+        <button
+          onClick={resetSim}
+          style={{
+            ...btnCtrl,
+            height: 28,
+            padding: '0 9px',
+            color: C.yellow,
+            background: 'rgba(250, 204, 21, 0.08)',
+            borderColor: 'rgba(250, 204, 21, 0.25)',
+            fontSize: 11,
+            borderRadius: 6,
+          }}
+          title="Reset simulation objects"
+        >
+          <RotateCcw size={12} /> Reset
+        </button>
+
+        {/* Tower Height Badge (if applicable) */}
         {metrics && metrics.tower_height > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.3)', fontSize: 11, color: '#d46a43', fontWeight: 700 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 7px', borderRadius: 6, background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.3)', fontSize: 10.5, color: '#38bdf8', fontWeight: 700 }}>
             🏗️ {metrics.tower_height}/9
           </div>
         )}
 
-        {/* ROS Connection Status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 6, background: connected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: connected ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)', fontSize: 11, color: connected ? C.green : C.red }}>
-          {connected ? <Wifi size={12} color={C.green} /> : <WifiOff size={12} color={C.red} />}
-          <span style={{ fontWeight: 600 }}>{connected ? 'ROS 2 Live' : 'Offline'}</span>
+        {/* ROS 2 Status Badge */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '3px 8px',
+            borderRadius: 6,
+            background: connected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+            border: connected ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
+            fontSize: 10.5,
+            color: connected ? C.green : C.red,
+            fontWeight: 600,
+          }}
+        >
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? C.green : C.red }} />
+          <span>{connected ? 'ROS 2' : 'Offline'}</span>
         </div>
 
-        {/* Toggle side */}
-        <button onClick={() => setSideOpen(!sideOpen)} style={{ ...btnSmall, marginLeft: 2 }}>
-          {sideOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+        {/* Theme Toggle */}
+        <button
+          onClick={() => setIsDark(!isDark)}
+          style={{ ...btnSmall, border: `1px solid ${C.border}`, width: 28, height: 28, borderRadius: 6 }}
+          title="Toggle light/dark theme"
+        >
+          {isDark ? <Sun size={13} color={C.yellow} /> : <Moon size={13} color={C.textDim} />}
         </button>
       </div>
 
@@ -415,7 +489,7 @@ function App() {
         {/* ── Chat Area (center) ──────────────────────── */}
         <div style={{
           flex: 1,
-          display: showChatPane ? 'flex' : 'none',
+          display: isVla ? 'flex' : 'none',
           flexDirection: 'column',
           minWidth: 0,
           background: C.bgChat
@@ -484,7 +558,7 @@ function App() {
               })}
               {messages.length === 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.textMuted, gap: 16 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: C.white, marginTop: 40 }}>Welcome to Gemini Robotics ER</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: C.white, marginTop: 40 }}>Welcome to Physical AI with Isaac / Gemini</div>
                   <div style={{ fontSize: 13, maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
                     Multi-Agent Vision-Language-Action platform for 3 Franka FR3 manipulators.
                   </div>
@@ -565,7 +639,7 @@ function App() {
         </div>
 
         {/* ── Right Dashboard Panel & Divider ─────────────────── */}
-        {sideOpen && showChatPane && (
+        {sideOpen && isVla && (
           <div
             onMouseDown={() => {
               isDragging.current = true;
@@ -586,8 +660,8 @@ function App() {
         )}
         {sideOpen && (
           <div style={{
-            width: showChatPane ? `${rightPanelWidth}%` : '100%',
-            flex: showChatPane ? undefined : 1,
+            width: isVla ? `${rightPanelWidth}%` : '100%',
+            flex: isVla ? undefined : 1,
             background: C.bgSide,
             display: 'flex',
             flexDirection: 'column',
@@ -597,33 +671,35 @@ function App() {
             {/* Header with high-tech tab switcher */}
             <div style={{ padding: '8px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.glassBg, backdropFilter: 'blur(10px)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <button
-                  onClick={() => setActiveRightTab('builder')}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
-                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                    background: activeRightTab === 'builder' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-                    color: activeRightTab === 'builder' ? '#38bdf8' : C.textDim,
-                    border: activeRightTab === 'builder' ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid transparent',
-                  }}
-                >
-                  <Layers size={12} />
-                  <span>Task Blocks (Flow)</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveRightTab('graph')}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
-                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                    background: activeRightTab === 'graph' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                    color: activeRightTab === 'graph' ? '#d46a43' : C.textDim,
-                    border: activeRightTab === 'graph' ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
-                  }}
-                >
-                  <Network size={12} />
-                  <span>Workflow Graph</span>
-                </button>
+                {executionMode === 'flow' ? (
+                  <button
+                    onClick={() => setActiveRightTab('builder')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                      fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      background: activeRightTab === 'builder' ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
+                      color: activeRightTab === 'builder' ? '#38bdf8' : C.textDim,
+                      border: activeRightTab === 'builder' ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid transparent',
+                    }}
+                  >
+                    <Layers size={12} />
+                    <span>Task Blocks</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setActiveRightTab('graph')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+                      fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      background: activeRightTab === 'graph' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                      color: activeRightTab === 'graph' ? '#d46a43' : C.textDim,
+                      border: activeRightTab === 'graph' ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid transparent',
+                    }}
+                  >
+                    <Network size={12} />
+                    <span>Workflow Graph</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => setActiveRightTab('map')}

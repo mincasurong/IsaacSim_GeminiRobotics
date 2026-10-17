@@ -24,7 +24,7 @@ import {
   CheckCircle2,
   Lock,
 } from 'lucide-react';
-import { type MetricsData, type ChatMessage, type RobotAction } from './theme';
+import { C, type MetricsData, type ChatMessage, type RobotAction } from './theme';
 
 interface AgentWorkflowGraphProps {
   metrics: MetricsData | null;
@@ -33,6 +33,7 @@ interface AgentWorkflowGraphProps {
   results: RobotAction[];
   userGoal: string;
   mode?: number;
+  isDark?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -42,14 +43,14 @@ const fontSans = '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto
 const fontMono = '"JetBrains Mono", ui-monospace, SFMono-Regular, monospace';
 
 const baseFlowCardStyle = {
-  background: 'linear-gradient(145deg, rgba(24, 24, 30, 0.88) 0%, rgba(13, 13, 18, 0.94) 100%)',
+  background: C.nodeBg,
   backdropFilter: 'blur(16px)',
   WebkitBackdropFilter: 'blur(16px)',
-  border: '1px solid rgba(255, 255, 255, 0.08)',
-  boxShadow: '0 12px 32px -4px rgba(0, 0, 0, 0.6), 0 0 1px 1px rgba(255, 255, 255, 0.05)',
+  border: `1px solid ${C.nodeBorder}`,
+  boxShadow: C.nodeShadow,
   borderRadius: 22,
   padding: '16px 18px',
-  color: '#f4f4f5',
+  color: C.text,
   fontFamily: fontSans,
   transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
 };
@@ -60,7 +61,7 @@ const makeHandleStyle = (color: string) => ({
   height: 10,
   borderRadius: '50%',
   background: color,
-  border: '2px solid #09090b',
+  border: '2px solid var(--canvasBg, #09090b)',
   boxShadow: `0 0 10px ${color}`,
   transition: 'transform 0.2s ease',
 });
@@ -119,7 +120,7 @@ const GoalNode = ({ data }: { data: { goal: string } }) => {
         ...baseFlowCardStyle,
         width: 280,
         border: '1px solid rgba(56, 189, 248, 0.35)',
-        boxShadow: '0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.15)',
+        boxShadow: '0 16px 36px -6px rgba(0, 0, 0, 0.4), 0 0 20px rgba(56, 189, 248, 0.15)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -139,8 +140,8 @@ const GoalNode = ({ data }: { data: { goal: string } }) => {
             <Sparkles size={15} color="#ffffff" />
           </div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#ffffff' }}>Operator Directive</div>
-            <div style={{ fontSize: 9, color: '#94a3b8' }}>High-Level Goal</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Operator Directive</div>
+            <div style={{ fontSize: 9, color: C.textMuted }}>High-Level Goal</div>
           </div>
         </div>
         <Pill color="#38bdf8" pulse>VLA Input</Pill>
@@ -148,11 +149,11 @@ const GoalNode = ({ data }: { data: { goal: string } }) => {
 
       <div
         style={{
-          background: 'rgba(15, 23, 42, 0.65)',
+          background: C.subCardBg,
           borderRadius: 14,
           padding: '10px 12px',
-          border: '1px solid rgba(56, 189, 248, 0.15)',
-          color: '#e2e8f0',
+          border: `1px solid ${C.subCardBorder}`,
+          color: C.subCardText,
           fontSize: 11,
           lineHeight: '1.45',
           fontStyle: 'italic',
@@ -173,7 +174,7 @@ const GoalNode = ({ data }: { data: { goal: string } }) => {
 // Custom Node: Multi-Agent Persona Node
 // ─────────────────────────────────────────────────────────────
 const AgentPersonaNode = ({ data }: any) => {
-  const activeColor = data.isActive ? data.color : 'rgba(255, 255, 255, 0.12)';
+  const activeColor = data.isActive ? data.color : C.nodeBorder;
   const activeGlow = data.isActive ? `0 0 24px ${data.color}35` : 'none';
 
   return (
@@ -182,7 +183,7 @@ const AgentPersonaNode = ({ data }: any) => {
         ...baseFlowCardStyle,
         width: 260,
         border: `1px solid ${activeColor}`,
-        boxShadow: `0 14px 32px -4px rgba(0, 0, 0, 0.6), ${activeGlow}`,
+        boxShadow: `0 14px 32px -4px rgba(0, 0, 0, 0.35), ${activeGlow}`,
       }}
     >
       <Handle type="target" position={Position.Top} style={makeHandleStyle(data.color)} />
@@ -206,22 +207,22 @@ const AgentPersonaNode = ({ data }: any) => {
             {data.emoji}
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#f4f4f5' }}>{data.role}</div>
-            <div style={{ fontSize: 9, color: '#71717a', fontFamily: fontMono }}>{data.model}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.text }}>{data.role}</div>
+            <div style={{ fontSize: 9, color: C.textMuted, fontFamily: fontMono }}>{data.model}</div>
           </div>
         </div>
-        <Pill color={data.isActive ? data.color : '#71717a'} pulse={data.isActive}>
+        <Pill color={data.isActive ? data.color : C.textMuted} pulse={data.isActive}>
           {data.isActive ? 'Active' : 'Standby'}
         </Pill>
       </div>
 
       <div
         style={{
-          background: 'rgba(24, 24, 27, 0.6)',
+          background: C.subCardBg,
           borderRadius: 14,
           padding: '8px 12px',
-          border: '1px solid rgba(255, 255, 255, 0.05)',
-          color: data.isActive ? '#e4e4e7' : '#a1a1aa',
+          border: `1px solid ${C.subCardBorder}`,
+          color: data.isActive ? C.subCardText : C.textDim,
           fontSize: 10,
           lineHeight: '1.4',
           minHeight: 40,

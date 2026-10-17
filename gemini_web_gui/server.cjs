@@ -12,6 +12,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve static production build
+app.use(express.static(path.join(__dirname, 'dist')));
+
 /* ── State ────────────────────────────────────────────────── */
 let bringupProc = null;
 let logBuffer = [];

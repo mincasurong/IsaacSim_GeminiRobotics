@@ -1,0 +1,46 @@
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+moveit_simple_controller_manager:
+  controller_names:
+    - fr3_1_arm_controller
+    - fr3_2_arm_controller
+    - fr3_3_arm_controller
+
+  fr3_1_arm_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - robot1_fr3_joint1
+      - robot1_fr3_joint2
+      - robot1_fr3_joint3
+      - robot1_fr3_joint4
+      - robot1_fr3_joint5
+      - robot1_fr3_joint6
+      - robot1_fr3_joint7
+
+  fr3_2_arm_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - robot2_fr3_joint1
+      - robot2_fr3_joint2
+      - robot2_fr3_joint3
+      - robot2_fr3_joint4
+      - robot2_fr3_joint5
+      - robot2_fr3_joint6
+      - robot2_fr3_joint7
+
+  fr3_3_arm_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - robot3_fr3_joint1
+      - robot3_fr3_joint2
+      - robot3_fr3_joint3
+      - robot3_fr3_joint4
+      - robot3_fr3_joint5
+      - robot3_fr3_joint6
+      - robot3_fr3_joint7

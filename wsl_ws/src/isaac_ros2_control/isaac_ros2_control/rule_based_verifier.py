@@ -31,6 +31,11 @@ ROBOT_BASES = {
     'FR3_3': np.array([-0.3897, 0.225]),
 }
 
+CONVEYOR_ROBOT_BASES = {
+    'FR3_1': np.array([-0.7, 0.0]),
+    'FR3_2': np.array([0.7, 0.0]),
+}
+
 TABLE_ZONES = {
     'central_table': {'center': np.array([0.0, 0.0]), 'radius': 0.22},
     'table_1': {'center': np.array([0.0, -1.05]), 'radius': 0.35},
@@ -241,12 +246,18 @@ class RuleBasedTaskVerifier:
                         return False, sanitized, f"{block_name} is already stacked on the tower."
 
             # Dynamic Physical Reachability check based on actual TF coordinates
+            # (Skip static reach rejection for moving ConvItem0..9, as ConveyorDualController
+            # dynamically selects whichever ConvItem is inside the arm's conveyor window at 50Hz)
+            is_conv_item = block_name.startswith('ConvItem')
             block_info = getattr(workspace_state, 'block_status', {}).get(block_name, {}) if workspace_state else {}
             block_pos = block_info.get('pos')
 
-            if block_pos is not None:
+            if block_pos is not None and not is_conv_item:
                 bx, by, bz = block_pos
-                dist_to_robot = np.hypot(bx - ROBOT_BASES[robot][0], by - ROBOT_BASES[robot][1])
+                dist_mode1 = np.hypot(bx - ROBOT_BASES[robot][0], by - ROBOT_BASES[robot][1])
+                conv_base = CONVEYOR_ROBOT_BASES.get(robot)
+                dist_mode2 = np.hypot(bx - conv_base[0], by - conv_base[1]) if conv_base is not None else float('inf')
+                dist_to_robot = dist_mode1 if is_tower else min(dist_mode1, dist_mode2)
                 if dist_to_robot > MAX_ARM_REACH:
                     self.intercepted_count += 1
                     reachable_robots = [
@@ -316,8 +327,14 @@ class RuleBasedTaskVerifier:
                     f"(Central Table [0,0], Table 1 [0,-1.05], Table 2 [0.91,0.53], Table 3 [-0.91,0.53])."
                 )
 
-            # Check kinematic reachability from this robot's base
-            dist_from_robot = np.hypot(target_x - ROBOT_BASES[robot][0], target_y - ROBOT_BASES[robot][1])
+            # Check kinematic reachability from this robot's base (supporting both Mode 1 and Mode 2/3 base mounts)
+            goal_lower_place = goal_text.lower() if goal_text else ""
+            is_tower_place = any(k in goal_lower_place for k in ['tower', 'stack', 'layer', 'pyramid', 'table 1', 'table 2', 'table 3', 'relay'])
+            dist_mode1 = np.hypot(target_x - ROBOT_BASES[robot][0], target_y - ROBOT_BASES[robot][1])
+            conv_base = CONVEYOR_ROBOT_BASES.get(robot)
+            dist_mode2 = np.hypot(target_x - conv_base[0], target_y - conv_base[1]) if conv_base is not None else float('inf')
+            dist_from_robot = dist_mode1 if is_tower_place else min(dist_mode1, dist_mode2)
+            max_distance_check = dist_mode1 if is_tower_place else max(dist_mode1, dist_mode2)
             if dist_from_robot > MAX_ARM_REACH:
                 self.intercepted_count += 1
                 return False, sanitized, (
@@ -326,7 +343,7 @@ class RuleBasedTaskVerifier:
                     f"Place on the Central Table [0.0, 0.0] first so the destination robot can relay it."
                 )
 
-            if dist_from_robot < MIN_ARM_REACH:
+            if (is_tower_place and dist_mode1 < MIN_ARM_REACH) or (not is_tower_place and dist_from_robot < MIN_ARM_REACH and max_distance_check < MIN_ARM_REACH):
                 self.intercepted_count += 1
                 return False, sanitized, (
                     f"Target ({target_x:.2f}, {target_y:.2f}) is too close to {robot} base column "

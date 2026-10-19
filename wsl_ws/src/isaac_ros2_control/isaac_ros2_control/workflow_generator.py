@@ -218,15 +218,17 @@ Respond with a strictly valid JSON object matching this schema:
                     },
                     required=["reasoning", "nodes", "edges"],
                 )
+                wf_cfg_kwargs = dict(
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                    response_schema=workflow_schema,
+                )
+                if "flash-lite" not in str(self.model_name).lower():
+                    wf_cfg_kwargs["thinking_config"] = genai_types.ThinkingConfig(thinking_budget=256)
                 response = self.client.models.generate_content(
                     model=self.model_name,
                     contents=f"User Directive: \"{prompt}\" (Operating Mode {mode})\nGenerate optimal parallel multi-arm DAG workflow.",
-                    config=genai_types.GenerateContentConfig(
-                        temperature=0.1,
-                        response_mime_type="application/json",
-                        response_schema=workflow_schema,
-                        thinking_config=genai_types.ThinkingConfig(thinking_budget=256),
-                    )
+                    config=genai_types.GenerateContentConfig(**wf_cfg_kwargs),
                 )
                 raw_text = (response.text or "").strip()
                 raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
@@ -274,6 +276,22 @@ Respond with a strictly valid JSON object matching this schema:
                 ]
             }
 
+        # Parallel Conveyor
+        if any(w in lower for w in ["conveyor", "stream", "item", "follow"]):
+            return {
+                "reasoning": "Parallel dual-arm conveyor stream intercept: FR3_1 (left) and FR3_2 (right) track and pick moving items at 50Hz in parallel, then place them onto the workbench.",
+                "nodes": [
+                    {"id": "1", "action": "pick", "robot": "FR3_1", "target": "ConvItem0", "speed": "fast", "x_pos": 100, "y_pos": 50},
+                    {"id": "2", "action": "pick", "robot": "FR3_2", "target": "ConvItem3", "speed": "fast", "x_pos": 450, "y_pos": 50},
+                    {"id": "3", "action": "place", "robot": "FR3_1", "x": -0.45, "y": -0.25, "speed": "fast", "x_pos": 100, "y_pos": 230},
+                    {"id": "4", "action": "place", "robot": "FR3_2", "x": 0.45, "y": -0.25, "speed": "fast", "x_pos": 450, "y_pos": 230},
+                ],
+                "edges": [
+                    {"source": "1", "target": "3"},
+                    {"source": "2", "target": "4"},
+                ]
+            }
+
         # Mode 2 / Mode 5 or Circular Wave
         if any(w in lower for w in ["circle", "wave", "longbar", "bar", "mode 2", "mode 5"]):
             return {
@@ -286,22 +304,6 @@ Respond with a strictly valid JSON object matching this schema:
                 "edges": [
                     {"source": "1", "target": "2"},
                     {"source": "2", "target": "3"},
-                ]
-            }
-
-        # Parallel Conveyor
-        if any(w in lower for w in ["conveyor", "stream", "item"]):
-            return {
-                "reasoning": "Parallel dual-arm conveyor stream intercept: FR3_1 (left) and FR3_2 (right) pick simultaneously in parallel.",
-                "nodes": [
-                    {"id": "1", "action": "pick", "robot": "FR3_1", "target": "ConvItem0", "speed": "fast", "x_pos": 100, "y_pos": 50},
-                    {"id": "2", "action": "pick", "robot": "FR3_2", "target": "ConvItem3", "speed": "fast", "x_pos": 450, "y_pos": 50},
-                    {"id": "3", "action": "place", "robot": "FR3_1", "x": -0.25, "y": 0.25, "speed": "fast", "x_pos": 100, "y_pos": 230},
-                    {"id": "4", "action": "place", "robot": "FR3_2", "x": 0.25, "y": 0.25, "speed": "fast", "x_pos": 450, "y_pos": 230},
-                ],
-                "edges": [
-                    {"source": "1", "target": "3"},
-                    {"source": "2", "target": "4"},
                 ]
             }
 

@@ -324,7 +324,7 @@ class GeminiRoboticsNode(Node):
             raise RuntimeError('Gemini API client is not initialized.')
 
         config_kwargs = {'temperature': 1.0}
-        if thinking_budget >= 0:
+        if thinking_budget > 0 and "flash-lite" not in str(self.model_name).lower():
             config_kwargs['thinking_config'] = genai_types.ThinkingConfig(
                 thinking_budget=thinking_budget
             )
@@ -848,9 +848,10 @@ Provide a crisp, 2-3 sentence executive summary of your VLA task strategy.
         total_blocks_placed = 0
         premature_text_turns = 0
         is_dual_cell = len(self.robot_bases) == 2
-        target_blocks = getattr(self, "experiment_target_blocks", 3 if is_dual_cell else 9)
+        is_bar_goal = is_dual_cell and any(w in (self.user_goal or "").lower() for w in ("longbar", "bar", "circle", "wave", "cycloid"))
+        target_blocks = getattr(self, "experiment_target_blocks", (3 if is_bar_goal else 2) if is_dual_cell else 9)
         if is_dual_cell and target_blocks > 3:
-            target_blocks = 3
+            target_blocks = 3 if is_bar_goal else 2
         dual_place_done = False
         escalate_next_turn = False
         
@@ -890,15 +891,19 @@ Provide a crisp, 2-3 sentence executive summary of your VLA task strategy.
                     )
             
             t_gen_start = time.monotonic()
+            gen_cfg_kwargs = dict(
+                system_instruction=static_sys_instruction,
+                temperature=0.0,
+                tools=gemini_tools.ROBOT_TOOLS,
+            )
+            if active_thinking_budget > 0 and "flash-lite" not in str(active_turn_model).lower():
+                gen_cfg_kwargs["thinking_config"] = genai_types.ThinkingConfig(
+                    thinking_budget=active_thinking_budget
+                )
             response = self.client.models.generate_content(
                 model=active_turn_model,
                 contents=contents,
-                config=genai_types.GenerateContentConfig(
-                    system_instruction=static_sys_instruction,
-                    temperature=0.0,
-                    tools=gemini_tools.ROBOT_TOOLS,
-                    thinking_config=genai_types.ThinkingConfig(thinking_budget=active_thinking_budget),
-                ),
+                config=genai_types.GenerateContentConfig(**gen_cfg_kwargs),
             )
             t_gen_elapsed = time.monotonic() - t_gen_start
             if self.experiment_logger:
@@ -1003,7 +1008,7 @@ Provide a crisp, 2-3 sentence executive summary of your VLA task strategy.
                                     self.verifier.robot_holding["FR3_1"] = None
                                     self.verifier.robot_holding["FR3_2"] = None
                             eff_act = str(used_args.get("action") or fc.name).strip().lower()
-                            if is_dual_cell:
+                            if is_bar_goal:
                                 if eff_act in ("dual_arm_pick", "dual_arm_circle", "dual_arm_draw_circle", "dual_arm_motion", "dual_arm_place", "pick", "place") and res.get("success", False):
                                     total_blocks_placed += 1
                                     if self.active_trial_stats is not None:
@@ -1065,7 +1070,7 @@ Provide a crisp, 2-3 sentence executive summary of your VLA task strategy.
                         )
                     )
                     
-                if (is_dual_cell and dual_place_done) or (not is_dual_cell and total_blocks_placed >= target_blocks):
+                if (is_bar_goal and dual_place_done) or (not is_bar_goal and total_blocks_placed >= target_blocks):
                     self.get_logger().info(f"\033[92m[DONE] Target {total_blocks_placed}/{target_blocks} milestones reached!\033[0m")
                     break
 
